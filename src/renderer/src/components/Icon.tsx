@@ -2,6 +2,8 @@
 const PATHS: Record<string, string> = {
   terminal: "M4 17l6-6-6-6M12 19h8",
   more: "M5 12h.01M12 12h.01M19 12h.01",
+  maximize: "M4 9V4h5M20 15v5h-5M15 4h5v5M9 20H4v-5",
+  minimize: "M9 4v5H4M15 20v-5h5M20 9h-5V4M4 15h5v5",
   chat: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
   usage: "M18 20V10M12 20V4M6 20v-6",
   settings:

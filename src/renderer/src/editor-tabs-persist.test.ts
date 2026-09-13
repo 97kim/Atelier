@@ -33,7 +33,7 @@ test("에디터 탭·미저장 본문은 kv-store 에서 복원되고, 바뀌면
   m.setEditorDraft("/r/c.ts", { text: "typing c", mtimeMs: null, size: null });
   m.flushEditorTabsStorage();
   const saved = JSON.parse(kvGet("editorTabs.v1")!);
-  assert.deepEqual(saved.states.t2, { files: ["/r/c.ts"], active: "/r/c.ts", visible: true, dirty: [] });
+  assert.deepEqual(saved.states.t2, { files: ["/r/c.ts"], active: "/r/c.ts", visible: true, maximized: false, dirty: [] });
   assert.equal(saved.drafts["/r/c.ts"].text, "typing c");
   assert.equal("reveal" in saved.states.t2, false);
   assert.ok(writes.some(([k]) => k === "editorTabs.v1"), "main 으로 쓰기가 나간다");

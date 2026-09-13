@@ -7,6 +7,8 @@ export interface EditorTabsState {
   active: string | null;
   /** 패널 표시 여부. 파일을 열면 true, 헤더의 "코드" 로 접을 수 있다. */
   visible: boolean;
+  /** 최대화 — 채팅·오른쪽 패널을 잠시 숨기고 창 전체를 쓴다. 우측에 붙어 있으면 좁은 화면이 있어서. */
+  maximized: boolean;
   /** 저장하지 않은 변경이 있는 파일. 파일 트리의 이름 변경·삭제가 이걸 보고 편집 중인 파일을 건드리지 않는다. */
   dirty: string[];
   /** 마지막 열기 요청의 줄 범위(Read 툴카드의 offset/limit). nonce 가 바뀔 때마다 에디터가 그 줄로 이동한다. */
@@ -21,7 +23,7 @@ export interface EditorReveal {
   nonce: number;
 }
 
-const EMPTY: EditorTabsState = { files: [], active: null, visible: false, dirty: [], reveal: null };
+const EMPTY: EditorTabsState = { files: [], active: null, visible: false, maximized: false, dirty: [], reveal: null };
 let revealSeq = 0;
 const states = new Map<string, EditorTabsState>();
 const listeners = new Set<() => void>();
@@ -55,6 +57,7 @@ function ensureLoaded() {
         files,
         active: typeof st.active === "string" && files.includes(st.active) ? st.active : files[0],
         visible: st.visible !== false,
+        maximized: st.maximized === true,
         dirty: Array.isArray(st.dirty) ? st.dirty.filter((f): f is string => typeof f === "string" && files.includes(f)) : [],
         reveal: null,
       });
@@ -73,7 +76,7 @@ function ensureLoaded() {
 
 function persistNow() {
   const statesOut: Record<string, Omit<EditorTabsState, "reveal">> = {};
-  for (const [tabId, st] of states) if (st.files.length > 0) statesOut[tabId] = { files: st.files, active: st.active, visible: st.visible, dirty: st.dirty };
+  for (const [tabId, st] of states) if (st.files.length > 0) statesOut[tabId] = { files: st.files, active: st.active, visible: st.visible, maximized: st.maximized, dirty: st.dirty };
   const draftsOut: Record<string, EditorDraft> = {};
   for (const [p, d] of drafts) if (d.text.length <= DRAFT_MAX_CHARS) draftsOut[p] = d;
   // 아직 열려 있는 브라우저 탭의 주소만 남긴다(닫은 탭의 주소가 쌓이지 않게)
@@ -162,6 +165,7 @@ export function closeEditorFile(tabId: string, path: string): void {
     files,
     active,
     visible: cur.visible && files.length > 0,
+    maximized: cur.maximized && files.length > 0,
     dirty: cur.dirty.filter((f) => f !== path),
     reveal: cur.reveal?.path === path ? null : cur.reveal,
   });
@@ -244,7 +248,16 @@ export function activateEditorFile(tabId: string, path: string): void {
 
 export function setEditorPaneVisible(tabId: string, visible: boolean): void {
   const cur = getEditorTabs(tabId);
-  set(tabId, { ...cur, visible: visible && cur.files.length > 0 });
+  const on = visible && cur.files.length > 0;
+  // 접으면 최대화도 푼다 — 다시 펼쳤을 때 채팅이 사라진 화면으로 돌아오면 당황스럽다
+  set(tabId, { ...cur, visible: on, maximized: on && cur.maximized });
+}
+
+/** 최대화 토글. 패널이 접혀 있으면 켜면서 함께 펼친다. */
+export function setEditorMaximized(tabId: string, maximized: boolean): void {
+  const cur = getEditorTabs(tabId);
+  if (cur.files.length === 0) return;
+  set(tabId, { ...cur, maximized, visible: maximized ? true : cur.visible });
 }
 
 /** 모델에 없는(삭제된) 채팅 탭의 상태를 정리한다. 닫힌 탭은 모델에 남아 있으므로 다시 열면 그대로다. */
@@ -311,6 +324,7 @@ export function closeEditorPaths(path: string): void {
       files,
       active,
       visible: st.visible && files.length > 0,
+      maximized: st.maximized && files.length > 0,
       dirty: st.dirty.filter((f) => files.includes(f)),
       reveal: st.reveal && files.includes(st.reveal.path) ? st.reveal : null,
     });

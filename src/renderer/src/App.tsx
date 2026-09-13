@@ -6,7 +6,7 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { SearchPalette } from "./components/SearchPalette";
 import { requestReveal } from "./reveal";
-import { forgetEditorTabs, openBrowserTab, openEditorFile, pruneEditorTabs } from "./editor-tabs";
+import { forgetEditorTabs, getEditorTabs, openBrowserTab, openEditorFile, pruneEditorTabs, setEditorMaximized } from "./editor-tabs";
 import { clearComposerDraft, pruneComposerDrafts } from "./composer-draft";
 import { nextAttentionTab } from "@shared/attention-nav";
 import { useWorkspaces } from "./hooks/useWorkspaces";
@@ -117,6 +117,11 @@ export function App() {
         void closeTab(model.activeTabId);
       else if (name === "switch-workspace") setSwitcher((s) => !s);
       else if (name === "search") setSearch((s) => !s);
+      else if (name === "toggle-editor-maximize" && model.activeTabId) {
+        const t = getEditorTabs(model.activeTabId);
+        // 열린 파일이 없으면 넓힐 것도 없다
+        if (t.files.length > 0) setEditorMaximized(model.activeTabId, !t.maximized);
+      }
       else if (name === "next-attention" || name === "prev-attention")
         jumpAttention(name === "next-attention" ? 1 : -1);
       else if (name === "next-tab" || name === "prev-tab") {

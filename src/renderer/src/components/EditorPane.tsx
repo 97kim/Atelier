@@ -11,7 +11,7 @@ import { FileEditor, type FileEditorApi } from "./FileEditor";
 import { BrowserPane } from "./BrowserPane";
 import type { ChatImageDto } from "@shared/ipc";
 import { Icon } from "./Icon";
-import { browserTabLabel, getBrowserUrl, isBrowserTab, openBrowserTab, setBrowserUrl } from "../editor-tabs";
+import { browserTabLabel, getBrowserUrl, isBrowserTab, openBrowserTab, setBrowserUrl, setEditorMaximized } from "../editor-tabs";
 
 export function EditorPane({
   tabId,
@@ -108,6 +108,14 @@ export function EditorPane({
             );
           })}
         </div>
+        <button
+          onClick={() => setEditorMaximized(tabId, !tabs.maximized)}
+          className={`flex shrink-0 items-center px-2 ${tabs.maximized ? "text-accent" : "text-muted hover:text-fg"}`}
+          title={tabs.maximized ? "원래 크기로 (⌘⇧E)" : "창 전체로 넓히기 — 채팅·오른쪽 패널을 잠시 숨긴다 (⌘⇧E)"}
+          data-editor-maximize={tabs.maximized ? "on" : "off"}
+        >
+          <Icon name={tabs.maximized ? "minimize" : "maximize"} size={13} />
+        </button>
         <button
           onClick={() => setEditorPaneVisible(tabId, false)}
           className="flex shrink-0 items-center px-2 text-muted hover:text-fg"

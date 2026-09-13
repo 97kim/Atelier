@@ -1995,6 +1995,7 @@ function buildMenu() {
         { role: "zoomOut" },
         { type: "separator" },
         shortcut("터미널 패널", "CmdOrCtrl+J", "toggle-terminal"),
+        shortcut("코드·브라우저 넓게 보기", "CmdOrCtrl+Shift+E", "toggle-editor-maximize"),
         { type: "separator" },
         { role: "togglefullscreen" },
       ],

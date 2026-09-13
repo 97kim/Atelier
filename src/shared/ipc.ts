@@ -389,6 +389,7 @@ export type ShortcutName =
   | "close-tab"
   | "switch-workspace"
   | "toggle-terminal"
+  | "toggle-editor-maximize"
   | "search"
   | "next-attention"
   | "prev-attention"

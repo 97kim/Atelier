@@ -364,6 +364,8 @@ export function ChatView({
     setConcurrentDismissedState(key);
   };
   const editorShown = editorTabs.visible && editorTabs.files.length > 0 && !!cwd;
+  // 최대화: 채팅·오른쪽 패널을 잠시 숨기고 에디터/브라우저가 창 전체를 쓴다. 상태는 그대로 살아 있다(언마운트하지 않는다).
+  const editorMaximized = editorShown && editorTabs.maximized;
   // 패널 토글 라벨: 파일 탭과 브라우저 탭을 따로 센다(브라우저만 열려 있는데 "코드 1" 로 보이지 않게).
   const fileTabCount = editorTabs.files.filter((f) => !isBrowserTab(f)).length;
   const browserTabCount = editorTabs.files.length - fileTabCount;
@@ -669,8 +671,9 @@ export function ChatView({
         </header>
 
         <div className="flex min-h-0 flex-1">
-          {/* 채팅 칼럼은 340px 아래로 눌리지 않는다 — 공간이 모자라면 에디터 패널이 먼저 줄어든다(아래 flex-basis/shrink). */}
-          <div className="flex min-w-[340px] flex-1 flex-col">
+          {/* 채팅 칼럼은 340px 아래로 눌리지 않는다 — 공간이 모자라면 에디터 패널이 먼저 줄어든다(아래 flex-basis/shrink).
+              최대화 때는 숨기기만 한다 — 언마운트하면 스크롤 위치·입력 중이던 글이 날아간다. */}
+          <div className={`flex min-w-[340px] flex-1 flex-col ${editorMaximized ? "hidden" : ""}`} data-chat-column>
             <TabBar
               ws={ws}
               onActivate={onActivateTab}
@@ -865,21 +868,26 @@ export function ChatView({
 
           {editorShown && (
             <>
+              {/* 최대화면 경계선을 숨긴다 — 끌 것이 없다 */}
+              {!editorMaximized && (
+                <div
+                  onMouseDown={onEditorDragStart}
+                  className="w-1 shrink-0 cursor-col-resize hover:bg-accent/30"
+                  data-editor-resizer
+                />
+              )}
               <div
-                onMouseDown={onEditorDragStart}
-                className="w-1 shrink-0 cursor-col-resize hover:bg-accent/30"
-                data-editor-resizer
-              />
-              <div
-                className="mb-3 flex flex-col overflow-hidden rounded-xl bg-panel"
-                style={{ flex: `0 1 ${editorWidth}px`, minWidth: 360 }}
+                className={`mb-3 flex flex-col overflow-hidden rounded-xl bg-panel ${editorMaximized ? "ml-3 flex-1" : ""}`}
+                style={editorMaximized ? undefined : { flex: `0 1 ${editorWidth}px`, minWidth: 360 }}
                 data-editor-pane-shell
+                data-editor-maximized={editorMaximized ? "true" : "false"}
               >
                 <EditorPane tabId={tabId} cwd={cwd} tabs={editorTabs} onAttach={attachToChat} />
               </div>
             </>
           )}
 
+          <div className={editorMaximized ? "hidden" : "contents"} data-right-panel-wrap>
           <RightPanel
             cwd={cwd}
             context={
@@ -891,6 +899,7 @@ export function ChatView({
               />
             }
           />
+          </div>
         </div>
 
         {fanoutOpen && <FanoutModal initialPrompt={loadComposerDraft(tabId)} defaultProvider={provider} onStart={startFanout} onClose={closeFanout} />}
