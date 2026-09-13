@@ -125,7 +125,7 @@ export function MessageList({
   const groups: { kind: GroupKind; blocks: Block[] }[] = [];
   for (const b of blocks) {
     const kind: GroupKind =
-      b.kind === "user" ? "user" : b.kind === "error" ? "error" : b.kind === "review" ? "review" : b.kind === "verify" ? "verify" : b.kind === "fanout" ? "fanout" : b.kind === "orchestration" ? "orchestration" : "assistant";
+      b.kind === "user" ? "user" : b.kind === "compacted" ? "compacted" : b.kind === "error" ? "error" : b.kind === "review" ? "review" : b.kind === "verify" ? "verify" : b.kind === "fanout" ? "fanout" : b.kind === "orchestration" ? "orchestration" : "assistant";
     const last = groups[groups.length - 1];
     if (last && last.kind === kind && kind === "assistant") last.blocks.push(b);
     else groups.push({ kind, blocks: [b] });
@@ -318,7 +318,7 @@ function Avatar({ provider }: { provider: Provider }) {
   return <ProviderLogo provider={provider} size={32} className="mt-0.5" />;
 }
 
-type GroupKind = "user" | "assistant" | "error" | "review" | "verify" | "fanout" | "orchestration";
+type GroupKind = "user" | "assistant" | "compacted" | "error" | "review" | "verify" | "fanout" | "orchestration";
 
 function Group({
   group,
@@ -350,6 +350,21 @@ function Group({
   if (group.kind === "review") {
     const b = group.blocks[0];
     return b.kind === "review" ? <ReviewCard block={b} /> : null;
+  }
+  if (group.kind === "compacted") {
+    const b = group.blocks[0];
+    if (b.kind !== "compacted") return null;
+    const k = (n: number) => `${Math.round(n / 1000)}k`;
+    return (
+      <div className="flex items-center gap-3 py-1 text-[11px] text-muted" data-compacted={b.trigger}>
+        <div className="h-px flex-1 bg-line" />
+        <span className="shrink-0">
+          {b.trigger === "auto" ? "자동 압축" : "압축"} · {k(b.preTokens)}
+          {b.postTokens !== undefined ? ` → ${k(b.postTokens)}` : ""} · 위쪽 대화는 요약으로 대체됐습니다
+        </span>
+        <div className="h-px flex-1 bg-line" />
+      </div>
+    );
   }
   if (group.kind === "error") {
     const b = group.blocks[0];

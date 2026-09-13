@@ -156,6 +156,18 @@ export interface SessionResetEvent extends Base {
 }
 
 /**
+ * provider 가 대화를 압축했다(세션은 그대로 이어진다 — session_reset 과 다르다).
+ * SDK 의 compact_boundary 를 그대로 옮긴 것이라 압축 전후 토큰 수를 알 수 있다.
+ */
+export interface CompactedEvent extends Base {
+  type: "compacted";
+  /** 사용자가 시킨 압축인지(manual), 한도가 차서 자동으로 일어난 것인지(auto). */
+  trigger: "manual" | "auto";
+  preTokens: number;
+  postTokens?: number;
+}
+
+/**
  * 교차 리뷰: 다른 provider 탭에 diff 를 보내 받은 결과. reviewTabId 로 같은 카드를 갱신한다(requested → done|failed).
  * 원래 탭의 기록에 남으므로 재시작 뒤에도 카드가 보인다.
  */
@@ -267,6 +279,7 @@ export type ChatEvent =
   | PermissionResolvedEvent
   | TurnResultEvent
   | SessionResetEvent
+  | CompactedEvent
   | ReviewEvent
   | VerifyEvent
   | FanoutEvent

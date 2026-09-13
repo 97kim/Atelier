@@ -136,6 +136,8 @@ const api: WorkbenchApi = {
     fanoutCleanup: (tabId: string, fanoutId: string) => ipcRenderer.invoke(IPC.chatFanoutCleanup, tabId, fanoutId),
     events: (tabId: string) => ipcRenderer.invoke(IPC.chatEvents, tabId),
     clear: (tabId: string) => ipcRenderer.invoke(IPC.chatClear, tabId),
+    compact: (tabId: string, focus?: string) =>
+      ipcRenderer.invoke(IPC.chatCompact, tabId, focus),
     handoffPreview: (tabId: string) =>
       ipcRenderer.invoke(IPC.chatHandoffPreview, tabId),
     switchProvider: (tabId: string, opts: SwitchProviderDto) =>

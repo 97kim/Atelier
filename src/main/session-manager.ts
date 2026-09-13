@@ -966,6 +966,27 @@ export class SessionManager {
     this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
   }
 
+  /**
+   * 압축을 provider 에게 맡길 수 있나. Claude 는 SDK 가 `/compact` 를 처리하고 결과가
+   * compact_boundary 로 돌아온다 — 모델이 무엇을 남길지 정하므로 우리가 자르는 것보다 낫다.
+   * Codex 는 app-server 에 압축이 없고, 터미널이 세션을 쥔 동안에는 우리가 턴을 보낼 수 없다.
+   */
+  canCompactNatively(tabId: string): boolean {
+    const s = this.sessions.get(tabId);
+    if (!s || s.provider !== "claude") return false;
+    return !!s.sessionId && s.controller !== "terminal" && !this.isBusy(tabId);
+  }
+
+  /** provider 가 압축을 못 할 때의 대비책: 지금까지를 요약해 같은 provider 의 새 세션으로 넘긴다. */
+  compactFallback(tabId: string): SessionSnapshot {
+    const s = this.ensure(tabId);
+    return this.switchProvider(tabId, {
+      provider: s.provider,
+      model: s.model,
+      preserveContext: true,
+    });
+  }
+
   /** 전환 모달 미리보기: 지금까지의 이벤트로 요약과 통계를 만든다. */
   handoffPreview(tabId: string): Handoff {
     const s = this.ensure(tabId);

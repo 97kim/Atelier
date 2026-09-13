@@ -16,7 +16,7 @@ import {
 } from "electron";
 import type { PermissionAnswer } from "@shared/chat-events";
 import { isThemeMode } from "@shared/theme";
-import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, SearchResultDto } from "@shared/ipc";
+import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type CompactResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, SearchResultDto } from "@shared/ipc";
 import {
   DEFAULT_PRICING,
   periodRange,
@@ -1519,6 +1519,19 @@ function registerIpc() {
   );
   ipcMain.handle(IPC.chatEvents, (_e, tabId: string) => sessions.events(tabId));
   ipcMain.handle(IPC.chatClear, (_e, tabId: string) => sessions.clear(tabId));
+  // 압축은 되도록 provider 에게 맡긴다 — 모델이 무엇을 남길지 정하고 세션도 끊기지 않는다.
+  ipcMain.handle(
+    IPC.chatCompact,
+    async (_e, tabId: string, focus?: string): Promise<CompactResult> => {
+      if (typeof tabId !== "string") return { ok: false, error: "tabId 가 없습니다." };
+      if (sessions.canCompactNatively(tabId)) {
+        const f = typeof focus === "string" ? focus.trim() : "";
+        const r = await handleChatSend(tabId, { text: f ? `/compact ${f}` : "/compact" });
+        return r.ok ? { ok: true, native: true } : { ok: false, error: r.error };
+      }
+      return { ok: true, native: false, config: sessions.compactFallback(tabId) };
+    },
+  );
   ipcMain.handle(IPC.chatHandoffPreview, (_e, tabId: string) =>
     sessions.handoffPreview(tabId),
   );

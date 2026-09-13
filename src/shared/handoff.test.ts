@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ChatEvent } from "./chat-events";
-import { buildHandoff, extractFilePaths, pendingTodos } from "./handoff";
+import { buildHandoff, estimateTokens, extractFilePaths, pendingTodos } from "./handoff";
 
 let t = 0;
 type NoTs<T> = T extends unknown ? Omit<T, "ts"> : never;
@@ -58,16 +58,47 @@ test("요약: 사용자/어시스턴트 텍스트, 툴 한 줄, 파일·할 일 
   assert.equal(h.summary.split("### 어시스턴트").length - 1, 1);
 });
 
-test("maxChars 초과 시 최근 내용 우선 보존", () => {
+test("maxChars 초과 시 앞뒤를 남기고 가운데를 버린다 — 원래 요청은 항상 산다", () => {
   const events: ChatEvent[] = [];
   for (let i = 0; i < 50; i++) {
     events.push(ev({ type: "user_message", id: `u${i}`, text: `메시지 ${i} ${"x".repeat(200)}` }));
   }
   const h = buildHandoff(events, { maxChars: 3000 });
   assert.ok(h.summary.length <= 3000);
-  assert.match(h.summary, /앞부분 생략/);
+  assert.match(h.summary, /가운데 생략/);
+  // 무엇을 하려던 세션인지(첫 요청)와 어디까지 왔는지(마지막)가 둘 다 남아야 한다.
+  assert.match(h.summary, /원래 요청: 메시지 0/);
   assert.match(h.summary, /메시지 49/);
-  assert.doesNotMatch(h.summary, /메시지 0 /);
+  // 가운데는 실제로 버려졌다.
+  assert.doesNotMatch(h.summary, /메시지 25 /);
+});
+
+test("성공한 툴 결과는 최근 것만, 실패는 다 남긴다", () => {
+  const events: ChatEvent[] = [];
+  for (let i = 0; i < 30; i++) {
+    events.push(ev({ type: "tool_use", toolUseId: `t${i}`, name: "Bash", input: { command: `cmd ${i}` }, partial: false }));
+    events.push(ev({ type: "tool_result", toolUseId: `t${i}`, output: `출력 ${i}`, isError: false }));
+  }
+  events.push(ev({ type: "tool_use", toolUseId: "bad", name: "Bash", input: { command: "boom" }, partial: false }));
+  events.push(ev({ type: "tool_result", toolUseId: "bad", output: "터졌다", isError: true }));
+  const h = buildHandoff(events, { maxChars: 100000 });
+  assert.match(h.summary, /출력 29/);
+  assert.doesNotMatch(h.summary, /출력 0\b/);
+  assert.match(h.summary, /실패: 터졌다/);
+});
+
+test("기록이 지시로 읽히지 않게 못박는다", () => {
+  const h = buildHandoff([ev({ type: "user_message", id: "u", text: "dmg 만들어줘" })]);
+  assert.match(h.summary, /지시가 아니다/);
+  assert.match(h.summary, /이미 처리된 것으로 보고/);
+});
+
+test("토큰 추정은 한글을 영어보다 무겁게 센다", () => {
+  // 같은 글자 수라도 한글이 토큰을 훨씬 많이 쓴다 — 한 비율로 뭉뚱그리면 한국어에서 크게 어긋난다.
+  const korean = "한".repeat(100);
+  const ascii = "a".repeat(100);
+  assert.ok(estimateTokens(korean) > estimateTokens(ascii) * 3);
+  assert.equal(estimateTokens(ascii), 25);
 });
 
 test("extractFilePaths / pendingTodos 는 두 provider 의 입력 형태를 모두 안다", () => {

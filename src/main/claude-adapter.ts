@@ -279,6 +279,16 @@ function handleMessage(s: LiveSession, message: SDKMessage) {
     if (message.subtype === "init") {
       s.sessionId = message.session_id;
       if (message.terminal_slash_commands) t?.req.onCommands?.({ terminal: message.terminal_slash_commands });
+    } else if (message.subtype === "compact_boundary") {
+      // 압축은 세션 안의 경계다 — 세션 id 는 그대로다. 화면에 구분선으로 남긴다.
+      const m = message.compact_metadata;
+      t?.req.onEvent({
+        type: "compacted",
+        ts: Date.now(),
+        trigger: m.trigger,
+        preTokens: m.pre_tokens,
+        postTokens: m.post_tokens,
+      });
     } else if (message.subtype === "commands_changed") {
       t?.req.onCommands?.({
         commands: message.commands.map((c) => ({

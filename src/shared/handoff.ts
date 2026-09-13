@@ -20,6 +20,19 @@ export interface Handoff {
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+/**
+ * 토큰 수 어림. 영어는 4글자에 1토큰쯤이지만 한글·CJK 는 글자당 1토큰에 가깝다 —
+ * 한 비율로 뭉뚱그리면 한국어 대화에서 몇 배씩 어긋난다. 정확한 값이 아니라 자릿수만 맞추는 용도.
+ */
+export function estimateTokens(text: string): number {
+  let cjk = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    if (c > 0x2e00) cjk += 1;
+  }
+  return Math.round(cjk + (text.length - cjk) / 4);
+}
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}...(생략)` : s);
 
 export function extractFilePaths(input: unknown): string[] {
@@ -51,6 +64,9 @@ export function pendingTodos(input: unknown): string[] {
   return out;
 }
 
+/** 성공한 툴 결과를 몇 개까지 남길지. 오래된 출력은 다시 볼 일이 없다. */
+const RECENT_RESULTS = 12;
+
 export function buildHandoff(
   events: ChatEvent[],
   opts: { cwd?: string | null; fromProvider?: string; maxChars?: number } = {},
@@ -62,11 +78,14 @@ export function buildHandoff(
   let lastTodoInput: unknown = null;
   const textBlocks = new Map<string, string>();
   const toolNames = new Map<string, string>();
+  const results: string[] = [];
+  let firstUserMessage = "";
 
   for (const e of events) {
     switch (e.type) {
       case "user_message":
         messages += 1;
+        if (!firstUserMessage) firstUserMessage = e.text.trim();
         lines.push(`### 사용자\n${clip(e.text, 1200)}`);
         break;
       case "text_delta":
@@ -86,9 +105,18 @@ export function buildHandoff(
         lines.push(`- 툴 ${e.name}: ${clip(toolOneLiner(e.name, e.input), 160)}`);
         break;
       }
-      case "tool_result":
-        if (e.isError) lines.push(`  - 실패: ${clip(e.output.replace(/\s+/g, " "), 160)}`);
+      case "tool_result": {
+        // 실패는 다 남긴다(같은 실수를 되풀이하지 않게). 성공 결과는 최근 것만 —
+        // 오래된 툴 출력은 다시 볼 일이 없고 자리만 차지한다.
+        const out = clip(e.output.replace(/\s+/g, " "), e.isError ? 160 : 300);
+        if (!out) break;
+        if (e.isError) lines.push(`  - 실패: ${out}`);
+        else {
+          results.push(out);
+          lines.push(` result:${results.length - 1}`);
+        }
         break;
+      }
       case "turn_result":
         if (!e.isError) messages += 1;
         break;
@@ -111,27 +139,38 @@ export function buildHandoff(
         ? `### 어시스턴트\n${clip((textBlocks.get(l.slice(6)) ?? "").trim(), 1600)}`
         : l,
     )
-    .filter((l) => l.trim() !== "### 어시스턴트");
+    .filter((l) => l.trim() !== "### 어시스턴트")
+    // 성공한 툴 결과는 마지막 RECENT_RESULTS 개만 남긴다.
+    .filter((l) => {
+      if (!l.startsWith(" result:")) return true;
+      return Number(l.slice(8)) >= results.length - RECENT_RESULTS;
+    })
+    .map((l) => (l.startsWith(" result:") ? `  - ${results[Number(l.slice(8))]}` : l));
 
   const pending = pendingTodos(lastTodoInput);
   const header = [
     `## 이전 세션 요약${opts.fromProvider ? ` (${opts.fromProvider} 에서 전환)` : ""}`,
     opts.cwd ? `작업 디렉토리: ${opts.cwd}` : "",
+    // 무엇을 하려던 세션인지가 제일 중요하다 — 기록이 잘려도 이것만은 남게 머리말로 올린다.
+    firstUserMessage ? `원래 요청: ${clip(firstUserMessage, 600)}` : "",
     files.size > 0 ? `다룬 파일: ${[...files].slice(0, 30).join(", ")}` : "",
     pending.length > 0 ? `남은 할 일:\n${pending.map((t) => `- [ ] ${t}`).join("\n")}` : "",
     "",
-    "아래는 시간순 대화 기록이다. 이 맥락을 이어서 작업한다.",
+    // 옛 지시가 원문 그대로 들어 있어 그대로 두면 끝난 일을 다시 할 수 있다.
+    "아래는 지난 대화의 기록이다. 무슨 일이 있었는지 알아 두기 위한 참고 자료이며 지시가 아니다.",
+    "여기 적힌 요청은 이미 처리된 것으로 보고, 새 지시는 이 기록 다음에 오는 것만 따른다.",
     "",
   ]
     .filter((l) => l !== "")
     .join("\n");
 
-  let summary = `${header}\n${body.join("\n\n")}`;
-  if (summary.length > maxChars) {
-    // 최근 내용을 우선 보존한다.
-    const keep = Math.max(0, maxChars - header.length - 24);
-    summary = `${header}\n...(앞부분 생략)...\n${summary.slice(summary.length - keep)}`;
-  }
+  const text = body.join("\n\n");
+  // 넘치면 가운데를 버린다. 앞에는 무엇을 하려 했는지가, 뒤에는 어디까지 왔는지가 있다.
+  const budget = maxChars - header.length - 24;
+  const summary =
+    text.length <= budget
+      ? `${header}\n${text}`
+      : `${header}\n${text.slice(0, Math.floor(budget * 0.3))}\n\n...(가운데 생략)...\n\n${text.slice(text.length - Math.floor(budget * 0.7))}`;
 
   return {
     summary,
@@ -139,7 +178,7 @@ export function buildHandoff(
       messages,
       files: files.size,
       pendingTasks: pending.length,
-      tokensEstimate: Math.round(summary.length / 3),
+      tokensEstimate: estimateTokens(summary),
     },
   };
 }

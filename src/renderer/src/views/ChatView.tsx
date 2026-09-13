@@ -249,18 +249,15 @@ export function ChatView({
     shouldShowCtxBanner(ctxPct, ctxLevel, ctxDismissed);
   const [ctxBusy, setCtxBusy] = useState(false);
   // 같은 provider 로 "요약 + 새 세션": 기존 handoff 경로를 그대로 쓴다 (다음 메시지 앞에 요약이 붙는다).
-  const compactToNewSession = async () => {
-    if (!config) return;
+  // 압축은 provider 에게 맡긴다 — 모델이 무엇을 남길지 정하고 세션도 끊기지 않는다.
+  // Codex 처럼 압축이 없는 provider 면 main 이 알아서 요약 후 새 세션으로 넘어간다.
+  const compactContext = async () => {
     setCtxBusy(true);
     try {
-      setConfig(
-        await window.workbench.chat.switchProvider(tabId, {
-          provider: config.provider,
-          model: config.model,
-          preserveContext: true,
-        }),
-      );
-      // session_reset 이벤트가 lastTurn 을 비워 배너·게이지가 함께 내려간다.
+      const r = await window.workbench.chat.compact(tabId);
+      if (!r.ok) setAttachError(r.error);
+      else if (r.config) setConfig(r.config);
+      // 네이티브 압축이면 compacted 이벤트가, 폴백이면 session_reset 이 게이지를 정리한다.
     } catch (e) {
       setAttachError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -775,17 +772,17 @@ export function ChatView({
                     : " 대화를 요약해 새 세션으로 이어가면 비용과 지연이 줄어듭니다."}
                 </span>
                 <button
-                  onClick={() => void compactToNewSession()}
+                  onClick={() => void compactContext()}
                   disabled={ctxBusy || running || terminalControlled}
                   className={`shrink-0 rounded border px-2 py-0.5 disabled:opacity-40 ${
                     ctxLevel === "critical"
                       ? "border-err/40 hover:bg-err/10"
                       : "border-warn/40 hover:bg-warn/10"
                   }`}
-                  title="지금까지의 대화를 요약해 다음 메시지에 붙이고, 컨텍스트가 빈 새 세션으로 이어갑니다"
+                  title="대화를 압축해 컨텍스트를 줄입니다. Claude 는 세션을 유지한 채 스스로 요약합니다"
                   data-context-compact
                 >
-                  {ctxBusy ? "정리 중…" : "요약해서 새 세션으로"}
+                  {ctxBusy ? "압축 중…" : "압축하기"}
                 </button>
                 <button
                   onClick={dismissCtx}

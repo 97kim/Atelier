@@ -81,6 +81,15 @@ export interface TurnBlock {
   errorText?: string;
 }
 
+/** 압축 경계. 여기 위쪽 대화는 요약으로 대체됐다는 표시. */
+export interface CompactedBlock {
+  kind: "compacted";
+  id: string;
+  trigger: "manual" | "auto";
+  preTokens: number;
+  postTokens?: number;
+}
+
 export interface ErrorBlock {
   kind: "error";
   id: string;
@@ -135,7 +144,7 @@ export interface OrchestrationBlock {
   ts: number;
 }
 
-export type Block = UserBlock | TextBlock | ToolBlock | TurnBlock | ErrorBlock | ReviewBlock | VerifyBlock | FanoutBlock | OrchestrationBlock;
+export type Block = UserBlock | TextBlock | ToolBlock | TurnBlock | CompactedBlock | ErrorBlock | ReviewBlock | VerifyBlock | FanoutBlock | OrchestrationBlock;
 
 export interface SessionTotals {
   usage: TokenUsage;
@@ -451,6 +460,23 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
           notes: event.notes,
           ts: b?.ts ?? event.ts,
         })),
+      };
+
+    case "compacted":
+      // 압축은 세션을 끊지 않는다 — 경계만 남기고, 다음 턴이 실제 사용량을 알려줄 때까지 게이지는 비운다.
+      return {
+        ...state,
+        lastTurn: null,
+        blocks: [
+          ...finalizeStreaming(state.blocks),
+          {
+            kind: "compacted",
+            id: `compact-${event.ts}-${state.eventCount}`,
+            trigger: event.trigger,
+            preTokens: event.preTokens,
+            postTokens: event.postTokens,
+          },
+        ],
       };
 
     case "session_reset":

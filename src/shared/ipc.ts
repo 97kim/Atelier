@@ -115,6 +115,11 @@ export interface RendererErrorDto {
   source?: string;
 }
 
+/** 압축 결과. native 면 provider 가 세션 안에서 압축했고(세션 유지), 아니면 요약 후 새 세션이다. */
+export type CompactResult =
+  | { ok: true; native: boolean; config?: SessionSnapshotDto }
+  | { ok: false; error: string };
+
 export const IPC = {
   appInfo: "app:info",
   appModels: "app:models",
@@ -135,6 +140,7 @@ export const IPC = {
   chatSnapshot: "chat:snapshot",
   chatEvents: "chat:events",
   chatClear: "chat:clear",
+  chatCompact: "chat:compact",
   chatHandoffPreview: "chat:handoff-preview",
   chatSwitchProvider: "chat:switch-provider",
   chatEvent: "chat:event",
@@ -700,6 +706,11 @@ export interface WorkbenchApi {
     /** 지금까지의 이벤트 로그 (화면 재구성용). */
     events(tabId: string): Promise<ChatEvent[]>;
     clear(tabId: string): Promise<SessionSnapshotDto>;
+    /**
+     * 컨텍스트를 줄인다. Claude 는 provider 에게 맡기고(`/compact`) 세션이 그대로 이어진다 —
+     * focus 를 주면 무엇을 남길지 지시할 수 있다. Codex 는 압축이 없어 요약 후 새 세션으로 간다.
+     */
+    compact(tabId: string, focus?: string): Promise<CompactResult>;
     handoffPreview(tabId: string): Promise<Handoff>;
     switchProvider(
       tabId: string,
