@@ -1,0 +1,161 @@
+// ⌘F 대화 검색: 모든 세션(닫힌 것 포함)의 사용자·어시스턴트 텍스트를 부분 일치로 찾는다.
+// 결과는 세션별로 묶이고, 고르면 그 세션을 열고 해당 블록으로 스크롤한다.
+import { useEffect, useRef, useState } from "react";
+import type { SearchResultDto } from "@shared/ipc";
+import { Icon } from "./Icon";
+
+interface Row {
+  tabId: string;
+  blockId: string;
+  title: string;
+  workspaceName: string;
+  open: boolean;
+  kind: "user" | "assistant" | "tool";
+  snippet: string;
+  first: boolean;
+}
+
+export function SearchPalette({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (tabId: string, blockId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResultDto[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // 입력 후 180ms 디바운스. 늦게 온 응답이 최신 결과를 덮지 않게 seq 로 거른다.
+  const seq = useRef(0);
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      ++seq.current; // 늦게 오는 이전 응답을 무효화
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    const my = ++seq.current;
+    setSearching(true);
+    const t = setTimeout(() => {
+      window.workbench.chat
+        .search(q)
+        .then((r) => {
+          if (my !== seq.current) return;
+          setResults(r);
+          setCursor(0);
+        })
+        .catch(console.error)
+        .finally(() => my === seq.current && setSearching(false));
+    }, 180);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const rows: Row[] = results.flatMap((r) =>
+    r.hits.map((h, i) => ({
+      tabId: r.tabId,
+      blockId: h.blockId,
+      title: r.title,
+      workspaceName: r.workspaceName,
+      open: r.open,
+      kind: h.kind,
+      snippet: h.snippet,
+      first: i === 0,
+    })),
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowDown" && rows.length) {
+        e.preventDefault();
+        setCursor((c) => (c + 1) % rows.length);
+      } else if (e.key === "ArrowUp" && rows.length) {
+        e.preventDefault();
+        setCursor((c) => (c - 1 + rows.length) % rows.length);
+      } else if (e.key === "Enter" && rows[cursor]) {
+        onPick(rows[cursor].tabId, rows[cursor].blockId);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rows, cursor, onClose, onPick]);
+  useEffect(() => {
+    listRef.current?.children[cursor]?.scrollIntoView({ block: "nearest" });
+  }, [cursor]);
+
+  const total = results.reduce((n, r) => n + r.hits.length, 0);
+
+  return (
+    <div
+      className="absolute inset-0 z-30 flex items-start justify-center bg-overlay/50 pt-24"
+      onClick={onClose}
+      data-search-palette
+    >
+      <div
+        className="w-[640px] overflow-hidden rounded-xl border border-line bg-panel shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+          <Icon name="search" size={14} className="text-muted" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="대화 내용 검색…"
+            className="flex-1 bg-transparent outline-none placeholder:text-muted"
+            style={{ userSelect: "text" }}
+          />
+          {searching && (
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
+          )}
+          <kbd className="label">esc</kbd>
+        </div>
+        <ul ref={listRef} className="max-h-[420px] overflow-y-auto p-2">
+          {rows.length === 0 && (
+            <li className="px-3 py-6 text-center text-muted">
+              {query.trim()
+                ? searching
+                  ? "검색 중…"
+                  : "일치하는 대화가 없습니다."
+                : "모든 세션의 메시지를 검색합니다. 닫힌 세션도 포함됩니다."}
+            </li>
+          )}
+          {rows.map((row, i) => (
+            <li key={`${row.tabId}:${row.blockId}`}>
+              {row.first && (
+                <div className="mt-2 flex items-baseline gap-2 px-3 pb-1 pt-1 first:mt-0">
+                  <span className="truncate font-medium">{row.title}</span>
+                  <span className="label shrink-0 text-muted">{row.workspaceName}</span>
+                  {!row.open && <span className="label shrink-0 text-muted-2">닫힘</span>}
+                </div>
+              )}
+              <div
+                onMouseEnter={() => setCursor(i)}
+                onClick={() => onPick(row.tabId, row.blockId)}
+                className={`flex cursor-default items-start gap-2 rounded-md px-3 py-1.5 ${
+                  cursor === i ? "bg-panel-2" : ""
+                }`}
+                data-search-hit
+              >
+                <span
+                  className={`label mt-0.5 w-7 shrink-0 ${row.kind === "user" ? "text-accent" : row.kind === "tool" ? "text-muted-2" : "text-muted"}`}
+                >
+                  {row.kind === "user" ? "나" : row.kind === "tool" ? "툴" : "AI"}
+                </span>
+                <span className="min-w-0 flex-1 text-[12.5px] text-fg">{row.snippet}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="label flex justify-between border-t border-line px-4 py-2">
+          <span>↑↓ 이동 · ⏎ 열기</span>
+          <span>{total > 0 ? `${results.length}개 세션 · ${total}건` : ""}</span>
+        </div>
+      </div>
+    </div>
+  );
+}

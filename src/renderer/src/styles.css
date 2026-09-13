@@ -1,0 +1,366 @@
+@import "tailwindcss";
+
+/* 디자인 토큰 — 로컬 디자인 원본(*.pen, 저장소에는 없음)의 변수와 1:1 */
+@theme {
+  --color-bg: #f6f7fb;
+  --color-panel: #ffffff;
+  --color-panel-2: #f1f3f7;
+  --color-inset: #f8f9fc;
+  /* 탭 스트립(창 크롬). 내용 영역(bg)보다 한 톤 어두워 활성 탭이 내용으로 이어져 보인다. */
+  --color-chrome: #e8ebf1;
+  --color-line: #e1e4ea;
+  --color-fg: #18202a;
+  --color-muted: #687282;
+  --color-muted-2: #9aa3b0;
+  --color-accent: #696fea;
+  --color-accent-2: #858af2;
+  --color-accent-tint: #eef0ff;
+  --color-on-accent: #ffffff;
+  /* 주 버튼(새 세션·전송·승인). 로고와 같은 검정 톤 — 인디고 액센트는 링크·진행 표시 등 보조로만. */
+  --color-primary: #18202a;
+  --color-primary-hover: #2b3542;
+  --color-on-primary: #ffffff;
+  --color-ok: #23815a;
+  --color-ok-bg: #eaf7ef;
+  --color-warn: #946516;
+  --color-warn-bg: #fff7e6;
+  --color-err: #c94b5d;
+  --color-err-bg: #fdeef0;
+  --color-overlay: #05070a;
+  --color-scrollbar: #cfd4dd;
+  /* 떠 있는 패널(팝업·입력창)의 그림자. 다크에선 더 진하게. */
+  --shadow-pop: 0 12px 32px rgba(24, 32, 42, 0.08);
+  --font-ui: "Inter Variable", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "SF Mono", Menlo, ui-monospace, monospace;
+  /* 반경 스케일을 한 단계씩 키운다 — 직선·직각 인상을 줄이기 위해 (2026-09-04) */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+/* ===== 다크 테마 — 렌더러가 <html data-theme="dark"> 를 붙이면 토큰만 바뀐다(theme.ts). 밝은 값은 위 @theme 이 기본. ===== */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #0f1216;
+  --color-panel: #171b21;
+  --color-panel-2: #1f242c;
+  --color-inset: #12161b;
+  --color-chrome: #0b0e12;
+  --color-line: #2a313b;
+  --color-fg: #e4e8ee;
+  --color-muted: #97a1b0;
+  --color-muted-2: #66707e;
+  --color-accent: #8a90f4;
+  --color-accent-2: #a3a7f7;
+  --color-accent-tint: #24284a;
+  --color-on-accent: #ffffff;
+  --color-primary: #e4e8ee;
+  --color-primary-hover: #ffffff;
+  --color-on-primary: #0f1216;
+  --color-ok: #4cc38a;
+  --color-ok-bg: #12271d;
+  --color-warn: #e2ab3f;
+  --color-warn-bg: #2d2410;
+  --color-err: #f0808f;
+  --color-err-bg: #34191f;
+  --color-overlay: #000000;
+  --color-scrollbar: #3a424d;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* macOS hiddenInset 타이틀바 영역을 드래그 핸들로 */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+code,
+kbd,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  user-select: text;
+  /* JetBrains Mono 의 합자(// → 한 글자처럼 붙음)가 주소·경로에서 슬래시 하나를 삼킨 것처럼 보인다 — UI 텍스트에선 끈다 */
+  font-variant-ligatures: none;
+}
+
+/* 디자인의 소문자 라벨: 모노 · 작은 · 자간 넓게 */
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* 레이어 밖 규칙은 @layer utilities 보다 항상 이기므로(캐스케이드 레이어 규칙), 폼 리셋은 base 레이어에 둔다.
+   그렇지 않으면 button 의 text-* 유틸리티가 color: inherit 에 눌린다. */
+@layer base {
+  select,
+  button {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+  }
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+  }
+}
+
+/* "생각 중" 점 세 개 — 순서대로 살짝 떠오르며 진해진다 */
+.thinking-dots > span:not(:first-child) {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: thinking-dot 1.2s ease-in-out infinite;
+}
+.thinking-dots > span:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.thinking-dots > span:nth-child(4) {
+  animation-delay: 0.3s;
+}
+@keyframes thinking-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* 탭 스트립처럼 스크롤은 되지만 막대는 보이면 안 되는 곳 */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===== 코드 뷰어: 거터와 코드가 같은 줄 높이를 써야 줄 번호가 맞물린다 ===== */
+.code-view,
+.code-view pre,
+.code-view code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.code-view > pre,
+.code-view > div {
+  padding-top: 0.6em;
+  padding-bottom: 0.6em;
+}
+.code-view > div:first-child,
+.code-view > div + div {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.code-view pre {
+  tab-size: 4;
+}
+
+/* ===== markdown ===== */
+.md {
+  line-height: 1.65;
+  word-break: break-word;
+  font-size: 13.5px;
+}
+.md > *:first-child {
+  margin-top: 0;
+}
+.md > *:last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 0.4em 0;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  margin: 0.9em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.md h1 {
+  font-size: 1.25em;
+}
+.md h2 {
+  font-size: 1.15em;
+}
+.md h3 {
+  font-size: 1.05em;
+}
+.md ul,
+.md ol {
+  margin: 0.3em 0;
+  padding-left: 1.4em;
+}
+.md ul {
+  list-style: disc;
+}
+.md ol {
+  list-style: decimal;
+}
+.md li {
+  margin: 0.15em 0;
+}
+.md code {
+  background: var(--color-inset);
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 12px;
+}
+.md pre {
+  margin: 0.5em 0;
+  padding: 0.6em 0.8em;
+  border-radius: 8px;
+  border: 1px solid var(--color-line);
+  background: var(--color-inset);
+  overflow-x: auto;
+}
+.md pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.md pre code.hljs {
+  background: none;
+  padding: 0;
+}
+.md blockquote {
+  margin: 0.5em 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--color-line);
+  color: var(--color-muted);
+}
+.md table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 12px;
+}
+.md th,
+.md td {
+  border: 1px solid var(--color-line);
+  padding: 0.3em 0.6em;
+}
+.md th {
+  background: var(--color-inset);
+}
+.md a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* 답변 속 파일 참조(존재 확인된 것만). 링크와 구분되게 점선 밑줄, 글자색은 본문 그대로. */
+.md .file-ref {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--color-muted);
+  text-underline-offset: 2px;
+}
+.md .file-ref:hover {
+  color: var(--color-accent);
+  text-decoration-color: var(--color-accent);
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--color-line);
+  margin: 0.8em 0;
+}
+
+/* 검색 결과로 이동한 블록을 잠깐 강조 */
+.reveal-target { border-radius: 6px; transition: background-color 0.4s ease; }
+.reveal-flash { background-color: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+
+/* "생각 중" 아래 흘러가는 생각 텍스트: 두 줄까지만, 새 조각이 오면 살짝 올라오며 나타난다 */
+.reasoning-tail {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;
+  animation: reasoning-in 0.25s ease-out;
+}
+@keyframes reasoning-in {
+  from {
+    opacity: 0.4;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 진행 중 라벨: 글자 위로 밝은 띠가 좌→우로 흐른다(Codex TUI·claude.ai 의 shimmer).
+   글자색을 transparent 로 두고 배경을 글자에 클리핑하므로 currentColor 를 쓸 수 없다 — 바탕·띠 색은 변수로 받는다. */
+.shimmer {
+  --shimmer-base: var(--color-muted);
+  --shimmer-hi: var(--color-fg);
+  background-image: linear-gradient(90deg, var(--shimmer-base) 0%, var(--shimmer-base) 35%, var(--shimmer-hi) 50%, var(--shimmer-base) 65%, var(--shimmer-base) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+/* 작은 회전 스피너(툴카드 진행 상태) */
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

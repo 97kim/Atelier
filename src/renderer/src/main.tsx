@@ -1,0 +1,70 @@
+import React from "react";
+import { createRoot } from "react-dom/client";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
+import "./styles.css";
+import { App } from "./App";
+import { EDITOR_STORAGE_KEY, flushEditorTabsStorage } from "./editor-tabs";
+import { flushComposerDrafts } from "./composer-draft";
+import { hydrateKv, kvGet, kvSet } from "./kv-store";
+import { applyThemeMode } from "./theme";
+
+// 종료 직전: 모아 두었던 초안 저장을 지금 쓴다(마지막 300ms 안의 입력·버린 초안이 유실·재등장하지 않게).
+window.addEventListener("beforeunload", () => {
+  flushEditorTabsStorage();
+  flushComposerDrafts();
+});
+
+// 처리되지 않은 renderer 오류를 main 로그 파일로. React 19 는 렌더 중 예외도 window error 로 보고한다.
+window.addEventListener("error", (e) => {
+  window.workbench?.app.reportError({
+    kind: "error",
+    message: e.message || String(e.error),
+    stack: e.error instanceof Error ? e.error.stack : undefined,
+    source: e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : undefined,
+  });
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const reason: unknown = e.reason;
+  window.workbench?.app.reportError({
+    kind: "unhandledrejection",
+    message: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
+
+/** 이전 빌드가 localStorage 에 두었던 초안을 한 번 옮긴다(옮긴 뒤 localStorage 쪽은 지운다). */
+function migrateLocalStorageDrafts() {
+  try {
+    const old = localStorage.getItem("workbench.editorTabs.v1");
+    if (old && !kvGet(EDITOR_STORAGE_KEY)) kvSet(EDITOR_STORAGE_KEY, old);
+    localStorage.removeItem("workbench.editorTabs.v1");
+    for (const k of Object.keys(localStorage)) {
+      if (!k.startsWith("workbench.composerDraft.")) continue;
+      const key = `composerDraft.${k.slice("workbench.composerDraft.".length)}`;
+      const v = localStorage.getItem(k);
+      if (v && !kvGet(key)) kvSet(key, v);
+      localStorage.removeItem(k);
+    }
+  } catch {
+    /* 없거나 막힘 */
+  }
+}
+
+// 렌더러 상태(열린 파일·초안)는 main 의 파일에서 받아 온 뒤에 그린다 — 첫 화면부터 복원된 상태로.
+// 테마도 첫 렌더 전에 칠한다(밝은 화면이 번쩍이지 않게).
+async function start() {
+  let entries: Record<string, string> = {};
+  const [stateResult, settingsResult] = await Promise.allSettled([window.workbench.state.load(), window.workbench.app.getSettings()]);
+  if (stateResult.status === "fulfilled") entries = stateResult.value;
+  else console.error("[state] load 실패:", stateResult.reason);
+  applyThemeMode(settingsResult.status === "fulfilled" ? settingsResult.value.theme : "system");
+  hydrateKv(entries, (key, value) => window.workbench.state.set(key, value));
+  migrateLocalStorageDrafts();
+  createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
+void start();

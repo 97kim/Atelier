@@ -1,0 +1,518 @@
+// Claude Agent SDK 메시지 → 공통 ChatEvent 매핑. 부수효과 없는 상태 머신이라 단위 테스트 가능.
+//
+// includePartialMessages:true 로 돌리면 stream_event(토큰 단위)와 최종 assistant 메시지가
+// 둘 다 온다. 스트림에서 본 message id 는 기억해 두고, 같은 id 의 최종 assistant 메시지는
+// 버린다(dedupe). 스트림이 없던 메시지(파셜 미지원 등)만 최종 메시지로 블록을 만든다.
+
+import type { ChatEvent } from "@shared/chat-events";
+import type { ProviderRateLimitDto, RateLimitWindowDto } from "@shared/ipc";
+
+type SDKMessage = import("@anthropic-ai/claude-agent-sdk").SDKMessage;
+
+interface StreamBlock {
+  kind: "text" | "tool_use" | "other";
+  blockId: string;
+  toolUseId?: string;
+  name?: string;
+  json: string;
+  /** 마지막으로 흘린 미리보기(JSON 문자열). 같으면 다시 보내지 않는다. */
+  previewKey?: string;
+}
+
+export class ClaudeEventMapper {
+  private messageId: string | null = null;
+  private readonly seenStreamMessages = new Set<string>();
+  /** 메인 루프의 마지막 assistant 메시지가 든 입력 컨텍스트 크기. result 의 usage 는 턴 누적치라 따로 든다. */
+  private lastContextTokens: number | null = null;
+  private readonly blocks = new Map<number, StreamBlock>();
+  private counter = 0;
+
+  map(msg: SDKMessage, ts: number): ChatEvent[] {
+    switch (msg.type) {
+      case "system":
+        if (msg.subtype === "init") {
+          return [
+            {
+              type: "session",
+              ts,
+              sessionId: msg.session_id,
+              provider: "claude",
+              model: msg.model,
+              cwd: msg.cwd,
+            },
+          ];
+        }
+        // /usage, /help 같은 로컬 슬래시 커맨드 출력은 모델을 거치지 않고 텍스트로만 온다.
+        if (msg.subtype === "local_command_output") {
+          const text = msg.content.trim();
+          return text
+            ? [
+                {
+                  type: "assistant_text",
+                  ts,
+                  blockId: `local:${msg.uuid}`,
+                  text,
+                },
+              ]
+            : [];
+        }
+        return [];
+      case "stream_event":
+        if (msg.parent_tool_use_id) return []; // 서브에이전트 스트림은 노출하지 않는다
+        return this.mapStreamEvent(msg.event, ts);
+      case "assistant":
+        return this.mapAssistant(msg, ts);
+      case "user":
+        return this.mapUser(msg, ts);
+      case "result":
+        return [this.mapResult(msg, ts)];
+      default:
+        return [];
+    }
+  }
+
+  private mapStreamEvent(
+    event: { type: string; [k: string]: unknown },
+    ts: number,
+  ): ChatEvent[] {
+    switch (event.type) {
+      case "message_start": {
+        const id =
+          (event.message as { id?: string } | undefined)?.id ??
+          `m${++this.counter}`;
+        this.messageId = id;
+        this.seenStreamMessages.add(id);
+        this.blocks.clear();
+        return [];
+      }
+      case "content_block_start": {
+        const index = event.index as number;
+        const cb = event.content_block as {
+          type: string;
+          id?: string;
+          name?: string;
+        };
+        const blockId = `${this.messageId ?? "m"}:${index}`;
+        if (cb.type === "text") {
+          this.blocks.set(index, { kind: "text", blockId, json: "" });
+          return [];
+        }
+        if (cb.type === "tool_use") {
+          const toolUseId = cb.id ?? blockId;
+          this.blocks.set(index, {
+            kind: "tool_use",
+            blockId,
+            toolUseId,
+            name: cb.name ?? "tool",
+            json: "",
+          });
+          return [
+            {
+              type: "tool_use",
+              ts,
+              toolUseId,
+              name: cb.name ?? "tool",
+              input: {},
+              partial: true,
+            },
+          ];
+        }
+        this.blocks.set(index, { kind: "other", blockId, json: "" });
+        return [];
+      }
+      case "content_block_delta": {
+        const block = this.blocks.get(event.index as number);
+        if (!block) return [];
+        const delta = event.delta as {
+          type: string;
+          text?: string;
+          partial_json?: string;
+          thinking?: string;
+        };
+        if (
+          block.kind === "text" &&
+          delta.type === "text_delta" &&
+          delta.text
+        ) {
+          return [
+            {
+              type: "text_delta",
+              ts,
+              blockId: block.blockId,
+              text: delta.text,
+            },
+          ];
+        }
+        if (block.kind === "tool_use" && delta.type === "input_json_delta") {
+          block.json += delta.partial_json ?? "";
+          // 명령·경로가 만들어지는 대로 카드에 보이게 — 뽑힌 값이 바뀌었을 때만 흘린다
+          const preview = previewToolInput(block.json);
+          const key = JSON.stringify(preview);
+          if (key !== block.previewKey && Object.keys(preview).length > 0) {
+            block.previewKey = key;
+            return [{ type: "tool_use", ts, toolUseId: block.toolUseId!, name: block.name!, input: preview, partial: true, preview: true }];
+          }
+        }
+        if (delta.type === "thinking_delta" && delta.thinking) return [{ type: "thinking_delta", ts, text: delta.thinking }];
+        return [];
+      }
+      case "content_block_stop": {
+        const block = this.blocks.get(event.index as number);
+        if (!block || block.kind !== "tool_use") return [];
+        return [
+          {
+            type: "tool_use",
+            ts,
+            toolUseId: block.toolUseId!,
+            name: block.name!,
+            input: parseJsonLoose(block.json),
+          },
+        ];
+      }
+      default:
+        return [];
+    }
+  }
+
+  private mapAssistant(
+    msg: Extract<SDKMessage, { type: "assistant" }>,
+    ts: number,
+  ): ChatEvent[] {
+    const events: ChatEvent[] = [];
+    if (msg.error) {
+      events.push({
+        type: "error",
+        ts,
+        message: describeAssistantError(msg.error),
+      });
+    }
+    if (msg.parent_tool_use_id) return [...events, ...subagentActivity(msg.parent_tool_use_id, msg.message.content, ts)];
+    const mu = (msg.message as { usage?: Partial<Record<string, number>> }).usage;
+    if (mu)
+      this.lastContextTokens =
+        (mu.input_tokens ?? 0) + (mu.cache_read_input_tokens ?? 0) + (mu.cache_creation_input_tokens ?? 0);
+    if (this.seenStreamMessages.has(msg.message.id)) return events; // 스트림으로 이미 처리
+    const raw: unknown = msg.message.content;
+    const content: unknown[] = Array.isArray(raw) ? raw : [];
+    content.forEach((block: unknown, i: number) => {
+      const b = block as {
+        type: string;
+        text?: string;
+        id?: string;
+        name?: string;
+        input?: unknown;
+      };
+      const blockId = `${msg.message.id}:${i}`;
+      if (b.type === "text" && typeof b.text === "string") {
+        events.push({ type: "assistant_text", ts, blockId, text: b.text });
+      } else if (b.type === "tool_use") {
+        events.push({
+          type: "tool_use",
+          ts,
+          toolUseId: b.id ?? blockId,
+          name: b.name ?? "tool",
+          input: b.input ?? {},
+        });
+      }
+    });
+    return events;
+  }
+
+  private mapUser(
+    msg: Extract<SDKMessage, { type: "user" }>,
+    ts: number,
+  ): ChatEvent[] {
+    if (msg.parent_tool_use_id) return [];
+    const content = msg.message.content;
+    if (!Array.isArray(content)) return [];
+    const events: ChatEvent[] = [];
+    for (const block of content) {
+      const b = block as {
+        type: string;
+        tool_use_id?: string;
+        content?: unknown;
+        is_error?: boolean;
+      };
+      if (b.type !== "tool_result" || !b.tool_use_id) continue;
+      events.push({
+        type: "tool_result",
+        ts,
+        toolUseId: b.tool_use_id,
+        output: toolResultText(b.content),
+        isError: b.is_error === true,
+      });
+    }
+    return events;
+  }
+
+  private mapResult(
+    msg: Extract<SDKMessage, { type: "result" }>,
+    ts: number,
+  ): ChatEvent {
+    const u = msg.usage as Partial<Record<string, number>>;
+    const modelUsage: Record<
+      string,
+      import("@shared/chat-events").ModelUsageEntry
+    > = {};
+    for (const [model, mu] of Object.entries(msg.modelUsage ?? {})) {
+      modelUsage[model] = {
+        input: mu.inputTokens ?? 0,
+        output: mu.outputTokens ?? 0,
+        cacheRead: mu.cacheReadInputTokens ?? 0,
+        cacheWrite: mu.cacheCreationInputTokens ?? 0,
+        costUsd: mu.costUSD ?? 0,
+        contextWindow: mu.contextWindow || undefined,
+      };
+    }
+    const isError = msg.is_error || msg.subtype !== "success";
+    let errorText: string | undefined;
+    if (msg.subtype !== "success")
+      errorText = RESULT_ERROR_LABEL[msg.subtype] ?? msg.subtype;
+    else if (msg.is_error) errorText = msg.result;
+    return {
+      type: "turn_result",
+      ts,
+      usage: {
+        input: u.input_tokens ?? 0,
+        output: u.output_tokens ?? 0,
+        cacheRead: u.cache_read_input_tokens ?? 0,
+        cacheWrite: u.cache_creation_input_tokens ?? 0,
+      },
+      ...(this.lastContextTokens !== null ? { contextTokens: this.lastContextTokens } : {}),
+      costUsd: msg.total_cost_usd ?? 0,
+      durationMs: msg.duration_ms ?? 0,
+      numTurns: msg.num_turns ?? 0,
+      sessionId: msg.session_id,
+      modelUsage,
+      isError,
+      errorText,
+    };
+  }
+}
+
+const RESULT_ERROR_LABEL: Record<string, string> = {
+  error_during_execution: "실행 중 오류로 턴이 중단되었습니다.",
+  error_max_turns: "최대 턴 수에 도달했습니다.",
+  error_max_budget_usd: "예산 한도에 도달했습니다.",
+  error_max_structured_output_retries:
+    "구조화 출력 재시도 한도에 도달했습니다.",
+};
+
+function describeAssistantError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const e = error as { message?: string; type?: string };
+    return e.message || e.type || JSON.stringify(error);
+  }
+  return String(error);
+}
+
+/**
+ * rate_limit_event 의 rate_limit_info → 구독 한도. unifiedWindows(5시간/주간/모델별 주간, utilization 0~1) 가 있으면
+ * 그걸 쓰고, 없으면 최상위 rateLimitType/utilization 하나만 채운다. SDK 타입에 unifiedWindows 가 없어 느슨하게 읽는다.
+ * seven_day_overage_included 는 CLI 가 "Fable limit" 으로 부르는 모델별 주간 창(/usage 의 "Current week (Fable)").
+ */
+export function parseClaudeRateLimit(
+  info: unknown,
+  observedAt: number,
+): ProviderRateLimitDto | null {
+  const i = info as Record<string, unknown> | null | undefined;
+  if (!i || typeof i !== "object") return null;
+  const windows = i.unifiedWindows as Record<string, unknown> | undefined;
+  let session = claudeWindow(windows?.five_hour, 300);
+  let weekly = claudeWindow(windows?.seven_day, 10_080);
+  const modelBucket = claudeWindow(windows?.seven_day_overage_included, 10_080);
+  let modelWeekly = modelBucket
+    ? { ...modelBucket, label: MODEL_WINDOW_LABEL.seven_day_overage_included }
+    : null;
+  const rejected = i.status === "rejected" && typeof i.resetsAt === "number" ? i.resetsAt : undefined;
+  if (!session && !weekly && !modelWeekly) {
+    const type = typeof i.rateLimitType === "string" ? i.rateLimitType : "";
+    // 거절된 창은 utilization 이 없어도 다 쓴 것이다. 그 창을 100% 로 채워 목록에서 사라지지 않게 한다.
+    const single = claudeWindow(
+      { utilization: rejected ? 1 : i.utilization, resetsAt: i.resetsAt },
+      type === "five_hour" ? 300 : 10_080,
+    );
+    if (type === "five_hour") session = single;
+    else if (type in MODEL_WINDOW_LABEL)
+      modelWeekly = single && { ...single, label: MODEL_WINDOW_LABEL[type] };
+    else if (type.startsWith("seven_day")) weekly = single;
+  }
+  if (!session && !weekly && !modelWeekly) {
+    // 창 정보 없이 거절만 온 경우에도 재시도 예약은 할 수 있어야 한다.
+    return rejected ? { session: null, weekly: null, modelWeekly: null, observedAt, rejectedResetsAt: rejected } : null;
+  }
+  return { session, weekly, modelWeekly, observedAt, ...(rejected ? { rejectedResetsAt: rejected } : {}) };
+}
+
+/**
+ * rate_limit_event 는 그 순간 알려 준 창만 담는다(거절 이벤트는 걸린 창 하나뿐). 그대로 저장하면 나머지 창이
+ * 화면에서 사라지므로, 새 값에 없는 창은 이전 관측값을 유지한다. 새 값이 없으면 이전 값을 그대로 돌려준다.
+ */
+export function mergeRateLimit(
+  prev: ProviderRateLimitDto | null | undefined,
+  next: ProviderRateLimitDto | null,
+): ProviderRateLimitDto | null {
+  if (!next) return prev ?? null;
+  if (!prev) return next;
+  return {
+    ...next,
+    session: next.session ?? prev.session,
+    weekly: next.weekly ?? prev.weekly,
+    modelWeekly: next.modelWeekly ?? prev.modelWeekly,
+  };
+}
+
+/**
+ * `/usage` 로컬 커맨드 출력 텍스트 → 구독 한도. 모델 호출 없이(비용 0) 현재 값을 얻는 유일한 통로라 새로고침에 쓴다.
+ *   Current session: 3% used · resets Sep 4 at 11:10pm (Asia/Seoul)
+ *   Current week (all models): 25% used · resets Sep 9 at 8pm (Asia/Seoul)
+ *   Current week (Fable): 37% used · resets Sep 9 at 8pm (Asia/Seoul)
+ * 초기화 시각은 CLI 가 이 PC 의 시간대로 찍으므로 로컬 시간으로 해석한다. 못 읽으면 resetsAt=0 (화면에서 생략).
+ */
+export function parseUsageText(
+  text: string,
+  now: number,
+): ProviderRateLimitDto | null {
+  let session: RateLimitWindowDto | null = null;
+  let weekly: RateLimitWindowDto | null = null;
+  let modelWeekly: (RateLimitWindowDto & { label: string }) | null = null;
+  const re =
+    /^Current (session|week(?: \(([^)]+)\))?):\s*(\d+(?:\.\d+)?)% used(?:\s*·\s*resets (.+?))?\s*$/;
+  for (const raw of text.split("\n")) {
+    const m = re.exec(raw.trim());
+    if (!m) continue;
+    const [, kind, scope, pct, resets] = m;
+    const w: RateLimitWindowDto = {
+      usedPercent: Number(pct),
+      windowMinutes: kind === "session" ? 300 : 10_080,
+      resetsAt: resets ? parseResetTime(resets, now) : 0,
+    };
+    if (kind === "session") session = w;
+    else if (!scope || /all models/i.test(scope)) weekly = w;
+    else modelWeekly = { ...w, label: scope.replace(/\s+only$/i, "").trim() };
+  }
+  if (!session && !weekly && !modelWeekly) return null;
+  return { session, weekly, modelWeekly, observedAt: now };
+}
+
+const MONTHS: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+/** "Sep 4 at 11:10pm (Asia/Seoul)" → epoch 초. 연도는 now 기준, 이미 하루 넘게 지났으면 다음 해. 실패하면 0. */
+export function parseResetTime(s: string, now: number): number {
+  const m =
+    /^([A-Za-z]{3})\w*\s+(\d{1,2})\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i.exec(
+      s.trim(),
+    );
+  if (!m) return 0;
+  const month = MONTHS[m[1].toLowerCase()];
+  if (month === undefined) return 0;
+  let hour = Number(m[3]) % 12;
+  if (m[5].toLowerCase() === "pm") hour += 12;
+  const d = new Date(now);
+  d.setMonth(month, Number(m[2]));
+  d.setHours(hour, Number(m[4] ?? 0), 0, 0);
+  if (d.getTime() < now - 86_400_000) d.setFullYear(d.getFullYear() + 1);
+  return Math.floor(d.getTime() / 1000);
+}
+
+/** 모델 한정 주간 창의 rateLimitType → 표시명 (CLI 의 limit 이름과 맞춤). */
+const MODEL_WINDOW_LABEL: Record<string, string> = {
+  seven_day_overage_included: "Fable",
+  seven_day_opus: "Opus",
+  seven_day_sonnet: "Sonnet",
+};
+
+function claudeWindow(
+  raw: unknown,
+  windowMinutes: number,
+): RateLimitWindowDto | null {
+  const w = raw as Record<string, unknown> | null | undefined;
+  if (!w || typeof w.utilization !== "number" || typeof w.resetsAt !== "number")
+    return null;
+  return {
+    usedPercent: Math.max(0, Math.min(100, w.utilization * 100)),
+    windowMinutes,
+    resetsAt: w.resetsAt,
+  };
+}
+
+export function parseJsonLoose(json: string): unknown {
+  const trimmed = json.trim();
+  if (!trimmed) return {};
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return { _raw: trimmed };
+  }
+}
+
+/** tool_result content(string | block[]) 를 표시용 문자열로. 이미지는 placeholder. */
+export function toolResultText(content: unknown): string {
+  if (content == null) return "";
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((c) => {
+        const b = c as { type?: string; text?: string };
+        if (b.type === "text") return b.text ?? "";
+        if (b.type === "image") return "[image]";
+        return JSON.stringify(c);
+      })
+      .join("\n");
+  }
+  return JSON.stringify(content);
+}
+
+/**
+ * 스트리밍 중인(아직 닫히지 않은) 툴 입력 JSON 에서 문자열 필드만 뽑는다: {"command":"cd ~ && ls -la /Us → { command: "cd ~ && ls -la /Us" }.
+ * 정확한 파서가 아니라 `"키": "값…` 모양을 정규식으로 찾는 것이라, 문자열 안에 든 따옴표는 이스케이프(\") 로만 구분한다.
+ * 끝이 잘린 이스케이프(\ 하나로 끝남)는 떼어 낸다. 값이 없는 키·문자열이 아닌 값은 뺀다.
+ */
+export function previewToolInput(json: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re = /"([A-Za-z_][\w-]*)"\s*:\s*"((?:[^"\\]|\\.)*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(json))) {
+    let raw = m[2];
+    if (raw.endsWith("\\")) raw = raw.slice(0, -1);
+    try {
+      out[m[1]] = JSON.parse(`"${raw}"`) as string;
+    } catch {
+      out[m[1]] = raw;
+    }
+  }
+  return out;
+}
+
+/** 하위 에이전트의 assistant 메시지에서 도구 호출과 말을 뽑아 카드에 흘릴 활동 이벤트로. 입력은 문자열 필드만 200자로 잘라 보낸다. */
+export function subagentActivity(parentToolUseId: string, content: unknown, ts: number): ChatEvent[] {
+  const blocks: unknown[] = Array.isArray(content) ? content : [];
+  const out: ChatEvent[] = [];
+  for (const raw of blocks) {
+    const b = raw as { type: string; name?: string; input?: unknown; text?: string };
+    if (b.type === "tool_use") {
+      const input: Record<string, string> = {};
+      const src = b.input && typeof b.input === "object" ? (b.input as Record<string, unknown>) : {};
+      for (const [k, v] of Object.entries(src)) if (typeof v === "string") input[k] = v.length > 200 ? v.slice(0, 200) + "…" : v;
+      out.push({ type: "subagent_activity", ts, parentToolUseId, tool: b.name ?? "tool", input });
+    } else if (b.type === "text" && typeof b.text === "string") {
+      const line = b.text.trim().split("\n").filter(Boolean).pop() ?? "";
+      if (line) out.push({ type: "subagent_activity", ts, parentToolUseId, text: line.length > 160 ? line.slice(0, 160) + "…" : line });
+    }
+  }
+  return out;
+}

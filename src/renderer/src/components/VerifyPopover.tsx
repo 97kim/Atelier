@@ -1,0 +1,126 @@
+// "검증" 버튼의 명령 편집창 — 한 줄에 명령 하나. 저장은 워크스페이스에(같은 워크스페이스의 모든 탭이 공유), 실행은 이 탭의 cwd 에서.
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { VERIFY_MAX_COMMANDS, parseVerifyCommands } from "@shared/verify";
+import { Icon } from "./Icon";
+
+export function VerifyPopover({
+  tabId,
+  anchor,
+  saved,
+  onSave,
+  onRun,
+  onClose,
+}: {
+  tabId: string;
+  /** 붙일 버튼 — 헤더가 overflow-hidden 이라 body 포털로 그리고 이 요소 아래에 fixed 로 놓는다. */
+  anchor: HTMLElement | null;
+  /** 워크스페이스에 저장된 명령. 비어 있으면 cwd 에서 추천을 받아 채운다. */
+  saved: string[];
+  onSave: (commands: string[]) => void;
+  onRun: (commands: string[]) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(saved.join("\n"));
+  const [suggested, setSuggested] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const ta = useRef<HTMLTextAreaElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number }>({ top: 72, right: 16 });
+  useLayoutEffect(() => {
+    const place = () => {
+      const r = anchor?.getBoundingClientRect();
+      if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [anchor]);
+  useEffect(() => {
+    if (saved.length > 0) return;
+    let alive = true;
+    void window.workbench.chat.verifySuggest(tabId).then((list) => {
+      if (alive && list.length > 0) {
+        setText(list.join("\n"));
+        setSuggested(true);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tabId, saved.length]);
+  useEffect(() => {
+    ta.current?.focus();
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  const commands = parseVerifyCommands(text);
+  const dirty = commands.join("\n") !== saved.join("\n");
+  const run = () => {
+    if (commands.length === 0) return;
+    if (dirty) onSave(commands);
+    onRun(commands);
+    onClose();
+  };
+  return createPortal(
+    <div ref={ref} className="fixed z-40 w-[420px] max-w-[calc(100vw-16px)] rounded-lg border border-line bg-panel p-3 shadow-pop" style={{ top: pos.top, right: pos.right }} data-verify-popover>
+      <div className="mb-2 flex items-center gap-2">
+        <Icon name="check" size={12} className="text-accent" />
+        <span className="font-medium">검증 명령</span>
+        <span className="text-[11px] text-muted">한 줄에 하나, 위에서부터 순서대로 · 실패하면 멈춤</span>
+      </div>
+      <textarea
+        ref={ta}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            run();
+          }
+        }}
+        rows={Math.min(8, Math.max(3, text.split("\n").length + 1))}
+        spellCheck={false}
+        placeholder={"yarn typecheck\nyarn test"}
+        className="mono w-full resize-y rounded-md border border-line bg-inset px-2.5 py-2 text-[12px] leading-[1.6] outline-none focus:border-accent"
+        data-verify-commands
+      />
+      <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
+        {suggested && saved.length === 0 && commands.length > 0 && <span data-verify-suggested>저장소에서 추천한 명령입니다. 고쳐서 쓰세요.</span>}
+        {commands.length > VERIFY_MAX_COMMANDS - 1 && <span>최대 {VERIFY_MAX_COMMANDS}개</span>}
+        <span className="flex-1" />
+        <button
+          onClick={() => {
+            onSave(commands);
+            onClose();
+          }}
+          disabled={!dirty}
+          className="rounded-md border border-line px-2.5 py-1 hover:bg-panel-2 disabled:opacity-40"
+          data-verify-save
+        >
+          저장
+        </button>
+        <button
+          onClick={run}
+          disabled={commands.length === 0}
+          className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-on-accent hover:bg-accent/90 disabled:opacity-40"
+          title="저장하고 바로 실행 (⌘↩)"
+          data-verify-run
+        >
+          <Icon name="play" size={10} />
+          {dirty ? "저장하고 실행" : "실행"}
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}

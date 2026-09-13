@@ -1,0 +1,69 @@
+import { useMemo } from "react";
+import { diffLines } from "diff";
+
+const MAX_LINES = 400;
+
+/** unified diff 문자열(Codex fileChange 의 diff·팬아웃 비교)을 줄 단위로 색칠한다. 파일 헤더(diff --git/index/---/+++)는 숨기고 hunk 헤더(@@)는 흐리게. */
+export function UnifiedDiff({ diff }: { diff: string }) {
+  const rows = useMemo(
+    () =>
+      diff
+        .replace(/\n$/, "")
+        .split("\n")
+        .filter((l) => !/^(---|\+\+\+) |^diff --git |^index [0-9a-f]+\.\.|^(new|deleted) file mode |^similarity index |^rename (from|to) /.test(l)),
+    [diff],
+  );
+  const shown = rows.slice(0, MAX_LINES);
+  return (
+    <pre className="diff mono overflow-x-auto rounded-md border border-line bg-inset p-2 leading-5" style={{ userSelect: "text" }}>
+      {shown.map((line, i) => {
+        const sign = line[0];
+        const cls = sign === "+" ? "bg-ok-bg text-ok" : sign === "-" ? "bg-err-bg text-err" : sign === "@" ? "text-muted-2" : "text-muted";
+        return (
+          <div key={i} className={cls}>
+            {line}
+          </div>
+        );
+      })}
+      {rows.length > MAX_LINES && <div className="text-muted">… {rows.length - MAX_LINES}줄 더 있음</div>}
+    </pre>
+  );
+}
+
+/** old → new 라인 diff. Edit 툴의 old_string/new_string, Write 의 content(old="") 에 쓴다. */
+export function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
+  const rows = useMemo(() => {
+    const parts = diffLines(oldText, newText);
+    const out: { sign: " " | "+" | "-"; text: string }[] = [];
+    for (const p of parts) {
+      const sign = p.added ? "+" : p.removed ? "-" : " ";
+      const lines = p.value.replace(/\n$/, "").split("\n");
+      for (const line of lines) out.push({ sign, text: line });
+    }
+    return out;
+  }, [oldText, newText]);
+
+  const shown = rows.slice(0, MAX_LINES);
+  return (
+    <pre className="diff mono overflow-x-auto rounded-md border border-line bg-inset p-2 leading-5" style={{ userSelect: "text" }}>
+      {shown.map((r, i) => (
+        <div
+          key={i}
+          className={
+            r.sign === "+"
+              ? "bg-ok-bg text-ok"
+              : r.sign === "-"
+                ? "bg-err-bg text-err"
+                : "text-muted"
+          }
+        >
+          <span className="inline-block w-4 select-none opacity-70">{r.sign}</span>
+          {r.text}
+        </div>
+      ))}
+      {rows.length > MAX_LINES && (
+        <div className="text-muted">… {rows.length - MAX_LINES}줄 더 있음</div>
+      )}
+    </pre>
+  );
+}

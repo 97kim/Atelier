@@ -1,0 +1,846 @@
+// renderer ↔ main 계약. 양쪽 모두 이 파일만 import 한다 (node/electron 의존성 없음).
+
+import type {
+  ChatEvent,
+  PermissionAnswer,
+  PermissionPolicy,
+  SessionStatus,
+} from "./chat-events";
+import type { BackgroundJobDto } from "./background-jobs";
+import type { NetFailure } from "./browser-diagnostics";
+import type { Handoff } from "./handoff";
+import type { OrchRunState } from "./orchestration";
+import type { LspServerId } from "./lsp-servers";
+import type { SlashCommandDto } from "./slash-commands";
+import type { SnippetDto } from "./snippets";
+import type { SearchHit } from "./transcript-search";
+import type { WorkbenchModel } from "./workspace-model";
+import type { PricingEntry, UsageFilter, UsageSummary } from "./usage";
+
+export type Provider = "claude" | "codex";
+export const PROVIDERS: Provider[] = ["claude", "codex"];
+
+/** 모델 피커의 한 줄. id 는 CLI 에 넘기는 값(별칭 또는 전체 이름). */
+export interface ModelOptionDto {
+  id: string;
+  label: string;
+  description?: string;
+  /** 별칭이 가리키는 실제 모델 id(Claude). */
+  resolved?: string;
+  /** CLI 가 기본으로 고른 모델(Codex). */
+  isDefault?: boolean;
+}
+
+export interface CliStatusDto {
+  installed: boolean;
+  path: string | null;
+  source?: "auto" | "override";
+  error?: string;
+  /** --version 첫 줄. 설치된 경우에만. */
+  version?: string;
+  /** CLI 설정 파일의 기본 모델(~/.claude/settings.json model, ~/.codex/config.toml model). 없으면 undefined. */
+  defaultModel?: string;
+}
+
+export interface CliCandidateDto {
+  path: string;
+  verified: boolean;
+  versionOutput?: string;
+}
+
+export interface OverrideSetResultDto {
+  ok: boolean;
+  reason?:
+    | "not_found"
+    | "permission_denied"
+    | "disk_full"
+    | "readonly_fs"
+    | "unknown";
+  message?: string;
+}
+
+export interface AppInfoDto {
+  version: string;
+  platform: string;
+  userDataPath: string;
+  /** OS 로그인 사용자명 (os.userInfo). 사이드바 하단 표시용. */
+  userName: string;
+  /** main 콘솔이 기록되는 로그 파일 경로 (userData/logs/main.log). */
+  logPath: string;
+}
+
+/** 예열 대상: 보고 있는 탭(활성화·설정 변경·시작 때 프로세스를 미리 띄움) 또는 끔. */
+export type WarmTarget = "active" | "off";
+
+/** 앱 동작 설정(userData/settings.json). 링크 열기 방식은 renderer 의 localStorage 에 있어 여기 없다. */
+import type { ThemeMode } from "./theme";
+
+export interface AppSettingsDto {
+  /** 화면 테마. system 이면 macOS 화면 모드를 따른다. */
+  theme: ThemeMode;
+  warmTarget: WarmTarget;
+  /** 턴 없이 이만큼(분) 지나면 provider 프로세스를 내린다. */
+  sessionIdleMinutes: number;
+  /** 동시에 진행할 턴 수(승인 대기 포함). 넘치면 큐에서 기다린다. */
+  maxConcurrent: number;
+  /** 응답이 끝났을 때 macOS 알림: always = 항상, unfocused = 창이 포커스 밖이거나 다른 탭을 볼 때, off = 안 함. */
+  notifyOnDone: NotifyOnDone;
+}
+
+export type NotifyOnDone = "always" | "unfocused" | "off";
+export const NOTIFY_ON_DONE_DEFAULT: NotifyOnDone = "always";
+export function isNotifyOnDone(v: unknown): v is NotifyOnDone {
+  return v === "always" || v === "unfocused" || v === "off";
+}
+/** 응답 완료 알림을 띄울지 — 순수 판정(테스트용). */
+export function shouldNotifyDone(mode: NotifyOnDone, focused: boolean, isActiveTab: boolean): boolean {
+  if (mode === "off") return false;
+  if (mode === "always") return true;
+  return !focused || !isActiveTab;
+}
+
+export const SESSION_IDLE_MINUTES_DEFAULT = 10;
+export const SESSION_IDLE_MINUTES_MIN = 1;
+export const SESSION_IDLE_MINUTES_MAX = 120;
+export const MAX_CONCURRENT_DEFAULT = 4;
+export const MAX_CONCURRENT_MIN = 1;
+/** UI 상한. 검증된 안전선이 아니라 입력 범위다. */
+export const MAX_CONCURRENT_MAX = 8;
+
+/** renderer 의 처리되지 않은 오류. main 이 로그 파일에 남긴다. */
+export interface RendererErrorDto {
+  kind: "error" | "unhandledrejection";
+  message: string;
+  stack?: string;
+  source?: string;
+}
+
+export const IPC = {
+  appInfo: "app:info",
+  appModels: "app:models",
+  appOpenLogs: "app:open-logs",
+  appSettingsGet: "app:settings-get",
+  appSettingsSet: "app:settings-set",
+  stateLoad: "state:load",
+  stateSet: "state:set",
+  rendererError: "app:renderer-error",
+  cliStatus: "cli:status",
+  cliCandidates: "cli:candidates",
+  cliSetOverride: "cli:set-override",
+  cliRefresh: "cli:refresh",
+  chatSend: "chat:send",
+  chatAbort: "chat:abort",
+  chatPermission: "chat:permission",
+  chatConfigure: "chat:configure",
+  chatSnapshot: "chat:snapshot",
+  chatEvents: "chat:events",
+  chatClear: "chat:clear",
+  chatHandoffPreview: "chat:handoff-preview",
+  chatSwitchProvider: "chat:switch-provider",
+  chatEvent: "chat:event",
+  chatCommands: "chat:commands",
+  chatCommandsChanged: "chat:commands-changed",
+  chatSearch: "chat:search",
+  chatQueueRemove: "chat:queue-remove",
+  chatLimitRetry: "chat:limit-retry",
+  chatLimitCancel: "chat:limit-cancel",
+  chatQueueUpdate: "chat:queue-update",
+  chatQueueSendNext: "chat:queue-send-next",
+  chatExport: "chat:export",
+  chatAttachTerminal: "chat:attach-terminal",
+  chatDetachTerminal: "chat:detach-terminal",
+  chatSnapshotChanged: "chat:snapshot-changed",
+  mcpStatus: "mcp:status",
+  pickDirectory: "dialog:pick-directory",
+  openExternal: "browser:open-external",
+  browserNetFailures: "browser:net-failures",
+  backgroundJobs: "jobs:list",
+  backgroundJobsChanged: "jobs:changed",
+  gitInfo: "git:info",
+  gitChanges: "git:changes",
+  gitCommit: "git:commit",
+  gitRevert: "git:revert",
+  snippetsList: "snippets:list",
+  snippetsSave: "snippets:save",
+  snippetsRemove: "snippets:remove",
+  snippetsChanged: "snippets:changed",
+  gitDraftMessage: "git:draft-message",
+  fileRead: "file:read",
+  fileWrite: "file:write",
+  fileCreate: "file:create",
+  lspStatus: "lsp:status",
+  lspSetPath: "lsp:set-path",
+  lspStart: "lsp:start",
+  lspSend: "lsp:send",
+  lspStop: "lsp:stop",
+  lspMessage: "lsp:message",
+  lspExit: "lsp:exit",
+  fileRename: "file:rename",
+  fileDelete: "file:delete",
+  fileList: "file:list",
+  fileLocate: "file:locate",
+  previewUrl: "preview:url",
+  controlOpen: "control:open",
+  controlInstallCli: "control:install-cli",
+  controlInstallSkill: "control:install-skill",
+  controlInstallStatus: "control:install-status",
+  chatCrossReview: "chat:cross-review",
+  chatVerify: "chat:verify",
+  chatVerifyAbort: "chat:verify-abort",
+  chatVerifySuggest: "chat:verify-suggest",
+  chatFanout: "chat:fanout",
+  chatFanoutCompare: "chat:fanout-compare",
+  chatFanoutAdopt: "chat:fanout-adopt",
+  chatFanoutCleanup: "chat:fanout-cleanup",
+  orchList: "orch:list",
+  orchReply: "orch:reply",
+  orchFollowup: "orch:followup",
+  orchTakeover: "orch:takeover",
+  orchWorker: "orch:worker",
+  orchClose: "orch:close",
+  orchGate: "orch:gate",
+  orchChanged: "orch:changed",
+  cliDiagnostics: "cli:diagnostics",
+  wsState: "ws:state",
+  wsAdd: "ws:add",
+  wsCreate: "ws:create",
+  wsUpdate: "ws:update",
+  wsRemove: "ws:remove",
+  wsChanged: "ws:changed",
+  tabCreate: "tab:create",
+  tabClose: "tab:close",
+  tabReopen: "tab:reopen",
+  tabDelete: "tab:delete",
+  wtCreate: "worktree:create",
+  wtStatus: "worktree:status",
+  wtMerge: "worktree:merge",
+  wtRemove: "worktree:remove",
+  tabActivate: "tab:activate",
+  tabRename: "tab:rename",
+  tabReorder: "tab:reorder",
+  shortcut: "app:shortcut",
+  usageQuery: "usage:query",
+  usageStatus: "usage:status",
+  usageRescan: "usage:rescan",
+  usageExport: "usage:export",
+  usageSettingsGet: "usage:settings-get",
+  usageSettingsSet: "usage:settings-set",
+  usageChanged: "usage:changed",
+  usageRefreshLimits: "usage:refresh-limits",
+  termOpen: "term:open",
+  termWrite: "term:write",
+  termResize: "term:resize",
+  termClose: "term:close",
+  termData: "term:data",
+  termExit: "term:exit",
+  termList: "term:list",
+  termOpened: "term:opened",
+} as const;
+
+/** 채팅 탭에 붙는 통합 터미널 (main 의 node-pty). 패널을 닫아도 셸은 유지, 탭을 닫으면 종료. */
+export interface TerminalOpenResultDto {
+  ok: boolean;
+  existing: boolean;
+  shell: string;
+  pid?: number;
+  error?: string;
+  /** 이미 떠 있던 터미널에 다시 붙을 때 최근 출력. */
+  backlog?: string;
+}
+
+/** 터미널 id 는 "<채팅탭 id>:<이름>". kind=command 는 하이브리드 모드의 CLI. */
+export interface TerminalInfoDto {
+  id: string;
+  kind: "shell" | "command";
+  title: string;
+}
+
+export interface TerminalApi {
+  /** termId 로 셸을 연다. 이미 있으면 그 pty 에 붙는다(backlog 포함). */
+  open(
+    termId: string,
+    cwd: string,
+    cols: number,
+    rows: number,
+  ): Promise<TerminalOpenResultDto>;
+  write(termId: string, data: string): void;
+  resize(termId: string, cols: number, rows: number): void;
+  close(termId: string): Promise<void>;
+  /** 이 채팅 탭에 붙어 있는 터미널 목록 ("<tabId>:" 접두어). */
+  list(tabId: string): Promise<TerminalInfoDto[]>;
+  onData(listener: (termId: string, data: string) => void): () => void;
+  onExit(listener: (termId: string, exitCode: number) => void): () => void;
+  /** main 이 새 pty 를 만들었을 때 (하이브리드 CLI 등). */
+  onOpened(listener: (info: TerminalInfoDto) => void): () => void;
+}
+
+/** 구독 한도 창 하나 (5시간 세션 창 / 주간 창). */
+export interface RateLimitWindowDto {
+  usedPercent: number;
+  windowMinutes: number;
+  /** epoch 초 */
+  resetsAt: number;
+}
+
+/** provider 별 구독 한도. Claude 는 턴 중 rate_limit_event, Codex 는 트랜스크립트의 rate_limits 에서 온다. */
+export interface ProviderRateLimitDto {
+  session: RateLimitWindowDto | null;
+  weekly: RateLimitWindowDto | null;
+  /** 특정 모델에만 적용되는 주간 창 (Claude 의 "Current week (Fable)" 등). label 은 모델 표시명. */
+  modelWeekly: (RateLimitWindowDto & { label: string }) | null;
+  /** 관측 시각(ms). 턴이 돌아야 갱신되므로 화면에 같이 표시한다. */
+  observedAt: number;
+  /** rate_limit_event 가 status "rejected" 였으면 그 리셋 시각(epoch 초). 자동 재시도 예약에 쓴다. */
+  rejectedResetsAt?: number;
+}
+
+/** 동시 실행 상한에 걸려 기다리는 턴의 상태(status=queued). */
+export interface QueueInfoDto {
+  /** 대기 순번(1 이 다음 차례). */
+  position: number;
+  /** 지금 진행 중인 턴 수(승인 대기 포함). */
+  running: number;
+  max: number;
+  /** 진행 중 가운데 권한 승인을 기다리는 턴 수 — 사용자가 답하면 자리가 난다. */
+  waitingPermission: number;
+}
+
+/** 한도 도달로 멈춘 턴의 자동 재시도 상태. */
+export interface LimitWaitDto {
+  /** 재시도 예정 시각(ms). 리셋 시각을 모르면 null (수동 재시도만). */
+  until: number | null;
+  attempts: number;
+  /** 한도 오류 원문 (배너에 표시). */
+  message: string;
+}
+
+export interface UsageStatusDto {
+  scanning: boolean;
+  files: number;
+  records: number;
+  lastScanAt: number | null;
+  lastScanMs: number;
+  rateLimits: {
+    claude: ProviderRateLimitDto | null;
+    codex: ProviderRateLimitDto | null;
+  };
+  roots: { claude: string; codex: string };
+  /** userData/pricing.json 이 있으면 true (기본 가격표 대체). */
+  customPricing: boolean;
+  pricing: PricingEntry[];
+}
+
+export interface UsageSettingsDto {
+  /** 월 예산(USD, 추정 비용 기준). null 이면 알림 없음. */
+  monthlyBudgetUsd: number | null;
+}
+
+export interface UsageApi {
+  query(filter: UsageFilter): Promise<UsageSummary>;
+  status(): Promise<UsageStatusDto>;
+  rescan(): Promise<UsageStatusDto>;
+  /** 구독 한도 새로고침: Claude 는 /usage 로컬 커맨드(비용 0), Codex 는 트랜스크립트 재스캔. */
+  refreshLimits(): Promise<UsageStatusDto>;
+  /** 저장 다이얼로그를 띄워 CSV 로 내보낸다. 취소하면 null. */
+  exportCsv(filter: UsageFilter): Promise<string | null>;
+  getSettings(): Promise<UsageSettingsDto>;
+  setSettings(patch: Partial<UsageSettingsDto>): Promise<UsageSettingsDto>;
+  onChanged(listener: () => void): () => void;
+}
+
+/** 사용자 응답이 필요한 세션: 권한 대기 / 안 보는 사이 끝난 턴(완료·오류). */
+export type SessionAttention = "permission" | "done" | "error";
+
+export type VerifyStartResult = { ok: true; runId: string } | { ok: false; error: string };
+export type OrchResult = { ok: true } | { ok: false; error: string };
+
+/** 팬아웃 시작 요청: 지시 하나를 격리 세션(worktree) 여러 개에 동시에 보낸다. */
+export interface FanoutStartDto {
+  prompt: string;
+  variants: { provider: Provider; model?: string }[];
+  policy?: PermissionPolicy;
+}
+export type FanoutStartResult = { ok: true; fanoutId: string; tabIds: string[] } | { ok: false; error: string };
+/** 비교 화면 데이터: 변형마다 worktree 의 변경 목록과 파일별 diff. */
+export interface FanoutCompareDto {
+  fanoutId: string;
+  variants: {
+    tabId: string;
+    label: string;
+    provider: Provider;
+    status: string;
+    summary?: string;
+    /** worktree 가 없으면(정리됨) false. */
+    exists: boolean;
+    changes: GitChangeDto[];
+    diffs: Record<string, string>;
+  }[];
+}
+export type FanoutAdoptResult = { ok: true; files: string[] } | { ok: false; error: string };
+
+export interface WorkspaceStateDto {
+  model: WorkbenchModel;
+  statuses: Record<string, SessionStatus>;
+  attention: Record<string, SessionAttention>;
+}
+
+export type ShortcutName =
+  | "new-tab"
+  | "close-tab"
+  | "switch-workspace"
+  | "toggle-terminal"
+  | "search"
+  | "next-attention"
+  | "prev-attention"
+  | "next-tab"
+  | "prev-tab"
+  | `tab-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
+
+export interface GitInfoDto {
+  root: string;
+  name: string;
+  branch: string | null;
+  /** 조회한 cwd 가 레포 안에서 차지하는 상대 경로("" 이면 루트). 변경 목록의 루트 기준 경로를 cwd 기준으로 바꿀 때 쓴다. */
+  prefix: string;
+}
+
+export interface GitChangeDto {
+  path: string;
+  /** kind === "renamed" 일 때 이전 경로. 커밋 pathspec 에 함께 넣어야 삭제까지 커밋된다. */
+  oldPath?: string;
+  kind: "added" | "modified" | "deleted" | "renamed";
+  added: number;
+  deleted: number;
+}
+
+/** 전체 세션 검색 결과 — 세션 단위로 묶고 일치 블록을 나열한다. */
+export interface SearchResultDto {
+  tabId: string;
+  title: string;
+  workspaceName: string;
+  provider: Provider;
+  open: boolean;
+  updatedAt: number;
+  hits: SearchHit[];
+}
+
+export type GitCommitResult =
+  | { ok: true; hash: string; subject: string; files: number }
+  | { ok: false; error: string };
+
+export type GitDraftResult =
+  | { ok: true; message: string }
+  | { ok: false; error: string };
+
+/** 파일 탐색기의 디렉토리 항목. .git 은 제외한다. */
+export interface DirEntryDto {
+  name: string;
+  /** 절대 경로 */
+  path: string;
+  kind: "dir" | "file";
+  size: number;
+}
+
+/** 코드 뷰어용 파일 한 개. 변경 파일 목록이나 툴카드의 경로를 눌렀을 때 읽는다. */
+export type FileOpResultDto = { ok: true; path: string } | { ok: false; error: string };
+
+export interface LspStatusDto {
+  serverId: LspServerId;
+  label: string;
+  installed: boolean;
+  path: string | null;
+  version: string | null;
+  typescriptLib: string | null;
+  override: string | null;
+  running: string[];
+  hint: string;
+}
+
+/** 언어 서버(shared/lsp-servers 의 명세: TypeScript, Python …). 렌더러의 CodeMirror LSP 클라이언트가 JSON-RPC 본문을 그대로 주고받는다. */
+export interface LspApi {
+  /** 서버 종류마다 한 항목. */
+  status(): Promise<LspStatusDto[]>;
+  setPath(serverId: LspServerId, path: string | null): Promise<{ ok: true } | { ok: false; error: string }>;
+  /** 탭 cwd 를 주면 main 이 저장소 루트를 정해 그 서버를 띄운다((서버, 루트)마다 하나). */
+  start(cwd: string, serverId: LspServerId): Promise<{ ok: true; id: string; root: string } | { ok: false; error: string }>;
+  send(id: string, message: string): void;
+  stop(id: string): Promise<void>;
+  onMessage(listener: (id: string, message: string) => void): () => void;
+  onExit(listener: (id: string) => void): () => void;
+}
+
+export interface FileViewDto {
+  /** 절대 경로. */
+  path: string;
+  /** git 루트(없으면 cwd) 기준 상대 경로. 표시용. */
+  relPath: string;
+  /** 현재 디스크 내용. 없거나(삭제) 바이너리/너무 크면 null. */
+  content: string | null;
+  /** HEAD 버전. 추적 중이고 HEAD 에 있을 때만. 새 파일이면 null. */
+  headContent: string | null;
+  size: number;
+  missing: boolean;
+  binary: boolean;
+  tooLarge: boolean;
+  /** 디스크 파일의 수정 시각(ms). 없으면 null. 저장 시 충돌 감지에 쓴다. */
+  mtimeMs: number | null;
+  /** 이미지 파일이면(확장자 기준, 상한 이내) 미리보기용 data URL. 그 밖엔 없음. */
+  image?: { mime: string; dataUrl: string };
+}
+
+/** 설정 화면의 PATH 진단. 로그인 셸 PATH 와 앱 프로세스 PATH 의 차이를 보여준다. */
+export interface CliDiagnosticsDto {
+  loginShell: string;
+  shellPathDirs: string[];
+  appPathDirs: string[];
+  /** 셸 PATH 에는 있지만 앱 PATH 에는 없는 디렉토리 중 CLI 가 실제로 발견된 곳. */
+  missingInApp: { dir: string; provider: Provider }[];
+}
+
+/** Claude CLI 가 보는 MCP 서버 하나의 상태 (터미널 /mcp 화면과 같은 정보). */
+export interface McpServerStatusDto {
+  name: string;
+  status: "connected" | "failed" | "needs-auth" | "pending" | "disabled";
+  error?: string;
+  /** user / project / local / claudeai / managed … */
+  scope?: string;
+  serverInfo?: { name: string; version: string };
+  /** stdio / sse / http / claudeai-proxy */
+  transport?: string;
+  /** stdio 면 command + args, 아니면 url */
+  target?: string;
+  tools: { name: string; description?: string }[];
+}
+
+export interface SwitchProviderDto {
+  provider: Provider;
+  model?: string;
+  preserveContext: boolean;
+}
+
+export interface ChatImageDto {
+  name: string;
+  mime: "image/png" | "image/jpeg" | "image/webp";
+  /** 순수 base64 (data: 접두사 없음). */
+  base64: string;
+}
+
+export interface ChatSendDto {
+  text: string;
+  images?: ChatImageDto[];
+}
+
+export type ChatSendResult =
+  /** pending: 턴 진행 중이라 프롬프트 큐에 들어갔다 (턴이 끝나면 자동 전송). */
+  | { ok: true; queued: boolean; pending?: boolean }
+  | { ok: false; error: string };
+
+export interface PendingPromptDto {
+  id: string;
+  text: string;
+  hasImages: boolean;
+}
+
+export interface SessionConfigDto {
+  provider: Provider;
+  cwd: string | null;
+  policy: PermissionPolicy;
+  model?: string;
+}
+
+export interface SessionSnapshotDto extends SessionConfigDto {
+  tabId: string;
+  status: SessionStatus;
+  sessionId: string | null;
+  handoffPending: boolean;
+  /** 세션의 첫 턴 시작 시각(컨텍스트 패널의 세션 타이머용). */
+  startedAt: number | null;
+  /** 지금 도는 턴의 실제 시작 시각(큐 대기 제외). 턴이 끝나면 null. */
+  turnStartedAt: number | null;
+  /** "terminal" 이면 CLI(TUI)가 pty 에서 세션을 제어 중이고 앱은 기록을 미러만 한다. */
+  controller: "app" | "terminal";
+  /** 턴 진행 중에 써 둔 다음 지시들. 턴이 정상 종료되면 순서대로 자동 전송. */
+  pendingPrompts: PendingPromptDto[];
+  /** 사용 한도 도달로 멈춰 재시도를 기다리는 중이면 그 상태. */
+  limitWait: LimitWaitDto | null;
+  /** 동시 실행 상한에 걸려 기다리는 중(status=queued)이면 그 상태. */
+  queueInfo: QueueInfoDto | null;
+  /** 터미널 모드에서 CLI 가 권한 승인을 기다리는 중이면 그 툴. (Claude 만 감지) */
+  terminalAttention: {
+    kind: "permission";
+    tool: string;
+    summary: string;
+    since: number;
+  } | null;
+  /** controller=terminal 인데 앱이 띄운 CLI 가 아니라 통합 터미널에서 사용자가 직접 띄운 것이면 true(끊기 버튼 없음). */
+  terminalExternal: boolean;
+}
+
+export interface WorktreeStatusDto {
+  exists: boolean;
+  baseMissing: boolean;
+  ahead: number;
+  behind: number;
+  dirty: number;
+}
+
+export type WorktreeResult<T extends object = object> = ({ ok: true } & T) | { ok: false; error: string };
+
+export interface WorktreeApi {
+  /** 워크스페이스의 저장소(활성 탭 cwd 또는 기본 경로)에서 브랜치+worktree 를 만들고 그 경로로 새 세션을 연다. */
+  create(workspaceId: string, fromTabId?: string | null): Promise<WorktreeResult<{ tabId: string }>>;
+  status(tabId: string): Promise<WorktreeStatusDto | null>;
+  /** 이 세션의 커밋을 base 브랜치로 merge (원본 저장소에서). */
+  merge(tabId: string): Promise<WorktreeResult<{ merged: number }>>;
+  /** worktree 삭제. 탭은 원본 저장소 경로로 돌아간다. 미커밋 변경은 force 없이는 거부. */
+  remove(tabId: string, opts?: { force?: boolean }): Promise<WorktreeResult<{ branchDeleted: boolean }>>;
+}
+
+export interface WorkspaceApi {
+  state(): Promise<WorkspaceStateDto>;
+  /** path 를 주지 않으면 디렉토리 선택 다이얼로그를 띄운다. 취소하면 null. */
+  add(path?: string): Promise<{ workspaceId: string; tabId: string } | null>;
+  /** 이름만으로 워크스페이스를 만들고 빈 세션을 하나 연다. 작업 경로는 탭에서 정한다. */
+  create(name: string): Promise<{ workspaceId: string; tabId: string }>;
+  /** 이름·기본 경로·검증 명령 변경. path 를 "" 로 주면 기본 경로 해제. */
+  update(
+    workspaceId: string,
+    patch: { name?: string; path?: string; verifyCommands?: string[] },
+  ): Promise<void>;
+  remove(workspaceId: string): Promise<void>;
+  createTab(workspaceId?: string): Promise<string | null>;
+  closeTab(tabId: string): Promise<void>;
+  reopenTab(tabId: string): Promise<void>;
+  /** 세션을 목록에서 지우고 대화 기록 파일도 삭제한다. 격리 세션의 worktree 가 dirty 면 지우지 않고 오류를 돌려준다. */
+  deleteTab(tabId: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  activateTab(tabId: string): Promise<void>;
+  renameTab(tabId: string, title: string): Promise<void>;
+  reorderTabs(openTabIds: string[]): Promise<void>;
+  onChanged(listener: (state: WorkspaceStateDto) => void): () => void;
+}
+
+export interface ChatEventEnvelope {
+  tabId: string;
+  event: ChatEvent;
+}
+
+/** preload 가 window.workbench 로 노출하는 API. */
+export interface WorkbenchApi {
+  app: {
+    info(): Promise<AppInfoDto>;
+    /** provider 의 모델 목록(CLI 에 물어 온 것, 실패하면 정적 폴백). force 면 캐시를 무시한다. */
+    models(provider: Provider, opts?: { force?: boolean }): Promise<{ models: ModelOptionDto[]; source: "cli" | "static" }>;
+    /** 메뉴 단축키(⌘T/⌘W/⌘K/⌘1~9)는 main 메뉴가 받아 renderer 로 넘긴다. */
+    onShortcut(listener: (name: ShortcutName) => void): () => void;
+    /** 로그 폴더를 Finder 로 연다. */
+    openLogs(): Promise<void>;
+    /** window error / unhandledrejection 을 main 로그 파일로 보낸다 (fire-and-forget). */
+    reportError(error: RendererErrorDto): void;
+    getSettings(): Promise<AppSettingsDto>;
+    /** 바꾼 값은 바로 적용된다(유휴 시간은 지금 놀고 있는 프로세스에도). */
+    setSettings(patch: Partial<AppSettingsDto>): Promise<AppSettingsDto>;
+    /** `atelier` CLI(제어 소켓)가 "이 탭에서 파일/브라우저를 열어라" 를 밀어 넣을 때. */
+    onControlOpen(listener: (req: ControlOpenDto) => void): () => void;
+    /** `atelier` 명령을 ~/.local/bin 에 설치한다(앱 동봉 스크립트를 앱의 node 로 실행하는 셸 스크립트). */
+    installCli(): Promise<{ ok: true; path: string; onPath: boolean; hint?: string } | { ok: false; error: string }>;
+    /** 스킬 스텁을 이 PC 에 있는 에이전트(Claude Code · Codex CLI)마다 설치한다. */
+    installSkill(agent?: "claude" | "codex"): Promise<{ ok: true; paths: string[]; skipped: string[] } | { ok: false; error: string }>;
+    /** 두 설치물의 현재 상태(있는지·이 앱을 가리키는지·PATH 에 있는지·스텁이 최신인지). */
+    installStatus(): Promise<InstallStatusDto>;
+  };
+  /** 렌더러 상태(열린 파일·미저장 초안·입력창 초안)의 파일 저장소. 시작 때 load, 바뀔 때 set(한 방향, 즉시 디스크). */
+  state: {
+    load(): Promise<Record<string, string>>;
+    set(key: string, value: string | null): void;
+  };
+  workspaces: WorkspaceApi;
+  usage: UsageApi;
+  terminal: TerminalApi;
+  cli: {
+    status(provider: Provider): Promise<CliStatusDto>;
+    candidates(provider: Provider): Promise<CliCandidateDto[]>;
+    setOverride(
+      provider: Provider,
+      binPath: string | null,
+    ): Promise<OverrideSetResultDto>;
+    /** 캐시를 비우고 셸 PATH 부터 다시 캡처한다. */
+    refresh(): Promise<void>;
+    diagnostics(): Promise<CliDiagnosticsDto>;
+  };
+  chat: {
+    send(tabId: string, payload: ChatSendDto): Promise<ChatSendResult>;
+    abort(tabId: string): Promise<boolean>;
+    answerPermission(
+      tabId: string,
+      requestId: string,
+      answer: PermissionAnswer,
+    ): Promise<boolean>;
+    configure(
+      tabId: string,
+      patch: Partial<SessionConfigDto>,
+    ): Promise<SessionSnapshotDto>;
+    snapshot(tabId: string): Promise<SessionSnapshotDto>;
+    /** 교차 리뷰: 이 탭의 작업 트리 diff 를 다른 provider 의 새 탭에 보내고, 답이 오면 이 탭에 카드로 붙인다. */
+    crossReview(tabId: string): Promise<{ ok: true; reviewTabId: string; scope: string } | { ok: false; error: string }>;
+    /** 검증: 워크스페이스에 저장한 명령(또는 commands)을 이 탭의 cwd 에서 순서대로 돌리고 결과를 이 탭에 카드로 남긴다. */
+    verify(tabId: string, opts?: { commands?: string[] }): Promise<VerifyStartResult>;
+    verifyAbort(tabId: string): Promise<boolean>;
+    /** 저장한 명령이 없을 때 cwd 의 매니페스트에서 추천하는 명령. */
+    verifySuggest(tabId: string): Promise<string[]>;
+    /** 팬아웃: 지시 하나를 격리 세션 N개에 보내고 이 탭에 카드로 남긴다. */
+    fanout(tabId: string, req: FanoutStartDto): Promise<FanoutStartResult>;
+    fanoutCompare(tabId: string, fanoutId: string): Promise<FanoutCompareDto>;
+    /** 변형의 변경(패치)을 이 탭의 저장소에 적용한다. */
+    fanoutAdopt(tabId: string, fanoutId: string, variantTabId: string): Promise<FanoutAdoptResult>;
+    /** 변형 worktree 를 모두 지우고 탭을 닫는다(미커밋 변경 포함, 강제). */
+    fanoutCleanup(tabId: string, fanoutId: string): Promise<{ ok: true } | { ok: false; error: string }>;
+    /** 지금까지의 이벤트 로그 (화면 재구성용). */
+    events(tabId: string): Promise<ChatEvent[]>;
+    clear(tabId: string): Promise<SessionSnapshotDto>;
+    handoffPreview(tabId: string): Promise<Handoff>;
+    switchProvider(
+      tabId: string,
+      opts: SwitchProviderDto,
+    ): Promise<SessionSnapshotDto>;
+    /** 구독 해제 함수를 돌려준다. */
+    onEvent(listener: (envelope: ChatEventEnvelope) => void): () => void;
+    /**
+     * 탭의 cwd 에서 쓸 수 있는 Claude 슬래시 커맨드(터미널 전용 제외). Codex 탭이면 빈 배열.
+     * 캐시가 없으면 CLI 를 잠깐 띄워 받아오므로 첫 호출은 수 초 걸릴 수 있다.
+     */
+    commands(tabId: string): Promise<SlashCommandDto[]>;
+    /** 어떤 cwd 의 커맨드 목록이 바뀌었을 때 (턴 도중 갱신 포함). */
+    onCommandsChanged(listener: (cwd: string) => void): () => void;
+    /** 하이브리드: 세션 제어를 터미널(CLI TUI)로 넘긴다. 같은 세션 id 로 claude --resume / codex resume 를 pty 에 띄운다. */
+    attachTerminal(
+      tabId: string,
+    ): Promise<
+      { ok: true; snapshot: SessionSnapshotDto } | { ok: false; error: string }
+    >;
+    /** 터미널의 CLI 를 끊고 채팅으로 돌아온다 (실제 복귀는 프로세스 종료 시). */
+    detachTerminal(tabId: string): Promise<void>;
+    /** main 이 스냅샷을 바꿨을 때(컨트롤러 전환, 세션 id 확정 등). */
+    onSnapshotChanged(
+      listener: (snapshot: SessionSnapshotDto) => void,
+    ): () => void;
+    /** 한도 대기: 지금 바로 재시도 / 재시도 취소. */
+    limitRetryNow(tabId: string): Promise<SessionSnapshotDto>;
+    limitCancel(tabId: string): Promise<SessionSnapshotDto>;
+    /** 프롬프트 큐 항목 삭제·수정. 스냅샷을 돌려준다. */
+    queueRemove(tabId: string, id: string): Promise<SessionSnapshotDto>;
+    queueUpdate(tabId: string, id: string, text: string): Promise<SessionSnapshotDto>;
+    /** 세션이 놀고 있을 때 대기열 맨 앞을 지금 보낸다(앱 재시작으로 복원된 지시 등). */
+    queueSendNext(tabId: string): Promise<SessionSnapshotDto>;
+    /** 모든 세션(닫힌 것 포함)의 사용자·어시스턴트 텍스트에서 부분 일치 검색. */
+    search(query: string): Promise<SearchResultDto[]>;
+    /** 저장 다이얼로그를 띄워 세션을 마크다운으로 내보낸다. 취소하면 null. */
+    exportMarkdown(tabId: string): Promise<string | null>;
+  };
+  worktree: WorktreeApi;
+  /** 오케스트레이션(Run/Task/Dispatch) — 사람 코디네이터용 UI. */
+  orch: {
+    list(): Promise<OrchRunState[]>;
+    reply(runId: string, questionId: string, body: string): Promise<OrchResult>;
+    followup(runId: string, dispatchId: string, body: string): Promise<OrchResult>;
+    takeover(runId: string): Promise<OrchResult>;
+    worker(runId: string, dispatchId: string, action: "retain" | "release" | "stop" | "abandon" | "cleanup"): Promise<OrchResult>;
+    gate(runId: string, gateId: string, resolution: string): Promise<OrchResult>;
+    close(runId: string): Promise<OrchResult>;
+    onChanged(listener: (runId: string) => void): () => void;
+  };
+  lsp: LspApi;
+  snippets: {
+    list(): Promise<SnippetDto[]>;
+    save(input: {
+      id?: string;
+      name: string;
+      text: string;
+      workspaceId: string | null;
+    }): Promise<{ ok: true; snippet: SnippetDto } | { ok: false; error: string }>;
+    remove(id: string): Promise<void>;
+    onChanged(listener: (items: SnippetDto[]) => void): () => void;
+  };
+  git: {
+    info(cwd: string): Promise<GitInfoDto | null>;
+    changes(cwd: string): Promise<GitChangeDto[]>;
+    /** 고른 파일만 add 하고 그 파일들만 커밋한다 (다른 스테이징은 건드리지 않음). */
+    commit(cwd: string, paths: string[], message: string): Promise<GitCommitResult>;
+    /** 고른 파일의 diff 로 Claude(haiku) 에게 커밋 메시지 초안을 받는다. */
+    draftMessage(cwd: string, paths: string[]): Promise<GitDraftResult>;
+    /** 파일 하나의 변경을 버린다(HEAD 상태로). 되돌릴 수 없다. */
+    revert(cwd: string, path: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  };
+  files: {
+    /** 절대 경로 또는 cwd 기준 상대 경로의 파일을 읽는다 (현재 내용 + HEAD 내용). */
+    read(cwd: string, path: string): Promise<FileViewDto>;
+    /**
+     * 파일을 저장한다. expectedMtimeMs 가 있고 디스크의 mtime 이 다르면(밖에서 바뀜) force 없이는 conflict 로 거부한다.
+     */
+    write(
+      cwd: string,
+      path: string,
+      content: string,
+      opts: { expectedMtimeMs: number | null; expectedSize?: number | null; force?: boolean },
+    ): Promise<{ ok: true; mtimeMs: number } | { ok: false; error: string; conflict?: boolean }>;
+    /** 새 파일(빈 내용) 또는 폴더. 저장소 안에서만, 이미 있으면 거부. */
+    create(cwd: string, path: string, kind: "file" | "dir"): Promise<FileOpResultDto>;
+    /** 이름 변경/이동. 덮어쓰기 없음. */
+    rename(cwd: string, from: string, to: string): Promise<FileOpResultDto>;
+    /** 휴지통으로 보낸다(되돌릴 수 있음). */
+    remove(cwd: string, path: string): Promise<FileOpResultDto>;
+    /** 디렉토리 항목 목록 (폴더 먼저, 이름순). */
+    list(dir: string): Promise<DirEntryDto[]>;
+    /** 답변에 적힌 파일 참조("Foo.kt", "src/a.ts")에 맞는 실제 파일들(절대 경로). cwd 기준 상대 경로 → 저장소 안 뒤쪽 경로 일치 순. 없으면 []. */
+    locate(cwd: string, ref: string): Promise<string[]>;
+  };
+  mcp: {
+    /** cwd 기준으로 Claude CLI 를 잠깐 띄워 MCP 서버 상태를 받는다. 연결 대기 때문에 최대 10초쯤 걸릴 수 있다. */
+    status(cwd: string): Promise<McpServerStatusDto[]>;
+  };
+  dialog: {
+    pickDirectory(): Promise<string | null>;
+  };
+  /** 턴이 끝난 뒤에도 도는 작업(백그라운드 Codex 등). 탭은 놀고 있어도 일이 남았음을 보여 준다. */
+  jobs: {
+    list(): Promise<BackgroundJobDto[]>;
+    onChanged(cb: (jobs: BackgroundJobDto[]) => void): () => void;
+  };
+  browser: {
+    /** 기본 브라우저로 연다(http/https/mailto 만). 앱 안 브라우저 탭은 렌더러의 <webview> 가 맡는다. */
+    openExternal(url: string): Promise<boolean>;
+    /** 에디터의 HTML 을 앱 안 브라우저로 볼 로컬 미리보기 URL(저장소 루트를 서비스하는 127.0.0.1 서버). 루트 밖이면 error. */
+    previewUrl(cwd: string, path: string): Promise<{ ok: true; url: string } | { ok: false; error: string }>;
+    /** 이 브라우저 탭(webview 의 webContents id)에서 최근 실패한 요청. 진단 첨부가 읽고 비운다. */
+    netFailures(webContentsId: number, clear?: boolean): Promise<NetFailure[]>;
+  };
+}
+
+/** 제어 소켓(atelier CLI)이 렌더러에 요청하는 화면 동작. */
+export type ControlOpenDto =
+  | { kind: "file"; tabId: string; path: string; line?: number }
+  | { kind: "browser"; tabId: string; url: string };
+
+/** 설정 > 일반의 "명령줄 도구·스킬" 설치 상태. */
+export interface InstallStatusDto {
+  cli: {
+    path: string;
+    installed: boolean;
+    /** 설치된 스크립트가 지금 실행 중인 이 앱(경로)을 가리키면 true. 앱을 옮겼으면 false. */
+    current: boolean;
+    /** 로그인 셸 PATH 에 ~/.local/bin 이 있으면 true. */
+    onPath: boolean;
+  };
+  /** 에이전트별 스킬 스텁. Claude Code 는 ~/.claude/skills, Codex CLI 는 $CODEX_HOME/skills(기본 ~/.codex/skills). */
+  skills: SkillInstallDto[];
+}
+
+export interface SkillInstallDto {
+  agent: "claude" | "codex";
+  label: string;
+  path: string;
+  /** 그 에이전트가 이 PC 에 있는지(홈 디렉토리 존재). 없으면 설치를 건너뛴다. */
+  available: boolean;
+  installed: boolean;
+  /** 설치된 스텁이 이 앱에 동봉된 것과 같으면 true. */
+  current: boolean;
+}
