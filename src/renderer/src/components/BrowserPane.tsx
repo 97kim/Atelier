@@ -7,6 +7,7 @@ import { browserTabLabel } from "../editor-tabs";
 import type { ChatImageDto } from "@shared/ipc";
 import { PICKER_STOP_SCRIPT, dataUrlImage, elementImage, formatElementAttachment, parsePickMessage, pickerScript } from "@shared/element-pick";
 import { DIAG_MAX_CONSOLE, formatDiagnostics, pushCapped, type ConsoleLine } from "@shared/browser-diagnostics";
+import { DEFAULT_VIEWPORT, VIEWPORTS, nextZoom, viewportById, zoomLevelToPercent } from "../browser-viewport";
 
 export { normalizeUrl };
 
@@ -50,6 +51,11 @@ export function BrowserPane({
   // 콘솔 줄은 화면에 안 그리므로 ref 에만 쌓는다(매 줄 렌더링하면 로그가 쏟아질 때 앱이 느려진다)
   const consoleRef = useRef<ConsoleLine[]>([]);
   const [diagBusy, setDiagBusy] = useState(false);
+  // 페이지 내 찾기 — ⌘F 는 대화 검색과 겹치므로 브라우저에 포커스가 있을 때만 이쪽이 잡는다(ChatView 가 라우팅).
+  const [find, setFind] = useState<{ open: boolean; text: string; matches: number; at: number }>({ open: false, text: "", matches: 0, at: 0 });
+  const findRef = useRef<HTMLInputElement>(null);
+  const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
+  const [zoom, setZoom] = useState(0);
   // 선택 세션마다 새 표식 — 페이지가 표식을 미리 알 수 없어 위조가 어렵고, 옛 세션의 늦은 메시지도 걸러진다
   const nonceRef = useRef("");
   const startPick = async () => {
@@ -197,6 +203,39 @@ export function BrowserPane({
     if (!initialUrl && visible) inputRef.current?.focus();
   }, [initialUrl, visible]);
 
+  // 이 탭이 보이는 동안, 브라우저용 단축키를 받는다(⌘F 찾기·⌘L 주소창·⌘R 새로고침).
+  // 앱 단축키는 네이티브 메뉴가 받아 ChatView 가 "지금 보이는 브라우저" 로 넘겨 준다.
+  useEffect(() => {
+    if (!visible) return;
+    const onCmd = (e: Event) => {
+      const what = (e as CustomEvent<string>).detail;
+      if (what === "find") {
+        setFind((f) => ({ ...f, open: true }));
+        setTimeout(() => findRef.current?.select(), 0);
+      } else if (what === "address") {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      } else if (what === "reload") {
+        view.current?.reload();
+      }
+    };
+    window.addEventListener("atelier:browser-command", onCmd);
+    return () => window.removeEventListener("atelier:browser-command", onCmd);
+  }, [visible]);
+
+  // 찾기 결과 개수는 webview 가 이벤트로 준다
+  useEffect(() => {
+    const el = view.current;
+    if (!el) return;
+    const onFound = (e: Event) => {
+      const r = (e as Event & { result?: { matches?: number; activeMatchOrdinal?: number } }).result;
+      if (!r) return;
+      setFind((f) => ({ ...f, matches: r.matches ?? 0, at: r.activeMatchOrdinal ?? 0 }));
+    };
+    el.addEventListener("found-in-page", onFound);
+    return () => el.removeEventListener("found-in-page", onFound);
+  }, [mounted]);
+
   // 에디터가 "브라우저에서 보기" 를 다시 누르거나 HTML 을 저장하면 그 URL 을 보고 있는 탭을 다시 불러온다
   useEffect(() => {
     const onReload = (e: Event) => {
@@ -260,6 +299,46 @@ export function BrowserPane({
     }
   };
 
+  /**
+   * 함정: Electron 의 `findNext` 는 이름과 반대다 — "다음 것을 찾아라" 가 아니라 **"새 검색을 시작하는가"** 다.
+   * 첫 검색에 true 를 줘야 결과(found-in-page)가 오고, 그 뒤 위아래로 옮길 때 false 를 준다.
+   * 거꾸로 주면 아무 일도 안 일어나고 조용히 "없음" 으로 보인다.
+   */
+  const runFind = (text: string, newSession: boolean, forward = true) => {
+    const el = view.current;
+    if (!el) return;
+    if (!text) {
+      try {
+        el.stopFindInPage("clearSelection");
+      } catch {
+        /* 아직 붙기 전 */
+      }
+      setFind((f) => ({ ...f, text, matches: 0, at: 0 }));
+      return;
+    }
+    try {
+      el.findInPage(text, { findNext: newSession, forward });
+    } catch {
+      /* 아직 붙기 전 */
+    }
+  };
+  const closeFind = () => {
+    try {
+      view.current?.stopFindInPage("clearSelection");
+    } catch {
+      /* 무시 */
+    }
+    setFind({ open: false, text: "", matches: 0, at: 0 });
+  };
+  const applyZoom = (level: number) => {
+    setZoom(level);
+    try {
+      view.current?.setZoomLevel(level);
+    } catch {
+      /* 아직 붙기 전 */
+    }
+  };
+
   const go = (raw: string) => {
     const next = normalizeUrl(raw);
     if (!next) return;
@@ -317,6 +396,31 @@ export function BrowserPane({
           <Icon name="edit" size={11} />
           {picking ? "요소를 클릭하세요…" : "요소 선택"}
         </button>
+        <select
+          value={viewport}
+          onChange={(e) => setViewport(e.target.value)}
+          disabled={!url}
+          className="rounded-md border border-line bg-panel px-1.5 py-0.5 text-[11px] text-muted hover:text-fg disabled:opacity-30"
+          title="보기 폭 — 창을 줄이지 않고 좁은 화면을 확인한다"
+          data-browser-viewport
+        >
+          {VIEWPORTS.map((v) => (
+            <option key={v.id} value={v.id} title={v.hint}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+        <div className="flex shrink-0 items-center rounded-md border border-line" data-browser-zoom={zoomLevelToPercent(zoom)}>
+          <button onClick={() => applyZoom(nextZoom(zoom, -1))} disabled={!url} className="px-1.5 py-0.5 text-muted hover:text-fg disabled:opacity-30" title="축소 (⌘-)">
+            <Icon name="minus" size={11} />
+          </button>
+          <button onClick={() => applyZoom(0)} disabled={!url} className="mono min-w-[38px] px-1 py-0.5 text-[10.5px] text-muted hover:text-fg disabled:opacity-30" title="100% 로 (⌘0)">
+            {zoomLevelToPercent(zoom)}%
+          </button>
+          <button onClick={() => applyZoom(nextZoom(zoom, 1))} disabled={!url} className="px-1.5 py-0.5 text-muted hover:text-fg disabled:opacity-30" title="확대 (⌘+)">
+            <Icon name="plus" size={11} />
+          </button>
+        </div>
         <button
           onClick={() => void attachDiagnostics()}
           disabled={!url || diagBusy}
@@ -360,12 +464,49 @@ export function BrowserPane({
           {error}
         </div>
       )}
+      {find.open && (
+        <div className="flex items-center gap-2 border-b border-line bg-inset px-3 py-1.5" data-browser-find>
+          <Icon name="search" size={12} className="shrink-0 text-muted" />
+          <input
+            ref={findRef}
+            autoFocus
+            value={find.text}
+            onChange={(e) => {
+              const text = e.target.value;
+              setFind((f) => ({ ...f, text }));
+              runFind(text, true);
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === "Enter") runFind(find.text, false, !e.shiftKey);
+              if (e.key === "Escape") closeFind();
+            }}
+            placeholder="이 페이지에서 찾기"
+            className="mono min-w-0 flex-1 bg-transparent text-[11.5px] outline-none placeholder:text-muted-2"
+            style={{ userSelect: "text" }}
+            data-browser-find-input
+          />
+          <span className="mono shrink-0 text-[10.5px] text-muted-2" data-browser-find-count>
+            {find.text ? (find.matches > 0 ? `${find.at}/${find.matches}` : "없음") : ""}
+          </span>
+          <button onClick={() => runFind(find.text, false, false)} disabled={find.matches === 0} className="rounded p-0.5 text-muted hover:text-fg disabled:opacity-30" title="이전 (⇧⏎)">
+            <Icon name="chevronDown" size={12} className="rotate-180" />
+          </button>
+          <button onClick={() => runFind(find.text, false, true)} disabled={find.matches === 0} className="rounded p-0.5 text-muted hover:text-fg disabled:opacity-30" title="다음 (⏎)">
+            <Icon name="chevronDown" size={12} />
+          </button>
+          <button onClick={closeFind} className="rounded p-0.5 text-muted hover:text-fg" title="닫기 (esc)" data-browser-find-close>
+            <Icon name="x" size={12} />
+          </button>
+        </div>
+      )}
       {pickMsg && (
         <div className="border-b border-line bg-accent-tint px-3 py-1 text-[11px] text-accent" data-browser-pick-msg>
           {pickMsg}
         </div>
       )}
-      <div className="relative min-h-0 flex-1 bg-white">
+      <div className={`relative min-h-0 flex-1 ${viewport === "full" ? "bg-white" : "flex justify-center bg-inset"}`} data-browser-viewport-active={viewport}>
         {url ? (
           // partition 을 앱 세션과 분리해 쿠키·저장소가 섞이지 않게 한다.
           <webview
@@ -375,7 +516,8 @@ export function BrowserPane({
             }}
             src={url}
             partition="persist:atelier-browser"
-            style={{ width: "100%", height: "100%" }}
+            // 프리셋 폭보다 패널이 좁으면 패널을 따른다 — 가로 스크롤이 생기면 좁은 화면 확인이 안 된다
+            style={{ width: viewportById(viewport).width ? `min(100%, ${viewportById(viewport).width}px)` : "100%", height: "100%" }}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 bg-inset text-muted">

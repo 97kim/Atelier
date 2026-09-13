@@ -6,7 +6,9 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { SearchPalette } from "./components/SearchPalette";
 import { requestReveal } from "./reveal";
+import { browserHasKeys } from "./browser-active";
 import { closeTarget } from "./close-target";
+import { isBrowserTab } from "./editor-tabs";
 import { forgetEditorTabs, getEditorTabs, getLastPane, openBrowserTab, openEditorFile, pruneEditorTabs, setEditorMaximized } from "./editor-tabs";
 import { clearComposerDraft, pruneComposerDrafts } from "./composer-draft";
 import { nextAttentionTab } from "@shared/attention-nav";
@@ -112,6 +114,20 @@ export function App() {
 
   // 메뉴 단축키 (⌘T/⌘W/⌘K/⌘1~9/⌃Tab)
   useEffect(() => {
+    /** 지금 브라우저를 보고 있나 — ⌘F·⌘L·⌘R 을 그쪽으로 보낼지 판단한다. */
+    const browserKeysActive = () => {
+      const tabId = model.activeTabId;
+      if (!tabId) return false;
+      const t = getEditorTabs(tabId);
+      return browserHasKeys({
+        editorShown: t.visible && t.files.length > 0,
+        editorMaximized: t.maximized,
+        focusInEditor: !!document.activeElement?.closest?.("[data-editor-pane-shell]"),
+        lastPane: getLastPane(tabId),
+        hasEditorTab: !!t.active,
+        activeIsBrowser: !!t.active && isBrowserTab(t.active),
+      });
+    };
     const handle = (name: ShortcutName) => {
       if (name === "new-tab") void newTab();
       else if (name === "close-tab" && model.activeTabId) {
@@ -131,7 +147,13 @@ export function App() {
         else void closeTab(tabId);
       }
       else if (name === "switch-workspace") setSwitcher((s) => !s);
-      else if (name === "search") setSearch((s) => !s);
+      else if (name === "search") {
+        // ⌘F: 브라우저를 보고 있으면 그 페이지에서 찾기, 아니면 대화 검색
+        if (browserKeysActive()) window.dispatchEvent(new CustomEvent("atelier:browser-command", { detail: "find" }));
+        else setSearch((s) => !s);
+      } else if (name === "browser-address" || name === "browser-reload") {
+        if (browserKeysActive()) window.dispatchEvent(new CustomEvent("atelier:browser-command", { detail: name === "browser-address" ? "address" : "reload" }));
+      }
       else if (name === "toggle-editor-maximize" && model.activeTabId) {
         const t = getEditorTabs(model.activeTabId);
         // 열린 파일이 없으면 넓힐 것도 없다
@@ -158,6 +180,7 @@ export function App() {
       }
     };
     // 네이티브 메뉴 가속기는 자동화로 못 누른다 — e2e 가 같은 경로를 타도록 열어 둔다.
+    void 0;
     (window as unknown as { __atelierShortcut?: (n: ShortcutName) => void }).__atelierShortcut = handle;
     return window.workbench.app.onShortcut(handle);
   }, [model, newTab, closeTab, api]);

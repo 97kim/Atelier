@@ -1987,7 +1987,8 @@ function buildMenu() {
     {
       label: "보기",
       submenu: [
-        { role: "reload" },
+        // ⌘R 은 브라우저 탭 새로고침에 준다 — 창 새로고침은 개발용이라 메뉴에서만 쓴다
+        { role: "reload", accelerator: "" },
         { role: "toggleDevTools" },
         { type: "separator" },
         { role: "resetZoom" },
@@ -1996,6 +1997,9 @@ function buildMenu() {
         { type: "separator" },
         shortcut("터미널 패널", "CmdOrCtrl+J", "toggle-terminal"),
         shortcut("코드·브라우저 넓게 보기", "CmdOrCtrl+Shift+E", "toggle-editor-maximize"),
+        { type: "separator" },
+        shortcut("브라우저 주소창", "CmdOrCtrl+L", "browser-address"),
+        shortcut("브라우저 새로고침", "CmdOrCtrl+R", "browser-reload"),
         { type: "separator" },
         { role: "togglefullscreen" },
       ],

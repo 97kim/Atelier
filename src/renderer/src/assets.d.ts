@@ -23,6 +23,10 @@ interface AtelierWebview extends HTMLElement {
   executeJavaScript(code: string): Promise<unknown>;
   capturePage(rect?: { x: number; y: number; width: number; height: number }): Promise<{ toDataURL(): string; isEmpty(): boolean }>;
   getWebContentsId(): number;
+  findInPage(text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }): number;
+  stopFindInPage(action: "clearSelection" | "keepSelection" | "activateSelection"): void;
+  setZoomLevel(level: number): void;
+  getZoomLevel(): number;
   openDevTools(): void;
   closeDevTools(): void;
   isDevToolsOpened(): boolean;

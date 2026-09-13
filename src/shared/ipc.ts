@@ -390,6 +390,8 @@ export type ShortcutName =
   | "switch-workspace"
   | "toggle-terminal"
   | "toggle-editor-maximize"
+  | "browser-address"
+  | "browser-reload"
   | "search"
   | "next-attention"
   | "prev-attention"
