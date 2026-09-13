@@ -96,6 +96,10 @@ function fakeDeps() {
     approveRoot: (p) => calls.push(`approve ${p}`),
     openFile: (tabId, path, line) => calls.push(`openFile ${tabId} ${path} ${line ?? ""}`),
     openBrowser: (tabId, url) => calls.push(`openBrowser ${tabId} ${url}`),
+    runInBrowser: async (tabId, script) => {
+      calls.push(`runInBrowser ${tabId} ${script.slice(0, 20)}`);
+      return { ok: true };
+    },
     guide: (name) => (name === "atelier-cli" ? "# 가이드" : null),
   };
   return { deps, calls, statuses, pending, model };

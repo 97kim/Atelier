@@ -175,6 +175,7 @@ export function EditorPane({
                 // 탭 키가 아니라 "마지막으로 보던 주소" 로 연다 — 패널을 접거나 채팅 탭을 옮겨도 재현 중이던 페이지가 남는다
                 initialUrl={getBrowserUrl(f) ?? (f.startsWith("browser:") ? null : f)}
                 visible={f === tabs.active}
+                chatTabId={tabId}
                 onLabel={(l) => setBrowserLabels((m) => (m[f] === l ? m : { ...m, [f]: l }))}
                 onAttach={onAttach}
                 onUrlChange={(u) => setBrowserUrl(f, u)}

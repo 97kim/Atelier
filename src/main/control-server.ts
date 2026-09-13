@@ -10,6 +10,7 @@ import type { ChatEvent, PermissionPolicy, SessionStatus } from "@shared/chat-ev
 import type { ChatSendResult, FanoutStartDto, FanoutStartResult, Provider, WorkspaceStateDto } from "@shared/ipc";
 import { OrchError, type Orchestrator } from "./orchestration";
 import { replaySession, type Block } from "@shared/session-state";
+import { clickScript, fillScript, readScript } from "@shared/browser-control";
 import { tabTitle, type TabMeta } from "@shared/workspace-model";
 
 export interface ControlSnapshot {
@@ -49,6 +50,8 @@ export interface ControlDeps {
   /** 렌더러에 "이 탭에서 파일/브라우저를 열어라" 를 밀어 넣는다. 창이 없으면 만들어서라도 전달한다. */
   openFile(tabId: string, path: string, line?: number): void;
   openBrowser(tabId: string, url: string): void;
+  /** 그 탭의 브라우저에서 스크립트를 돌린다(에이전트 조작). 브라우저가 없으면 던진다. */
+  runInBrowser(tabId: string, script: string): Promise<Record<string, unknown>>;
   guide(name: string): string | null;
 }
 
@@ -408,6 +411,27 @@ export class ControlServer {
         if (!/^https?:\/\//i.test(url)) throw new ControlError("--url 은 http(s) 주소여야 합니다.");
         this.deps.openBrowser(tab.id, url);
         return { tab: tab.id, url };
+      }
+      case "browser.read": {
+        const tab = this.resolveTab(params.tab);
+        const r = await this.deps.runInBrowser(tab.id, readScript());
+        return { tab: tab.id, ...r };
+      }
+      case "browser.click": {
+        const tab = this.resolveTab(params.tab);
+        const selector = params.selector !== undefined ? this.requireString(params, "selector") : undefined;
+        const text = params.text !== undefined ? this.requireString(params, "text") : undefined;
+        if (!selector && !text) throw new ControlError("--selector 나 --text 중 하나가 필요합니다.");
+        const r = await this.deps.runInBrowser(tab.id, clickScript({ selector, text }));
+        return { tab: tab.id, ...r };
+      }
+      case "browser.fill": {
+        const tab = this.resolveTab(params.tab);
+        const selector = this.requireString(params, "selector");
+        // 빈 문자열은 "지우기" 라는 뜻이므로 requireString 을 쓰지 않는다(str 은 공백을 undefined 로 만든다).
+        const value = typeof params.value === "string" ? params.value : "";
+        const r = await this.deps.runInBrowser(tab.id, fillScript(selector, value));
+        return { tab: tab.id, ...r };
       }
       case "skills.get": {
         const name = params.name !== undefined ? this.requireString(params, "name") : "atelier-cli";

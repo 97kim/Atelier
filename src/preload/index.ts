@@ -280,6 +280,8 @@ const api: WorkbenchApi = {
   browser: {
     openExternal: (url: string) => ipcRenderer.invoke(IPC.openExternal, url),
     previewUrl: (cwd: string, path: string) => ipcRenderer.invoke(IPC.previewUrl, cwd, path),
+    register: (tabId: string, webContentsId: number | null, url: string) =>
+      ipcRenderer.send(IPC.browserRegister, tabId, webContentsId, url),
     netFailures: (webContentsId: number, clear?: boolean) => ipcRenderer.invoke(IPC.browserNetFailures, webContentsId, clear === true),
   },
 };

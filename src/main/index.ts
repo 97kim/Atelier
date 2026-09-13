@@ -12,6 +12,7 @@ import {
   Menu,
   Notification,
   shell,
+  webContents,
   type MenuItemConstructorOptions,
 } from "electron";
 import type { PermissionAnswer } from "@shared/chat-events";
@@ -394,6 +395,7 @@ async function startControlServer() {
       approveRoot: (path) => approveRoot(path),
       openFile: (tabId, path, line) => deliverControlOpen({ kind: "file", tabId, path, line }),
       openBrowser: (tabId, url) => deliverControlOpen({ kind: "browser", tabId, url }),
+      runInBrowser: (tabId, script) => runInBrowser(tabId, script),
       guide: (name) => {
         if (name !== "atelier-cli") return null;
         try {
@@ -1203,6 +1205,28 @@ async function askHandoffBrief(tabId: string): Promise<string> {
   }
 }
 
+/**
+ * 채팅 탭마다 지금 보고 있는 브라우저 웹뷰. 렌더러가 알려 준다 —
+ * 어느 웹뷰가 어느 탭의 것인지는 화면 쪽만 안다. 에이전트의 browser.read/click/fill 이 이걸 쓴다.
+ */
+const browserViews = new Map<string, { id: number; url: string }>();
+
+/** 등록된 브라우저에서 스크립트를 돌리고 결과를 받는다. 없거나 죽었으면 뚜렷하게 알린다. */
+async function runInBrowser(tabId: string, script: string): Promise<Record<string, unknown>> {
+  const reg = browserViews.get(tabId);
+  if (!reg) throw new Error("이 탭에 열린 브라우저가 없습니다. 먼저 `atelier browser open --url …` 으로 여세요.");
+  const wc = webContents.fromId(reg.id);
+  if (!wc || wc.isDestroyed()) {
+    browserViews.delete(tabId);
+    throw new Error("브라우저 탭이 닫혔습니다. 다시 여세요.");
+  }
+  const out = await wc.executeJavaScript(script, true);
+  if (!out || typeof out !== "object") throw new Error("브라우저가 결과를 주지 않았습니다.");
+  const r = out as Record<string, unknown>;
+  if (typeof r.error === "string") throw new Error(r.error);
+  return r;
+}
+
 async function handleChatSend(
   tabId: string,
   payload: ChatSendDto,
@@ -1761,6 +1785,12 @@ function registerIpc() {
     return url ? { ok: true, url } : { ok: false, error: "저장소 안의 파일만 미리 볼 수 있습니다." };
   });
   ipcMain.handle(IPC.backgroundJobs, () => jobWatcher?.current() ?? []);
+  ipcMain.on(IPC.browserRegister, (_e, tabId: unknown, webContentsId: unknown, url: unknown) => {
+    if (typeof tabId !== "string") return;
+    if (typeof webContentsId === "number" && Number.isInteger(webContentsId))
+      browserViews.set(tabId, { id: webContentsId, url: typeof url === "string" ? url : "" });
+    else browserViews.delete(tabId);
+  });
   ipcMain.handle(IPC.browserNetFailures, (_e, webContentsId: unknown, clear: unknown) => {
     if (typeof webContentsId !== "number" || !Number.isInteger(webContentsId)) return [];
     const out = browserNetFailures(webContentsId);

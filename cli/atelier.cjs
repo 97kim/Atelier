@@ -50,6 +50,9 @@ const USAGE = `atelier — 실행 중인 Atelier 를 제어한다. 출력은 항
                                        # 지시 하나를 격리 세션(worktree) N개에 동시에 → 원래 탭에 팬아웃 카드
   atelier file open --path /abs/file [--line N] [--tab <sel>]
   atelier browser open --url https://… [--tab <sel>]
+  atelier browser read [--tab <sel>]                     보이는 글과 누를 만한 것(선택자 포함)
+  atelier browser click (--selector <css> | --text <글>) [--tab <sel>]
+  atelier browser fill --selector <css> --value <값> [--tab <sel>]
   atelier orch run-create --objective <text> [--coordinator active|<tab>]   # 오케스트레이션 Run (코디네이터 = 사람 또는 탭)
   atelier orch worker-start --run <id> [--key <k>] (--spec <text> | --task <id>) [--agent claude|codex] [--model <id>]
                             [--policy ask|auto_edit|full] [--cwd /abs] [--worktree] [--request-id <id>]
@@ -269,6 +272,9 @@ async function main() {
   }
   else if (group === "file" && cmd === "open") { method = "file.open"; params = { tab: flags.tab, path: flags.path, line: flags.line !== undefined ? Number(flags.line) : undefined }; }
   else if (group === "browser" && cmd === "open") { method = "browser.open"; params = { tab: flags.tab, url: flags.url }; }
+  else if (group === "browser" && cmd === "read") { method = "browser.read"; params = { tab: flags.tab }; }
+  else if (group === "browser" && cmd === "click") { method = "browser.click"; params = { tab: flags.tab, selector: flags.selector, text: flags.text }; }
+  else if (group === "browser" && cmd === "fill") { method = "browser.fill"; params = { tab: flags.tab, selector: flags.selector, value: flags.value }; }
   else return fail(`모르는 명령: ${[group, cmd].filter(Boolean).join(" ")}. --help 를 보세요.`, "unknown_command");
 
   for (const k of Object.keys(params)) if (params[k] === undefined) delete params[k];

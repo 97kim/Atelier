@@ -30,12 +30,15 @@ function addHistory(url: string): void {
 export function BrowserPane({
   initialUrl,
   visible,
+  chatTabId,
   onLabel,
   onAttach,
   onUrlChange,
 }: {
   initialUrl: string | null;
   visible: boolean;
+  /** 이 브라우저가 속한 채팅 탭. 에이전트 조작(atelier browser …)이 탭으로 찾아오므로 main 에 알려야 한다. */
+  chatTabId?: string;
   /** 탭 스트립에 보일 라벨(호스트 또는 페이지 제목)이 바뀔 때. */
   onLabel?: (label: string) => void;
   /** "요소 선택" 결과(HTML·스타일 텍스트 + 스크린샷 조각)를 입력창에 붙인다. */
@@ -46,6 +49,8 @@ export function BrowserPane({
   const view = useRef<AtelierWebview | null>(null);
   // <webview> 는 주소가 생긴 뒤에야 렌더되므로, 마운트 시점을 state 로 잡아 그때 리스너를 붙인다.
   const [mounted, setMounted] = useState(false);
+  // 웹뷰 요소가 DOM 에 생긴 것과 게스트가 실제로 붙은 것은 다르다 — 붙기 전에는 getWebContentsId() 가 던진다.
+  const [attached, setAttached] = useState(false);
   const onLabelRef = useRef(onLabel);
   onLabelRef.current = onLabel;
   const onUrlChangeRef = useRef(onUrlChange);
@@ -202,6 +207,8 @@ export function BrowserPane({
       setLoading(false);
       if (d.errorDescription && d.errorDescription !== "ERR_ABORTED") setError(`${d.errorDescription} — ${d.validatedURL ?? ""}`);
     };
+    const onAttach = () => setAttached(true);
+    el.addEventListener("dom-ready", onAttach);
     el.addEventListener("did-navigate", sync);
     el.addEventListener("did-navigate-in-page", sync);
     el.addEventListener("page-title-updated", onTitle);
@@ -209,6 +216,7 @@ export function BrowserPane({
     el.addEventListener("did-stop-loading", onStop);
     el.addEventListener("did-fail-load", onFail);
     return () => {
+      el.removeEventListener("dom-ready", onAttach);
       el.removeEventListener("did-navigate", sync);
       el.removeEventListener("did-navigate-in-page", sync);
       el.removeEventListener("page-title-updated", onTitle);
@@ -372,6 +380,22 @@ export function BrowserPane({
     if (el && url) void el.loadURL(next).catch(() => {});
     // url 이 비어 있으면(빈 탭) src 로 처음 붙는다
   };
+
+  // 보이는 브라우저만 main 에 등록한다 — 숨은 탭까지 등록하면 에이전트가 엉뚱한 화면을 조작한다.
+  useEffect(() => {
+    if (!chatTabId) return;
+    const el = view.current;
+    // attached 가 신호다 — 요소만 있고 게스트가 안 붙었으면 getWebContentsId() 가 던진다.
+    if (!visible || !el || !attached) return;
+    let id: number;
+    try {
+      id = el.getWebContentsId();
+    } catch {
+      return; // dom-ready 가 다시 불러 준다
+    }
+    window.workbench.browser.register(chatTabId, id, url);
+    return () => window.workbench.browser.register(chatTabId, null, "");
+  }, [chatTabId, visible, url, mounted, attached]);
 
   // 자동완성 후보. 목록이 열려 있을 때만 계산한다.
   const sugs = sugOpen ? suggest(readHistory(), input) : [];

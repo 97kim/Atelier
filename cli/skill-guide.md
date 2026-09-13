@@ -65,6 +65,9 @@ atelier tab verify-abort --tab <sel>
 ```text
 atelier file open --path /abs/file.ts --line 42 [--tab <sel>]   # 그 탭의 에디터 패널에서 파일을 그 줄에서 연다
 atelier browser open --url http://localhost:3000 [--tab <sel>]  # 그 탭의 인앱 브라우저 탭으로
+atelier browser read [--tab <sel>]                             # 보이는 글 + 누를 만한 것(선택자 포함)
+atelier browser click --selector "#save" [--tab <sel>]         # 또는 --text "저장"
+atelier browser fill --selector "#email" --value "a@b.c"       # React 도 상태가 갱신된다
 ```
 
 팬아웃(같은 지시를 격리 세션 여러 개에 동시에 보내 비교):
