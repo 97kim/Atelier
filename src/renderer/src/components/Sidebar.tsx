@@ -55,7 +55,12 @@ export function Sidebar({
   onExportTab,
   onJumpAttention,
   onNewWorktreeIn,
+  railed,
+  onToggleRail,
 }: {
+  /** 접힘: 얇은 띠만 남긴다. 아주 없애지 않는 이유는 macOS 신호등 버튼 자리를 지켜야 해서다. */
+  railed: boolean;
+  onToggleRail: () => void;
   view: View;
   onView: (v: View) => void;
   ws: WorkspaceStateDto;
@@ -190,14 +195,73 @@ export function Sidebar({
     setMenu(m);
   };
 
+  if (railed)
+    return (
+      <aside className="drag flex w-[52px] shrink-0 flex-col items-center bg-panel" data-sidebar="collapsed">
+        <button
+          onClick={onToggleRail}
+          className="no-drag mt-11 rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
+          title="사이드바 펼치기 (⌘B)"
+          data-sidebar-toggle
+        >
+          <Icon name="panelRight" size={15} />
+        </button>
+        <nav className="no-drag mt-2 flex flex-col gap-0.5">
+          {NAV.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => onView(item.id)}
+              title={item.label}
+              className={`rounded-md p-1.5 transition-colors ${
+                view === item.id ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2/60 hover:text-fg"
+              }`}
+            >
+              <Icon name={item.icon} size={15} />
+            </button>
+          ))}
+        </nav>
+        <button
+          onClick={activeWs ? onNewTab : () => onToggleRail()}
+          className="no-drag mt-2 rounded-md bg-primary p-1.5 text-on-primary hover:bg-primary-hover"
+          title={activeWs ? `${activeWs.name} 에 새 세션 (⌘T)` : "워크스페이스 추가 — 펼쳐서"}
+        >
+          <Icon name="edit" size={14} strokeWidth={2} />
+        </button>
+        <button
+          onClick={onSearch}
+          className="no-drag mt-1 rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
+          title="대화 검색 (⌘F)"
+        >
+          <Icon name="search" size={15} />
+        </button>
+        {attentionCount > 0 && (
+          <button
+            onClick={onJumpAttention}
+            className="no-drag mt-1 rounded-md bg-warn-bg p-1.5 text-warn"
+            title={`응답이 필요한 세션 ${attentionCount}개 (⌘⇧↓)`}
+          >
+            <Icon name="alert" size={15} />
+          </button>
+        )}
+      </aside>
+    );
+
   return (
-    <aside className="drag flex w-[248px] shrink-0 flex-col bg-panel">
+    <aside className="drag flex w-[248px] shrink-0 flex-col bg-panel" data-sidebar="expanded">
       <div className="flex items-center gap-2.5 px-4 pb-3 pt-11">
         <Logo size={22} className="text-fg" />
         <span className="text-[14px] font-semibold tracking-wide">Atelier</span>
         <span className="label ml-auto rounded bg-panel-2 px-1.5 py-0.5">
           LOCAL
         </span>
+        <button
+          onClick={onToggleRail}
+          className="no-drag -mr-1 rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
+          title="사이드바 접기 (⌘B)"
+          data-sidebar-toggle
+        >
+          <Icon name="panelRight" size={14} />
+        </button>
       </div>
 
       <nav className="no-drag flex gap-0.5 px-3 pb-3">

@@ -5,6 +5,7 @@ import { Icon } from "./components/Icon";
 import { Sidebar, type View } from "./components/Sidebar";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { SearchPalette } from "./components/SearchPalette";
+import { kvGet, kvSet } from "./kv-store";
 import { requestReveal } from "./reveal";
 import { browserHasKeys } from "./browser-active";
 import { closeTarget } from "./close-target";
@@ -19,6 +20,15 @@ import { UsageView } from "./views/UsageView";
 
 export function App() {
   const [view, setView] = useState<View>("chat");
+  // 사이드바 접힘. 아주 없애지 않고 얇은 띠로 두는 이유는 macOS 신호등 버튼 자리를 지켜야 해서다.
+  const [railed, setRailed] = useState(() => kvGet("sidebar.railed") === "1");
+  const toggleRail = useCallback(
+    () => setRailed((v) => {
+      kvSet("sidebar.railed", v ? null : "1");
+      return !v;
+    }),
+    [],
+  );
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("general");
   const [info, setInfo] = useState<AppInfoDto | null>(null);
@@ -146,6 +156,7 @@ export function App() {
         if (where === "editor") window.dispatchEvent(new CustomEvent("atelier:editor-close-active", { detail: tabId }));
         else void closeTab(tabId);
       }
+      else if (name === "toggle-sidebar") toggleRail();
       else if (name === "switch-workspace") setSwitcher((s) => !s);
       else if (name === "search") {
         // ⌘F: 브라우저를 보고 있으면 그 페이지에서 찾기, 아니면 대화 검색
@@ -188,6 +199,8 @@ export function App() {
   return (
     <div className="relative flex h-full">
       <Sidebar
+        railed={railed}
+        onToggleRail={toggleRail}
         view={view}
         onView={setView}
         ws={ws}

@@ -395,6 +395,7 @@ export type ShortcutName =
   | "close-tab"
   | "switch-workspace"
   | "toggle-terminal"
+  | "toggle-sidebar"
   | "toggle-editor-maximize"
   | "browser-address"
   | "browser-reload"
