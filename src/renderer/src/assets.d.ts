@@ -18,6 +18,8 @@ interface AtelierWebview extends HTMLElement {
   goBack(): void;
   goForward(): void;
   reload(): void;
+  /** 캐시를 무시하고 다시 받는다 — 고친 게 안 보일 때. */
+  reloadIgnoringCache(): void;
   stop(): void;
   loadURL(url: string): Promise<void>;
   executeJavaScript(code: string): Promise<unknown>;

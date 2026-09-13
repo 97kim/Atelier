@@ -170,10 +170,20 @@ export function openBrowserTab(tabId: string, url?: string): void {
   openEditorFile(tabId, key);
 }
 
+/**
+ * 최근에 닫은 탭 — 채팅 탭마다 따로, 최신이 뒤. ⌘⇧T 로 되돌린다.
+ * 브라우저 탭은 키만 되살리면 빈 탭이 되므로 보던 주소를 같이 들고 있는다.
+ */
+const closedStacks = new Map<string, { key: string; url: string | null }[]>();
+export const MAX_CLOSED_TABS = 10;
+
 export function closeEditorFile(tabId: string, path: string): void {
   const cur = getEditorTabs(tabId);
   const i = cur.files.indexOf(path);
   if (i === -1) return;
+  const stack = closedStacks.get(tabId) ?? [];
+  stack.push({ key: path, url: browserUrls.get(path) ?? null });
+  closedStacks.set(tabId, stack.slice(-MAX_CLOSED_TABS));
   const files = cur.files.filter((f) => f !== path);
   const active = cur.active === path ? (files[Math.min(i, files.length - 1)] ?? null) : cur.active;
   set(tabId, {
@@ -207,6 +217,27 @@ export interface EditorDraft {
   size: number | null;
 }
 const drafts = new Map<string, EditorDraft>();
+
+/** 마지막으로 닫은 탭을 되살린다. 되살릴 것이 없으면 false. */
+export function reopenClosedEditorTab(tabId: string): boolean {
+  ensureLoaded();
+  const stack = closedStacks.get(tabId);
+  const last = stack?.pop();
+  if (!last) return false;
+  // 이미 다시 열려 있으면(다른 경로로 열었다) 그 다음 것을 본다.
+  if (getEditorTabs(tabId).files.includes(last.key)) return reopenClosedEditorTab(tabId);
+  if (last.url !== null) {
+    browserUrls.set(last.key, last.url);
+    scheduleSave();
+  }
+  openEditorFile(tabId, last.key);
+  return true;
+}
+
+/** 되살릴 탭이 있나 — 메뉴·버튼 비활성화용. */
+export function hasClosedEditorTabs(tabId: string): boolean {
+  return (closedStacks.get(tabId)?.length ?? 0) > 0;
+}
 
 export function getEditorDraft(path: string): EditorDraft | null {
   ensureLoaded();
@@ -285,6 +316,7 @@ export function pruneEditorTabs(liveTabIds: Set<string>): void {
 
 /** 채팅 탭이 삭제됐다: 열린 파일 목록과, 다른 탭이 편집 중이지 않은 미저장 본문을 버린다. */
 export function forgetEditorTabs(tabId: string): void {
+  closedStacks.delete(tabId);
   ensureLoaded();
   const st = states.get(tabId);
   states.delete(tabId);

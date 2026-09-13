@@ -8,8 +8,24 @@ import type { ChatImageDto } from "@shared/ipc";
 import { PICKER_STOP_SCRIPT, dataUrlImage, elementImage, formatElementAttachment, parsePickMessage, pickerScript } from "@shared/element-pick";
 import { DIAG_MAX_CONSOLE, formatDiagnostics, pushCapped, type ConsoleLine } from "@shared/browser-diagnostics";
 import { DEFAULT_VIEWPORT, VIEWPORTS, nextZoom, viewportById, zoomLevelToPercent } from "../browser-viewport";
+import { parseHistory, recordVisit, suggest, type HistoryEntry } from "@shared/browser-history";
+import { kvGet, kvSet } from "../kv-store";
 
 export { normalizeUrl };
+
+// 주소 기록은 탭마다가 아니라 앱 전체가 하나를 쓴다 — 어느 탭에서 열었든 다음에 찾을 수 있어야 한다.
+const HISTORY_KEY = "browser.history";
+let historyCache: HistoryEntry[] | null = null;
+function readHistory(): HistoryEntry[] {
+  if (!historyCache) historyCache = parseHistory(kvGet(HISTORY_KEY));
+  return historyCache;
+}
+function addHistory(url: string): void {
+  const next = recordVisit(readHistory(), url, Date.now());
+  if (next === historyCache) return;
+  historyCache = next;
+  kvSet(HISTORY_KEY, JSON.stringify(next));
+}
 
 export function BrowserPane({
   initialUrl,
@@ -36,6 +52,9 @@ export function BrowserPane({
   onUrlChangeRef.current = onUrlChange;
   const [url, setUrl] = useState(initialUrl ?? "");
   const [input, setInput] = useState(initialUrl ?? "");
+  // 주소창 자동완성: 열림 여부와 키보드로 고른 줄(-1 = 고른 것 없음, 친 그대로 간다)
+  const [sugOpen, setSugOpen] = useState(false);
+  const [sugAt, setSugAt] = useState(-1);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [nav, setNav] = useState({ back: false, forward: false });
@@ -152,6 +171,7 @@ export function BrowserPane({
         const u = el.getURL();
         setUrl(u);
         setInput(u);
+        addHistory(u); // 주소창 자동완성용 — http(s) 가 아니면 recordVisit 이 거른다
         onUrlChangeRef.current?.(u);
         setNav({ back: el.canGoBack(), forward: el.canGoForward() });
         try {
@@ -217,6 +237,8 @@ export function BrowserPane({
         inputRef.current?.select();
       } else if (what === "reload") {
         view.current?.reload();
+      } else if (what === "hard-reload") {
+        view.current?.reloadIgnoringCache();
       }
     };
     window.addEventListener("atelier:browser-command", onCmd);
@@ -351,6 +373,9 @@ export function BrowserPane({
     // url 이 비어 있으면(빈 탭) src 로 처음 붙는다
   };
 
+  // 자동완성 후보. 목록이 열려 있을 때만 계산한다.
+  const sugs = sugOpen ? suggest(readHistory(), input) : [];
+
   return (
     <div className="flex h-full min-h-0 flex-col" data-browser-pane={url || "blank"}>
       <div className="flex items-center gap-1 border-b border-line px-2 py-1">
@@ -360,24 +385,63 @@ export function BrowserPane({
         <button onClick={() => view.current?.goForward()} disabled={!nav.forward} className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30" title="앞으로">
           <Icon name="chevronRight" size={13} />
         </button>
-        <button onClick={() => (loading ? view.current?.stop() : view.current?.reload())} disabled={!url} className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30" title={loading ? "중지" : "새로고침"} data-browser-reload>
+        <button
+          onClick={(e) => {
+            const el = view.current;
+            if (!el) return;
+            if (loading) el.stop();
+            // ⇧ 를 누른 채 누르면 캐시를 무시한다 — 고쳤는데 화면이 그대로일 때.
+            else if (e.shiftKey) el.reloadIgnoringCache();
+            else el.reload();
+          }}
+          disabled={!url}
+          className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
+          title={loading ? "중지" : "새로고침 (⌘R) · ⇧ 를 누르고 누르면 캐시 무시 (⌘⇧R)"}
+          data-browser-reload
+        >
           <Icon name={loading ? "x" : "refresh"} size={13} className={loading ? "" : ""} />
         </button>
         <form
-          className="min-w-0 flex-1"
+          className="relative min-w-0 flex-1"
           onSubmit={(e) => {
             e.preventDefault();
-            go(input);
+            const picked = sugAt >= 0 ? sugs[sugAt]?.url : null;
+            setSugOpen(false);
+            setSugAt(-1);
+            go(picked ?? input);
           }}
         >
           <input
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onFocus={(e) => e.target.select()}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setSugOpen(true);
+              setSugAt(-1);
+            }}
+            onFocus={(e) => {
+              e.target.select();
+              setSugOpen(true);
+              setSugAt(-1);
+            }}
+            // 클릭이 먼저 처리되도록 닫기를 미룬다 — 바로 닫으면 목록을 누를 수 없다.
+            onBlur={() => setTimeout(() => setSugOpen(false), 150)}
             onKeyDown={(e) => {
               e.stopPropagation();
-              if (e.key === "Escape") setInput(url);
+              if (e.key === "Escape") {
+                if (sugOpen) setSugOpen(false);
+                else setInput(url);
+                setSugAt(-1);
+                return;
+              }
+              if (!sugOpen || sugs.length === 0) return;
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSugAt((i) => (i + 1) % sugs.length);
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSugAt((i) => (i <= 0 ? sugs.length - 1 : i - 1));
+              }
             }}
             placeholder="주소를 입력하세요 (localhost:3000, example.com …)"
             spellCheck={false}
@@ -385,6 +449,35 @@ export function BrowserPane({
             style={{ userSelect: "text" }}
             data-browser-url
           />
+                  {sugs.length > 0 && (
+            <ul
+              className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-line bg-panel shadow-lg"
+              data-browser-suggest
+            >
+              {sugs.map((h, k) => (
+                <li key={h.url}>
+                  <button
+                    type="button"
+                    // blur 로 목록이 닫히기 전에 눌리도록 mousedown 에서 처리한다.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setSugOpen(false);
+                      setSugAt(-1);
+                      go(h.url);
+                    }}
+                    onMouseEnter={() => setSugAt(k)}
+                    className={`mono flex w-full items-center gap-2 px-2.5 py-1 text-left text-[11.5px] ${
+                      k === sugAt ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2/60"
+                    }`}
+                  >
+                    <Icon name="clock" size={11} className="shrink-0 opacity-60" />
+                    <span className="truncate">{h.url}</span>
+                    {h.visits > 1 && <span className="ml-auto shrink-0 text-[10px] opacity-50">{h.visits}회</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </form>
         <button
           onClick={() => (picking ? stopPick() : void startPick())}

@@ -399,6 +399,8 @@ export type ShortcutName =
   | "toggle-editor-maximize"
   | "browser-address"
   | "browser-reload"
+  | "browser-hard-reload"
+  | "reopen-tab"
   | "search"
   | "next-attention"
   | "prev-attention"

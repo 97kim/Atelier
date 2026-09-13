@@ -2030,6 +2030,7 @@ function buildMenu() {
       label: "파일",
       submenu: [
         shortcut("새 세션", "CmdOrCtrl+T", "new-tab"),
+        shortcut("닫은 코드·브라우저 탭 다시 열기", "CmdOrCtrl+Shift+T", "reopen-tab"),
         shortcut("탭 닫기", "CmdOrCtrl+W", "close-tab"),
         { type: "separator" },
         shortcut("워크스페이스 전환…", "CmdOrCtrl+K", "switch-workspace"),
@@ -2054,6 +2055,7 @@ function buildMenu() {
         { type: "separator" },
         shortcut("브라우저 주소창", "CmdOrCtrl+L", "browser-address"),
         shortcut("브라우저 새로고침", "CmdOrCtrl+R", "browser-reload"),
+        shortcut("브라우저 강력 새로고침 (캐시 무시)", "CmdOrCtrl+Shift+R", "browser-hard-reload"),
         { type: "separator" },
         { role: "togglefullscreen" },
       ],

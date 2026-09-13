@@ -10,7 +10,7 @@ import { requestReveal } from "./reveal";
 import { browserHasKeys } from "./browser-active";
 import { closeTarget } from "./close-target";
 import { isBrowserTab } from "./editor-tabs";
-import { forgetEditorTabs, getEditorTabs, getLastPane, openBrowserTab, openEditorFile, pruneEditorTabs, setEditorMaximized } from "./editor-tabs";
+import { forgetEditorTabs, getEditorTabs, getLastPane, openBrowserTab, openEditorFile, pruneEditorTabs, reopenClosedEditorTab, setEditorMaximized } from "./editor-tabs";
 import { clearComposerDraft, pruneComposerDrafts } from "./composer-draft";
 import { nextAttentionTab } from "@shared/attention-nav";
 import { useWorkspaces } from "./hooks/useWorkspaces";
@@ -162,8 +162,15 @@ export function App() {
         // ⌘F: 브라우저를 보고 있으면 그 페이지에서 찾기, 아니면 대화 검색
         if (browserKeysActive()) window.dispatchEvent(new CustomEvent("atelier:browser-command", { detail: "find" }));
         else setSearch((s) => !s);
-      } else if (name === "browser-address" || name === "browser-reload") {
-        if (browserKeysActive()) window.dispatchEvent(new CustomEvent("atelier:browser-command", { detail: name === "browser-address" ? "address" : "reload" }));
+      } else if (name === "reopen-tab") {
+        if (model.activeTabId) reopenClosedEditorTab(model.activeTabId);
+      } else if (name === "browser-address" || name === "browser-reload" || name === "browser-hard-reload") {
+        if (browserKeysActive())
+          window.dispatchEvent(
+            new CustomEvent("atelier:browser-command", {
+              detail: name === "browser-address" ? "address" : name === "browser-hard-reload" ? "hard-reload" : "reload",
+            }),
+          );
       }
       else if (name === "toggle-editor-maximize" && model.activeTabId) {
         const t = getEditorTabs(model.activeTabId);
