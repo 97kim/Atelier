@@ -39,7 +39,7 @@ import { SlashCommandCache } from "./claude-commands";
 import { fetchMcpStatus } from "./claude-mcp";
 import { setCodexSessionIdleMs, type CodexRuntime } from "./codex-adapter";
 import { buildReviewPrompt, otherProvider, reviewPermissionDecision, reviewScope, reviewTabTitle } from "@shared/cross-review";
-import { HANDOFF_BRIEF_PROMPT } from "@shared/handoff";
+import { handoffBriefPrompt, handoffNotePermission, NOTE_FILE } from "@shared/handoff";
 import { lastReplyText } from "@shared/session-state";
 import { PreviewServer } from "./preview-server";
 import { browserNetFailures, clearBrowserNetFailures, watchBrowserNetwork } from "./browser-net";
@@ -1179,15 +1179,21 @@ async function askHandoffBrief(tabId: string): Promise<string> {
   const snap = sessions.snapshot(tabId);
   if (!snap.sessionId || snap.controller === "terminal") return "";
   if (sessions.events(tabId).length === 0) return "";
+  const cwd = snap.cwd;
+  if (!cwd) return "";
+  const note = NOTE_FILE[snap.provider] ?? "AGENTS.md";
   const since = sessions.events(tabId).length;
-  const sent = await handleChatSend(tabId, { text: HANDOFF_BRIEF_PROMPT });
+  const sent = await handleChatSend(tabId, { text: handoffBriefPrompt(snap.provider) });
   if (!sent.ok) return "";
   const started = Date.now();
   for (;;) {
     await new Promise((r) => setTimeout(r, 700));
-    // 인계서는 도구를 쓸 일이 없다 — 그래도 권한을 물으면 거절해서 멈추지 않게 한다.
-    for (const req of sessions.pendingPermissions(tabId))
-      sessions.answerPermission(tabId, req.requestId, { behavior: "deny" });
+    // 이 턴은 사람이 보고 있지 않다 — 노트 파일에 덧붙이는 것만 열고 나머지는 거절해서 멈추지 않게 한다.
+    for (const req of sessions.pendingPermissions(tabId)) {
+      const decision = handoffNotePermission(req.tool, req.input, { cwd, note, exists: (p) => existsSync(p) });
+      if (decision === "allow") console.log(`[handoff] ${tabId} ${note} 쓰기 허용: ${req.tool}`);
+      sessions.answerPermission(tabId, req.requestId, { behavior: decision });
+    }
     const st = sessions.snapshot(tabId);
     const busy = st.status === "running" || st.status === "queued" || st.status === "waiting_permission" || st.limitWait !== null;
     const turned = sessions.events(tabId).slice(since).some((e) => e.type === "turn_result");

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ChatEvent } from "./chat-events";
-import { buildHandoff, estimateTokens, extractFilePaths, pendingTodos } from "./handoff";
+import { buildHandoff, estimateTokens, extractFilePaths, handoffBriefPrompt, handoffNotePermission, isNoteFile, pendingTodos } from "./handoff";
 
 let t = 0;
 type NoTs<T> = T extends unknown ? Omit<T, "ts"> : never;
@@ -114,4 +114,40 @@ test("extractFilePaths / pendingTodos 는 두 provider 의 입력 형태를 모�
     ["x"],
   );
   assert.deepEqual(pendingTodos(null), []);
+});
+
+test("인계서 프롬프트는 provider 의 노트 파일을 가리킨다", () => {
+  assert.match(handoffBriefPrompt("claude"), /CLAUDE\.md/);
+  assert.match(handoffBriefPrompt("codex"), /AGENTS\.md/);
+  // 자리표시자가 그대로 새어 나가면 안 된다.
+  assert.doesNotMatch(handoffBriefPrompt("claude"), /\{NOTE_FILE\}/);
+});
+
+test("isNoteFile: cwd 바로 아래의 그 파일만", () => {
+  assert.equal(isNoteFile("/r/CLAUDE.md", "/r", "CLAUDE.md"), true);
+  assert.equal(isNoteFile("CLAUDE.md", "/r", "CLAUDE.md"), true);
+  assert.equal(isNoteFile("/r/", "/r", "CLAUDE.md"), false);
+  assert.equal(isNoteFile("/r/sub/CLAUDE.md", "/r", "CLAUDE.md"), false);
+  assert.equal(isNoteFile("/r/AGENTS.md", "/r", "CLAUDE.md"), false);
+  assert.equal(isNoteFile("/other/CLAUDE.md", "/r", "CLAUDE.md"), false);
+});
+
+test("인계서 턴 권한: 노트 파일에 덧붙이는 것만 열고, 있는 파일 덮어쓰기는 막는다", () => {
+  const opts = { cwd: "/r", note: "CLAUDE.md", exists: (p: string) => p === "/r/CLAUDE.md" };
+  const none = { ...opts, exists: () => false };
+
+  assert.equal(handoffNotePermission("Edit", { file_path: "/r/CLAUDE.md" }, opts), "allow");
+  assert.equal(handoffNotePermission("Read", { file_path: "/r/CLAUDE.md" }, opts), "allow");
+  assert.equal(handoffNotePermission("ApplyPatch", { changes: [{ path: "/r/CLAUDE.md" }] }, opts), "allow");
+
+  // 있는 파일을 통째로 새로 쓰는 건 막는다 — 쌓아 둔 내용이 날아간다.
+  assert.equal(handoffNotePermission("Write", { file_path: "/r/CLAUDE.md" }, opts), "deny");
+  // 없으면 날릴 것이 없으니 만들게 둔다.
+  assert.equal(handoffNotePermission("Write", { file_path: "/r/CLAUDE.md" }, none), "allow");
+
+  // 나머지는 전부 거부 — 이 턴은 사람이 보고 있지 않다.
+  assert.equal(handoffNotePermission("Edit", { file_path: "/r/src/a.ts" }, opts), "deny");
+  assert.equal(handoffNotePermission("Bash", { command: "rm -rf /" }, opts), "deny");
+  assert.equal(handoffNotePermission("Edit", {}, opts), "deny");
+  assert.equal(handoffNotePermission("ApplyPatch", { changes: [{ path: "/r/CLAUDE.md" }, { path: "/r/x.ts" }] }, opts), "deny");
 });

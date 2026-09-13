@@ -20,18 +20,34 @@ const { chromium } = require("playwright-core");
   const tabId = await ev(() => document.querySelector('[data-tab][data-active="true"]')?.getAttribute("data-tab") ?? null);
   if (!tabId) { console.log("RESULT: FAIL (탭을 못 찾음)"); process.exit(1); }
   const snap = () => ev((id) => window.workbench.chat.snapshot(id), tabId);
-  const settle = async (label) => {
+  // 정책은 ask 그대로 둔다 — full 로 열면 인계서 턴의 권한 게이트가 통째로 우회돼 검증이 무의미해진다.
+  // 대신 준비 턴에서만 사용자처럼 승인해 준다.
+  const settle = async (label, { approve = false } = {}) => {
     for (let i = 0; i < 240; i++) {
       const s = await snap();
+      if (approve && s.status === "waiting_permission") {
+        // 아직 답 안 한 권한 요청을 기록에서 찾는다.
+        const ids = await ev(async (id) => {
+          const evs = await window.workbench.chat.events(id);
+          const done = new Set(evs.filter((e) => e.type === "permission_resolved").map((e) => e.requestId));
+          return evs.filter((e) => e.type === "permission_request" && !done.has(e.requestId)).map((e) => e.requestId);
+        }, tabId);
+        for (const rid of ids) await ev(([id, r]) => window.workbench.chat.answerPermission(id, r, { behavior: "allow" }), [tabId, rid]);
+      }
       if (s.sessionId && s.status !== "running" && s.status !== "queued" && s.status !== "waiting_permission") return s;
       await page.waitForTimeout(1000);
     }
     throw new Error(`${label}: 턴이 안 끝남`);
   };
 
-  // 넘길 맥락을 만든다 — 의도와 결정이 있어야 인계서에 담길 것이 생긴다.
-  cli("tab", "send", "--tab", "인계", "--text", "a.txt 파일에 '사과' 라고 써라. 다른 건 하지 마라.");
-  await settle("첫 턴");
+  // 이미 쌓여 있는 CLAUDE.md — 인계서 턴이 이걸 날리면 안 된다.
+  const noteFile = path.join(E2E, "repo", "CLAUDE.md");
+  const SENTINEL = "# 기존 메모\n\n이 줄은 사용자가 쌓아 둔 것이다. 절대 사라지면 안 된다.\n";
+  fs.writeFileSync(noteFile, SENTINEL, "utf8");
+
+  // 넘길 맥락을 만든다 — 이 저장소에 오래 남을 규칙을 하나 정해 준다.
+  cli("tab", "send", "--tab", "인계", "--text", "이 저장소의 규칙: 모든 텍스트 파일은 반드시 마지막 줄에 개행을 넣는다. 앞으로 계속 지킬 규칙이다. 그 규칙대로 a.txt 에 '사과' 라고 써라.");
+  await settle("첫 턴", { approve: true });
   console.log("첫 턴 끝");
 
   // 본론: Codex 로 넘기면서 떠나는 Claude 에게 인계서를 쓰게 한다.
@@ -52,6 +68,14 @@ const { chromium } = require("playwright-core");
   console.log("RESULT (디스크에 남았다 — 껐다 켜도 산다):", text.length > 50 ? "PASS" : "FAIL");
   console.log("RESULT (모델이 쓴 인계서다):", !mechanical && text.length > 50 ? "PASS" : "FAIL");
   console.log("RESULT (원래 요청이 담겼다):", /사과|a\.txt/.test(text) ? "PASS" : "FAIL");
+
+  // 오래 남을 것은 대화가 아니라 저장소에 — 다만 쌓여 있던 내용은 건드리면 안 된다.
+  const note = fs.existsSync(noteFile) ? fs.readFileSync(noteFile, "utf8") : "";
+  const appended = note.length > SENTINEL.length;
+  console.log("CLAUDE.md 길이:", SENTINEL.length, "→", note.length);
+  if (appended) console.log("덧붙은 내용:", JSON.stringify(note.slice(SENTINEL.length).trim().slice(0, 200)));
+  console.log("RESULT (쌓아 둔 내용이 그대로다):", note.startsWith(SENTINEL.trimEnd()) ? "PASS" : "FAIL");
+  console.log("RESULT (오래 남을 규칙이 노트에 적혔다):", appended && /개행|newline|줄바꿈/.test(note) ? "PASS" : "FAIL(모델 판단에 달림)");
 
   await b.close();
 })().catch((e) => { console.error("ERROR", e); process.exit(1); });

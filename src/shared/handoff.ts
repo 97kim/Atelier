@@ -214,9 +214,9 @@ function toolOneLiner(name: string, input: unknown): string {
  * Anthropic 권고는 압축을 모델에게 맡기고, 회수율을 먼저 최대화한 뒤 정밀도를 높이라는 것이다.
  * 항목 순서가 그 회수율 장치다 — 의도·결정·막힌 곳처럼 기록에서 복원할 수 없는 것을 앞에 둔다.
  */
-export const HANDOFF_BRIEF_PROMPT = [
+const BRIEF_TEMPLATE = [
   "지금 이 대화를 다른 AI 에이전트에게 넘긴다. 그쪽은 이 대화를 전혀 보지 못하고 네가 쓴 글만 읽는다.",
-  "인계서를 써라. 파일을 더 읽거나 도구를 쓰지 말고, 지금 아는 것만으로 바로 답해라.",
+  "인계서를 써라. 조사하지 말고 지금 아는 것만으로 바로 답해라. 도구는 아래 8번에서만 쓴다.",
   "",
   "다음을 순서대로 담되, 해당 없는 항목은 건너뛴다.",
   "1. 원래 요청 — 사용자가 무엇을 원했나. 도중에 바뀌었으면 바뀐 내용까지.",
@@ -226,6 +226,55 @@ export const HANDOFF_BRIEF_PROMPT = [
   "5. 건드린 파일과 각각 무엇을 바꿨는지.",
   "6. 지금 상태 — 무엇이 돌아가고 무엇이 깨져 있나. 커밋했는지, 테스트는 통과하는지.",
   "7. 바로 다음에 할 일.",
+  "8. 이 대화가 아니라 이 저장소에 오래 남아야 할 것이 있으면 — 프로젝트의 규칙, 굳은 관례, 되풀이되는 함정 —",
+  "   {NOTE_FILE} 끝에 덧붙여라. 이번 작업에만 해당하는 이야기는 넣지 마라. 남길 것이 없으면 아무것도 하지 마라.",
+  "   이미 있는 내용은 지우거나 고치지 말고 덧붙이기만 해라.",
   "",
   "사족·인사말·마무리 요약은 빼고 인계서만 써라. 추측은 추측이라고 밝혀라.",
 ].join("\n");
+
+/** 떠나는 provider 에 맞춰 노트 파일 이름을 채운 인계서 프롬프트. */
+export function handoffBriefPrompt(provider: string): string {
+  return BRIEF_TEMPLATE.replaceAll("{NOTE_FILE}", NOTE_FILE[provider] ?? "AGENTS.md");
+}
+
+/** 인계 직전에 오래 남길 것을 적어 두는 파일. 앱이 새 규약을 만들지 않고 각 CLI 의 것을 쓴다. */
+export const NOTE_FILE: Record<string, string> = { claude: "CLAUDE.md", codex: "AGENTS.md" };
+
+/** 경로가 cwd 바로 아래의 그 파일인가. 하위 디렉토리·다른 이름은 아니다. */
+export function isNoteFile(filePath: string, cwd: string, name: string): boolean {
+  const p = filePath.trim();
+  if (!p) return false;
+  if (p === name) return true; // 상대 경로로 오는 경우
+  const base = cwd.replace(/\/+$/, "");
+  return p === `${base}/${name}`;
+}
+
+/**
+ * 인계서 턴에서 올라온 권한 요청의 판정. 기본은 거부다 — 이 턴은 사람이 보고 있지 않다.
+ *
+ * 딱 하나만 연다: 그 provider 의 노트 파일에 오래 남길 것을 덧붙이는 일. 다만 이미 있는 파일을
+ * 통째로 새로 쓰는 것(Write)은 막는다 — 사용자가 쌓아 둔 내용을 날릴 수 있다. 없는 파일은
+ * 날릴 것이 없으니 만들게 둔다.
+ */
+export function handoffNotePermission(
+  tool: string,
+  input: unknown,
+  opts: { cwd: string; note: string; exists: (path: string) => boolean },
+): "allow" | "deny" {
+  const paths = extractFilePaths(input);
+  if (paths.length === 0) return "deny";
+  if (!paths.every((p) => isNoteFile(p, opts.cwd, opts.note))) return "deny";
+  switch (tool) {
+    case "Read":
+    case "Edit":
+    case "MultiEdit":
+    case "ApplyPatch":
+      return "allow";
+    case "Write":
+      // 덮어쓰기는 파일이 없을 때만.
+      return paths.every((p) => !opts.exists(p)) ? "allow" : "deny";
+    default:
+      return "deny";
+  }
+}
