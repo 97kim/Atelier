@@ -525,6 +525,11 @@ export interface SwitchProviderDto {
   provider: Provider;
   model?: string;
   preserveContext: boolean;
+  /**
+   * 떠나는 provider 에게 인계서를 직접 쓰게 한다. 우리가 기록을 잘라 만드는 요약보다
+   * 낫지만 턴 하나를 더 돌리므로 시간이 걸린다. 실패하면 조용히 기존 요약으로 돌아간다.
+   */
+  askSummary?: boolean;
 }
 
 export interface ChatImageDto {

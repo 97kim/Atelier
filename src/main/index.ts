@@ -39,6 +39,7 @@ import { SlashCommandCache } from "./claude-commands";
 import { fetchMcpStatus } from "./claude-mcp";
 import { setCodexSessionIdleMs, type CodexRuntime } from "./codex-adapter";
 import { buildReviewPrompt, otherProvider, reviewPermissionDecision, reviewScope, reviewTabTitle } from "@shared/cross-review";
+import { HANDOFF_BRIEF_PROMPT } from "@shared/handoff";
 import { lastReplyText } from "@shared/session-state";
 import { PreviewServer } from "./preview-server";
 import { browserNetFailures, clearBrowserNetFailures, watchBrowserNetwork } from "./browser-net";
@@ -1170,6 +1171,32 @@ function attachmentsDir(): string {
   return join(app.getPath("userData"), "attachments");
 }
 
+/**
+ * 떠나는 provider 에게 인계서를 쓰게 하고 그 답을 돌려준다.
+ * 실패하면 빈 문자열 — 부르는 쪽이 기존 요약으로 조용히 돌아간다. 전환 자체를 막지는 않는다.
+ */
+async function askHandoffBrief(tabId: string): Promise<string> {
+  const snap = sessions.snapshot(tabId);
+  if (!snap.sessionId || snap.controller === "terminal") return "";
+  if (sessions.events(tabId).length === 0) return "";
+  const since = sessions.events(tabId).length;
+  const sent = await handleChatSend(tabId, { text: HANDOFF_BRIEF_PROMPT });
+  if (!sent.ok) return "";
+  const started = Date.now();
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 700));
+    // 인계서는 도구를 쓸 일이 없다 — 그래도 권한을 물으면 거절해서 멈추지 않게 한다.
+    for (const req of sessions.pendingPermissions(tabId))
+      sessions.answerPermission(tabId, req.requestId, { behavior: "deny" });
+    const st = sessions.snapshot(tabId);
+    const busy = st.status === "running" || st.status === "queued" || st.status === "waiting_permission" || st.limitWait !== null;
+    const turned = sessions.events(tabId).slice(since).some((e) => e.type === "turn_result");
+    if (!busy && turned) return lastReplyText(sessions.events(tabId).slice(since)).trim();
+    if (!busy && st.status === "error") return "";
+    if (Date.now() - started > 3 * 60_000) return "";
+  }
+}
+
 async function handleChatSend(
   tabId: string,
   payload: ChatSendDto,
@@ -1537,8 +1564,15 @@ function registerIpc() {
   );
   ipcMain.handle(
     IPC.chatSwitchProvider,
-    (_e, tabId: string, opts: SwitchProviderDto) =>
-      sessions.switchProvider(tabId, opts),
+    async (_e, tabId: string, opts: SwitchProviderDto) => {
+      // Claude 와 Codex 는 세션을 이어받을 수 없어 텍스트로 넘길 수밖에 없다. 그 텍스트는
+      // 우리가 기록을 잘라 만드는 것보다 떠나는 쪽이 직접 쓴 것이 낫다 — 무엇이 중요한지 아는 쪽이니까.
+      const summary =
+        opts.preserveContext && opts.askSummary
+          ? await askHandoffBrief(tabId)
+          : undefined;
+      return sessions.switchProvider(tabId, { ...opts, summary });
+    },
   );
   ipcMain.handle(IPC.chatCommands, async (_e, tabId: string) => {
     const snap = sessions.snapshot(tabId);

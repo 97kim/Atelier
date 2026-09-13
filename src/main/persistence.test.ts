@@ -106,3 +106,23 @@ test("prompt queue: 저장은 base64 를 빼고, 복원은 파일에서 다시 �
   assert.equal(existsSync(join(dir, "attachments", "t1")), false, "첨부 디렉토리도 함께 지운다");
   rmSync(dir, { recursive: true, force: true });
 });
+
+test("인계서는 디스크에 남아 앱을 껐다 켜도 살아남는다", () => {
+  const { dir, store } = tmpStore();
+  assert.equal(store.loadHandoffPrefix("t1"), null);
+
+  store.saveHandoffPrefix("t1", "## 인계서\n원래 요청: 버그 고치기");
+  // 다른 Store 인스턴스 = 앱을 새로 띄운 것과 같다.
+  assert.equal(new Store(dir).loadHandoffPrefix("t1"), "## 인계서\n원래 요청: 버그 고치기");
+
+  // 다음 메시지에 실려 나갔으면 지운다 — 두 번 붙으면 안 된다.
+  store.saveHandoffPrefix("t1", null);
+  assert.equal(new Store(dir).loadHandoffPrefix("t1"), null);
+});
+
+test("대화를 비우면 인계서도 함께 지운다", () => {
+  const { dir, store } = tmpStore();
+  store.saveHandoffPrefix("t1", "옛 맥락");
+  store.resetThread("t1");
+  assert.equal(new Store(dir).loadHandoffPrefix("t1"), null);
+});

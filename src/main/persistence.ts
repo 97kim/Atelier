@@ -207,9 +207,44 @@ export class Store {
     try {
       fs.rmSync(this.threadPath(tabId), { force: true });
       fs.rmSync(this.queuePath(tabId), { force: true });
+      fs.rmSync(this.handoffPath(tabId), { force: true });
       // 첨부는 attachments/<tabId>/ 에 쌓인다(Codex local_image 입력·큐 복원용). 기록의 dataUrl 은 스레드 파일에 따로 있으므로 함께 지워도 된다.
       if (safeName(tabId) === tabId) fs.rmSync(path.join(this.attachmentsDir(), tabId), { recursive: true, force: true });
     } catch {}
+  }
+
+  // ===== handoff (전환·압축 때 만든 인계서 — 다음 메시지에 실려 나갈 때까지 보관) =====
+
+  handoffPath(tabId: string): string {
+    return path.join(this.threadsDir, `${safeName(tabId)}.handoff.txt`);
+  }
+
+  /**
+   * 인계서는 다음 메시지가 나갈 때까지만 살면 되지만, 그 사이에 앱이 꺼지면 맥락이
+   * 통째로 사라진다. 만드는 데 턴 하나가 드는 글이라 메모리에만 두지 않는다.
+   */
+  saveHandoffPrefix(tabId: string, prefix: string | null): void {
+    const p = this.handoffPath(tabId);
+    try {
+      if (!prefix) {
+        fs.rmSync(p, { force: true });
+        return;
+      }
+      fs.mkdirSync(this.threadsDir, { recursive: true });
+      fs.writeFileSync(`${p}.tmp`, prefix, "utf8");
+      fs.renameSync(`${p}.tmp`, p);
+    } catch (e) {
+      console.error(`[store] handoff 저장 실패 (${tabId}):`, e);
+    }
+  }
+
+  loadHandoffPrefix(tabId: string): string | null {
+    try {
+      const text = fs.readFileSync(this.handoffPath(tabId), "utf8");
+      return text.trim() ? text : null;
+    } catch {
+      return null;
+    }
   }
 
   // ===== prompt queue (턴 진행 중 써 둔 다음 지시들 — 앱을 껐다 켜도 남는다) =====

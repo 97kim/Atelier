@@ -9,7 +9,7 @@ import type {
   PermissionRequestEvent,
   SessionStatus,
 } from "@shared/chat-events";
-import { buildHandoff, type Handoff } from "@shared/handoff";
+import { buildHandoff, estimateTokens, type Handoff } from "@shared/handoff";
 import type { Provider, ProviderRateLimitDto } from "@shared/ipc";
 import type { SlashCommandDto } from "@shared/slash-commands";
 import type { StoredChatImage } from "./chat-attachments";
@@ -156,6 +156,9 @@ export interface SessionStore {
   /** 프롬프트 큐 영속화(선택). 없으면 큐는 메모리에만 산다. */
   savePromptQueue?(tabId: string, items: PendingPrompt[]): void;
   loadPromptQueue?(tabId: string): PendingPrompt[];
+  /** 인계서 영속화(선택). 없으면 앱을 껐다 켤 때 맥락이 사라진다. */
+  saveHandoffPrefix?(tabId: string, prefix: string | null): void;
+  loadHandoffPrefix?(tabId: string): string | null;
 }
 
 export interface SessionManagerDeps {
@@ -296,7 +299,8 @@ export class SessionManager {
         pending: new Map(),
         pendingReqs: new Map(),
         events: null,
-        handoffPrefix: null,
+        // 전환·압축 때 만든 인계서. 다음 메시지에 실려 나가기 전에 앱이 꺼졌으면 디스크에서 되살린다.
+        handoffPrefix: this.deps.store?.loadHandoffPrefix?.(tabId) ?? null,
         startedAt: null,
         turnStartedAt: null,
         queued: null,
@@ -470,6 +474,12 @@ export class SessionManager {
     return this.snapshot(tabId);
   }
 
+  /** 인계서는 만드는 데 턴 하나가 드는 글이다 — 메모리와 디스크를 같이 움직인다. */
+  private setHandoffPrefix(s: Session, prefix: string | null) {
+    s.handoffPrefix = prefix;
+    this.deps.store?.saveHandoffPrefix?.(s.tabId, prefix);
+  }
+
   private persistQueue(s: Session) {
     this.deps.store?.savePromptQueue?.(s.tabId, s.promptQueue);
   }
@@ -525,7 +535,7 @@ export class SessionManager {
       this.deps.onMeta?.(tabId, { sessionId: s.sessionId });
     }
     s.controller = "terminal";
-    s.handoffPrefix = null;
+    this.setHandoffPrefix(s, null);
     // 터미널이 세션을 잡는 동안 앱의 자동 재시도는 의미가 없다 — 예약을 지운다(큐는 돌아오면 이어 간다).
     if (s.limitWait) {
       this.clearLimitTimer(s);
@@ -661,7 +671,7 @@ export class SessionManager {
       s.limitAttempts = 0;
     }
     s.controller = "terminal";
-    s.handoffPrefix = null;
+    this.setHandoffPrefix(s, null);
     s.external = { pid, cwd, watch: null, since: Date.now() - 2000 };
     this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
     // 명령에 세션 id 가 있으면(`codex resume <id>`) 바로 그 세션을 붙인다 —
@@ -1002,13 +1012,21 @@ export class SessionManager {
    */
   switchProvider(
     tabId: string,
-    opts: { provider: Provider; model?: string; preserveContext: boolean },
+    opts: {
+      provider: Provider;
+      model?: string;
+      preserveContext: boolean;
+      /** 떠나는 provider 가 직접 쓴 인계서. 있으면 우리가 만든 요약 대신 이걸 넘긴다. */
+      summary?: string;
+    },
   ): SessionSnapshot {
     const s = this.ensure(tabId);
     if (this.isBusy(tabId)) this.abort(tabId);
     const events = this.events(tabId);
-    const handoff =
-      opts.preserveContext && events.length > 0
+    const written = opts.preserveContext ? (opts.summary ?? "").trim() : "";
+    const handoff = written
+      ? { summary: written, stats: { messages: 0, files: 0, pendingTasks: 0, tokensEstimate: estimateTokens(written) } }
+      : opts.preserveContext && events.length > 0
         ? this.handoffPreview(tabId)
         : null;
     const from = s.provider;
@@ -1021,7 +1039,7 @@ export class SessionManager {
     s.provider = opts.provider;
     s.model = opts.model || undefined;
     s.sessionId = null;
-    s.handoffPrefix = handoff ? handoff.summary : null;
+    this.setHandoffPrefix(s, handoff ? handoff.summary : null);
     this.deps.onMeta?.(tabId, {
       provider: s.provider,
       model: s.model,
@@ -1099,7 +1117,7 @@ export class SessionManager {
     const prompt = s.handoffPrefix
       ? `${s.handoffPrefix}\n\n---\n\n${text}`
       : text;
-    s.handoffPrefix = null;
+    this.setHandoffPrefix(s, null);
     s.queued = { text, prompt, images };
 
     if (!this.canStart(tabId)) {
@@ -1352,7 +1370,7 @@ export class SessionManager {
     closeProviderSessions(tabId);
     s.events = [];
     s.sessionId = null;
-    s.handoffPrefix = null;
+    this.setHandoffPrefix(s, null);
     s.startedAt = null;
     s.promptQueue = [];
     this.persistQueue(s);

@@ -18,13 +18,15 @@ export function ProviderSwitchModal({
   current: Provider;
   running: boolean;
   onClose: () => void;
-  onSwitch: (opts: { provider: Provider; model?: string; preserveContext: boolean }) => Promise<void>;
+  onSwitch: (opts: { provider: Provider; model?: string; preserveContext: boolean; askSummary?: boolean }) => Promise<void>;
   loadHandoff: () => Promise<Handoff>;
 }) {
   // 미리 고르지 않는다 — 사용자가 목록에서 직접 고른 뒤 확인한다(제공자가 늘어도 같은 흐름).
   const [selected, setSelected] = useState<Provider | null>(null);
   const [model, setModel] = useState("");
   const [preserve, setPreserve] = useState(true);
+  // 떠나는 쪽이 직접 쓴 인계서가 우리가 기록을 잘라 만든 요약보다 낫다 — 기본값으로 둔다.
+  const [askSummary, setAskSummary] = useState(true);
   const [status, setStatus] = useState<Record<Provider, CliStatusDto | null>>({ claude: null, codex: null });
   const [handoff, setHandoff] = useState<Handoff | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,7 +55,7 @@ export function ProviderSwitchModal({
     if (!canConfirm || !selected) return;
     setBusy(true);
     try {
-      await onSwitch({ provider: selected, model: model || undefined, preserveContext: preserve });
+      await onSwitch({ provider: selected, model: model || undefined, preserveContext: preserve, askSummary: preserve && askSummary });
       onClose();
     } finally {
       setBusy(false);
@@ -153,6 +155,17 @@ export function ProviderSwitchModal({
                 </div>
                 <Toggle value={preserve} onChange={setPreserve} />
               </div>
+              {preserve && (
+                <div className="flex items-center justify-between border-t border-line px-4 py-3">
+                  <div>
+                    <div className="font-medium">떠나는 쪽이 인계서를 직접 쓰게 한다</div>
+                    <div className="text-muted">
+                      무엇이 중요했는지 아는 쪽이 씁니다. 턴 하나를 더 돌리므로 잠시 걸립니다
+                    </div>
+                  </div>
+                  <Toggle value={askSummary} onChange={setAskSummary} />
+                </div>
+              )}
             </div>
           </div>
 
@@ -160,7 +173,7 @@ export function ProviderSwitchModal({
             <div className="rounded-lg border border-accent/30 bg-accent-tint px-4 py-3">
               <div className="mb-2 flex items-center gap-2 font-medium">
                 <Icon name="file" size={13} className="text-accent" />
-                요약 준비됨
+                {askSummary ? "대비책 요약 준비됨" : "요약 준비됨"}
               </div>
               <div className="flex gap-8">
                 {[
