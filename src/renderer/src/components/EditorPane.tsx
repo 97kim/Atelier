@@ -1,5 +1,5 @@
 // 채팅 옆 에디터 패널: 파일 탭 스트립 + 파일마다 FileEditor(숨김 유지). 닫을 때 저장 안 된 변경은 확인을 받는다.
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   activateEditorFile,
   closeEditorFile,
@@ -47,6 +47,19 @@ export function EditorPane({
     markDirty(path, false);
     closeEditorFile(tabId, path);
   };
+
+  // ⌘W 가 이 패널을 겨냥했을 때 — 버튼의 × 와 같은 경로를 탄다(미저장이면 확인 배너).
+  // App 에서 직접 closeEditorFile 을 부르면 그 확인을 건너뛰므로 이벤트로 넘겨받는다.
+  const activeFile = tabs.active;
+  useEffect(() => {
+    const onClose = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== tabId || !activeFile) return;
+      requestClose(activeFile);
+    };
+    window.addEventListener("atelier:editor-close-active", onClose);
+    return () => window.removeEventListener("atelier:editor-close-active", onClose);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabId, activeFile, tabs.dirty.join("\u0000")]);
 
   const name = (p: string) => (isBrowserTab(p) ? (browserLabels[p] ?? browserTabLabel(p)) : (p.split("/").pop() ?? p));
   // 같은 이름의 파일이 둘이면 상위 폴더를 붙여 구분한다

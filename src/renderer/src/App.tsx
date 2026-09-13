@@ -6,6 +6,7 @@ import { Sidebar, type View } from "./components/Sidebar";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { SearchPalette } from "./components/SearchPalette";
 import { requestReveal } from "./reveal";
+import { closeTarget } from "./close-target";
 import { forgetEditorTabs, getEditorTabs, openBrowserTab, openEditorFile, pruneEditorTabs, setEditorMaximized } from "./editor-tabs";
 import { clearComposerDraft, pruneComposerDrafts } from "./composer-draft";
 import { nextAttentionTab } from "@shared/attention-nav";
@@ -111,10 +112,23 @@ export function App() {
 
   // 메뉴 단축키 (⌘T/⌘W/⌘K/⌘1~9/⌃Tab)
   useEffect(() => {
-    return window.workbench.app.onShortcut((name: ShortcutName) => {
+    const handle = (name: ShortcutName) => {
       if (name === "new-tab") void newTab();
-      else if (name === "close-tab" && model.activeTabId)
-        void closeTab(model.activeTabId);
+      else if (name === "close-tab" && model.activeTabId) {
+        const tabId = model.activeTabId;
+        const t = getEditorTabs(tabId);
+        // 포커스가 에디터 패널 안이면(CodeMirror·브라우저 webview·도구막대) 그 탭을 닫는다.
+        // webview 안을 클릭하면 호스트의 activeElement 가 그 <webview> 요소가 되므로 이 검사로 잡힌다.
+        const focusInEditor = !!document.activeElement?.closest?.("[data-editor-pane-shell]");
+        const where = closeTarget({
+          editorShown: t.visible && t.files.length > 0,
+          editorMaximized: t.maximized,
+          focusInEditor,
+          hasEditorTab: !!t.active,
+        });
+        if (where === "editor") window.dispatchEvent(new CustomEvent("atelier:editor-close-active", { detail: tabId }));
+        else void closeTab(tabId);
+      }
       else if (name === "switch-workspace") setSwitcher((s) => !s);
       else if (name === "search") setSearch((s) => !s);
       else if (name === "toggle-editor-maximize" && model.activeTabId) {
@@ -141,7 +155,10 @@ export function App() {
           setView("chat");
         }
       }
-    });
+    };
+    // 네이티브 메뉴 가속기는 자동화로 못 누른다 — e2e 가 같은 경로를 타도록 열어 둔다.
+    (window as unknown as { __atelierShortcut?: (n: ShortcutName) => void }).__atelierShortcut = handle;
+    return window.workbench.app.onShortcut(handle);
   }, [model, newTab, closeTab, api]);
 
   return (
