@@ -8,6 +8,11 @@ export interface CloseTargetInput {
   editorMaximized: boolean;
   /** 지금 포커스가 에디터 패널 안에 있는가(CodeMirror·브라우저 webview·도구막대). */
   focusInEditor: boolean;
+  /**
+   * 마지막으로 쓴 영역. 포커스만으로는 부족하다 — 오른쪽 패널이나 툴카드에서 파일을 열면
+   * 에디터가 뜨지만 포커스는 누른 버튼에 남는다. 그때도 사용자는 코드를 보고 있다.
+   */
+  lastPane: "chat" | "editor";
   /** 닫을 에디터 탭이 있는가. */
   hasEditorTab: boolean;
 }
@@ -19,5 +24,6 @@ export interface CloseTargetInput {
 export function closeTarget(i: CloseTargetInput): "editor" | "chat" {
   if (!i.editorShown || !i.hasEditorTab) return "chat";
   if (i.editorMaximized) return "editor";
-  return i.focusInEditor ? "editor" : "chat";
+  // 애매하면 에디터 쪽으로 기운다 — 잘못 닫았을 때 탭 하나를 다시 여는 것이 세션을 잃는 것보다 싸다.
+  return i.focusInEditor || i.lastPane === "editor" ? "editor" : "chat";
 }

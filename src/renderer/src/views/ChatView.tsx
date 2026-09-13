@@ -26,7 +26,7 @@ import { Composer } from "../components/Composer";
 import { ContextPanel, shorten } from "../components/ContextPanel";
 import { LocateFileContext, OpenFileContext, type LocateFile, type OpenFile } from "../components/FileViewer";
 import { EditorPane } from "../components/EditorPane";
-import { isBrowserTab, openBrowserTab, openEditorFile, setEditorPaneVisible, useEditorTabs } from "../editor-tabs";
+import { isBrowserTab, openBrowserTab, openEditorFile, setEditorPaneVisible, setLastPane, useEditorTabs } from "../editor-tabs";
 import { appendComposerDraft, loadComposerDraft } from "../composer-draft";
 import { Icon } from "../components/Icon";
 import { ProviderLogo } from "../components/ProviderLogo";
@@ -673,7 +673,12 @@ export function ChatView({
         <div className="flex min-h-0 flex-1">
           {/* 채팅 칼럼은 340px 아래로 눌리지 않는다 — 공간이 모자라면 에디터 패널이 먼저 줄어든다(아래 flex-basis/shrink).
               최대화 때는 숨기기만 한다 — 언마운트하면 스크롤 위치·입력 중이던 글이 날아간다. */}
-          <div className={`flex min-w-[340px] flex-1 flex-col ${editorMaximized ? "hidden" : ""}`} data-chat-column>
+          <div
+            className={`flex min-w-[340px] flex-1 flex-col ${editorMaximized ? "hidden" : ""}`}
+            onMouseDownCapture={() => setLastPane(tabId, "chat")}
+            onFocusCapture={() => setLastPane(tabId, "chat")}
+            data-chat-column
+          >
             <TabBar
               ws={ws}
               onActivate={onActivateTab}
@@ -879,6 +884,8 @@ export function ChatView({
               <div
                 className={`mb-3 flex flex-col overflow-hidden rounded-xl bg-panel ${editorMaximized ? "ml-3 flex-1" : ""}`}
                 style={editorMaximized ? undefined : { flex: `0 1 ${editorWidth}px`, minWidth: 360 }}
+                onMouseDownCapture={() => setLastPane(tabId, "editor")}
+                onFocusCapture={() => setLastPane(tabId, "editor")}
                 data-editor-pane-shell
                 data-editor-maximized={editorMaximized ? "true" : "false"}
               >

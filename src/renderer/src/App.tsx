@@ -7,7 +7,7 @@ import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { SearchPalette } from "./components/SearchPalette";
 import { requestReveal } from "./reveal";
 import { closeTarget } from "./close-target";
-import { forgetEditorTabs, getEditorTabs, openBrowserTab, openEditorFile, pruneEditorTabs, setEditorMaximized } from "./editor-tabs";
+import { forgetEditorTabs, getEditorTabs, getLastPane, openBrowserTab, openEditorFile, pruneEditorTabs, setEditorMaximized } from "./editor-tabs";
 import { clearComposerDraft, pruneComposerDrafts } from "./composer-draft";
 import { nextAttentionTab } from "@shared/attention-nav";
 import { useWorkspaces } from "./hooks/useWorkspaces";
@@ -124,6 +124,7 @@ export function App() {
           editorShown: t.visible && t.files.length > 0,
           editorMaximized: t.maximized,
           focusInEditor,
+          lastPane: getLastPane(tabId),
           hasEditorTab: !!t.active,
         });
         if (where === "editor") window.dispatchEvent(new CustomEvent("atelier:editor-close-active", { detail: tabId }));

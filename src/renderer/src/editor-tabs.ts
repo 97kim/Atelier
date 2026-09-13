@@ -122,7 +122,22 @@ export function getEditorTabs(tabId: string): EditorTabsState {
  * 파일을 열고 활성화한다. 이미 열려 있으면 활성화만. 상한을 넘으면 가장 오래된(맨 앞) 파일부터 닫되,
  * 저장하지 않은 파일은 건너뛴다 — 전부 편집 중이면 상한을 넘겨서라도 연다(조용히 버리지 않는다).
  */
+// ===== 마지막으로 쓴 영역 =====
+// ⌘W 가 무엇을 닫을지 정할 때 쓴다. 포커스만 보면 부족하다 — 오른쪽 패널이나 툴카드에서 파일을 열면
+// 에디터가 뜨지만 포커스는 누른 그 버튼에 남아서, 사용자는 코드를 보고 있는데 세션이 닫힌다.
+// 파일을 여는 것 자체를 "이제 에디터를 쓰겠다" 는 신호로 친다. 디스크에 저장하지 않는다(일회성).
+const lastPane = new Map<string, "chat" | "editor">();
+
+export function setLastPane(tabId: string, pane: "chat" | "editor"): void {
+  lastPane.set(tabId, pane);
+}
+
+export function getLastPane(tabId: string): "chat" | "editor" {
+  return lastPane.get(tabId) ?? "chat";
+}
+
 export function openEditorFile(tabId: string, path: string, at?: { line?: number; endLine?: number } | null): void {
+  setLastPane(tabId, "editor");
   const cur = getEditorTabs(tabId);
   const files = cur.files.includes(path) ? [...cur.files] : [...cur.files, path];
   let over = files.length - MAX_EDITOR_FILES;
@@ -241,6 +256,7 @@ export function dirtyEditorPathsUnder(path: string): string[] {
 }
 
 export function activateEditorFile(tabId: string, path: string): void {
+  setLastPane(tabId, "editor");
   const cur = getEditorTabs(tabId);
   if (!cur.files.includes(path)) return;
   set(tabId, { ...cur, active: path, visible: true });
@@ -249,6 +265,7 @@ export function activateEditorFile(tabId: string, path: string): void {
 export function setEditorPaneVisible(tabId: string, visible: boolean): void {
   const cur = getEditorTabs(tabId);
   const on = visible && cur.files.length > 0;
+  if (!on) setLastPane(tabId, "chat");
   // 접으면 최대화도 푼다 — 다시 펼쳤을 때 채팅이 사라진 화면으로 돌아오면 당황스럽다
   set(tabId, { ...cur, visible: on, maximized: on && cur.maximized });
 }
