@@ -185,12 +185,27 @@ export function Composer({
     });
   };
 
-  useEffect(() => {
+  // 글 길이에 맞춰 높이를 키운다. 숨어 있을 때는 재지 않는다 — display:none 이면 scrollHeight 가 0 이라
+  // 0px 로 굳어 버리고, 다시 보여도 글만 있고 상자는 한 줄인 상태가 된다(넓게 보기 중 "채팅에 첨부").
+  const autosize = useCallback(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || el.offsetParent === null) return;
     el.style.height = "0px";
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
-  }, [text]);
+  }, []);
+
+  useEffect(() => {
+    autosize();
+  }, [text, autosize]);
+
+  // 숨어 있는 동안 붙은 글은 높이를 못 쟀다 — 다시 보이는 순간 한 번 잰다.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => autosize());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [autosize]);
 
   // 턴 진행 중에도 보낼 수 있다: main 이 프롬프트 큐에 넣고 턴이 끝나면 자동 전송한다.
   const submit = useCallback(async () => {
