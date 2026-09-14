@@ -121,6 +121,16 @@ export function EditorPane({
             );
           })}
         </div>
+        {/* 브라우저만 이 버튼으로 바로 열린다 — 파일은 어차피 무엇을 열지 고르는 단계가 필요해서
+            파일 트리·툴카드 경로 쪽이 맞다. 그래서 + 대신 지구본으로, 무엇이 열릴지 보이게 한다. */}
+        <button
+          onClick={() => openBrowserTab(tabId)}
+          className="flex shrink-0 items-center border-l border-line px-2 text-muted hover:text-fg"
+          title="새 브라우저 탭"
+          data-editor-new-browser
+        >
+          <Icon name="globe" size={13} />
+        </button>
         <button
           onClick={() => setEditorMaximized(tabId, !tabs.maximized)}
           className={`flex shrink-0 items-center px-2 ${tabs.maximized ? "text-accent" : "text-muted hover:text-fg"}`}
