@@ -142,6 +142,7 @@ export const IPC = {
   chatClear: "chat:clear",
   chatCompact: "chat:compact",
   browserRegister: "browser:register",
+  browserFavicon: "browser:favicon",
   chatHandoffPreview: "chat:handoff-preview",
   chatSwitchProvider: "chat:switch-provider",
   chatEvent: "chat:event",
@@ -836,6 +837,8 @@ export interface WorkbenchApi {
     /** 이 브라우저 탭(webview 의 webContents id)에서 최근 실패한 요청. 진단 첨부가 읽고 비운다. */
     /** 이 채팅 탭에서 지금 보고 있는 브라우저를 main 에 알린다(에이전트 조작용). 없어지면 null. */
     register(tabId: string, webContentsId: number | null, url: string): void;
+    /** 파비콘을 main 이 받아 data URL 로 준다(렌더러 CSP 가 원격 이미지를 막는다). 못 받으면 null. */
+    favicon(url: string): Promise<string | null>;
     netFailures(webContentsId: number, clear?: boolean): Promise<NetFailure[]>;
   };
 }

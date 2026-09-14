@@ -44,6 +44,7 @@ import { handoffBriefPrompt, handoffNotePermission, NOTE_FILE } from "@shared/ha
 import { lastReplyText } from "@shared/session-state";
 import { PreviewServer } from "./preview-server";
 import { browserNetFailures, clearBrowserNetFailures, watchBrowserNetwork } from "./browser-net";
+import { fetchFavicon } from "./browser-favicon";
 import { BackgroundJobWatcher } from "./background-jobs";
 import { VerifyRunner, suggestForCwd } from "./verify";
 import { invalidateModels, listModels } from "./models";
@@ -1791,6 +1792,9 @@ function registerIpc() {
       browserViews.set(tabId, { id: webContentsId, url: typeof url === "string" ? url : "" });
     else browserViews.delete(tabId);
   });
+  ipcMain.handle(IPC.browserFavicon, (_e, url: unknown) =>
+    typeof url === "string" ? fetchFavicon(url) : null,
+  );
   ipcMain.handle(IPC.browserNetFailures, (_e, webContentsId: unknown, clear: unknown) => {
     if (typeof webContentsId !== "number" || !Number.isInteger(webContentsId)) return [];
     const out = browserNetFailures(webContentsId);

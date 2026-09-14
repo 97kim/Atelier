@@ -282,6 +282,7 @@ const api: WorkbenchApi = {
     previewUrl: (cwd: string, path: string) => ipcRenderer.invoke(IPC.previewUrl, cwd, path),
     register: (tabId: string, webContentsId: number | null, url: string) =>
       ipcRenderer.send(IPC.browserRegister, tabId, webContentsId, url),
+    favicon: (url: string) => ipcRenderer.invoke(IPC.browserFavicon, url),
     netFailures: (webContentsId: number, clear?: boolean) => ipcRenderer.invoke(IPC.browserNetFailures, webContentsId, clear === true),
   },
 };

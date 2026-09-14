@@ -31,6 +31,8 @@ export function EditorPane({
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   // 브라우저 탭은 키가 고정이라(초기 URL 또는 browser:<n>) 현재 페이지의 호스트·제목을 따로 들고 라벨로 쓴다
   const [browserLabels, setBrowserLabels] = useState<Record<string, string>>({});
+  // 탭별 파비콘(data URL). 없으면 지구본으로 그린다 — 아직 안 왔거나, 그 사이트가 안 주거나, 못 받은 경우.
+  const [browserIcons, setBrowserIcons] = useState<Record<string, string>>({});
 
   const markDirty = useCallback((path: string, d: boolean) => setEditorFileDirty(tabId, path, d), [tabId]);
   const register = useCallback((path: string, api: FileEditorApi | null) => {
@@ -89,7 +91,19 @@ export function EditorPane({
                 data-editor-tab={f}
                 data-active={active ? "true" : undefined}
               >
-                <Icon name={isBrowserTab(f) ? "globe" : "file"} size={11} className="shrink-0 opacity-70" />
+                {isBrowserTab(f) && browserIcons[f] ? (
+                  // 파비콘은 main 이 data URL 로 바꿔 준 것만 온다(CSP 가 원격 이미지를 막는다).
+                  // 깨진 이미지면 지구본으로 돌아간다.
+                  <img
+                    src={browserIcons[f]}
+                    alt=""
+                    className="h-[11px] w-[11px] shrink-0 rounded-[2px]"
+                    onError={() => setBrowserIcons((m) => { const { [f]: _drop, ...rest } = m; return rest; })}
+                    data-tab-favicon
+                  />
+                ) : (
+                  <Icon name={isBrowserTab(f) ? "globe" : "file"} size={11} className="shrink-0 opacity-70" />
+                )}
                 <span className="truncate">{label(f)}</span>
                 {dirty.has(f) ? (
                   <button
@@ -187,6 +201,16 @@ export function EditorPane({
                 visible={f === tabs.active}
                 chatTabId={tabId}
                 onLabel={(l) => setBrowserLabels((m) => (m[f] === l ? m : { ...m, [f]: l }))}
+                onFavicon={(d) =>
+                  setBrowserIcons((m) => {
+                    if (!d) {
+                      if (!(f in m)) return m;
+                      const { [f]: _drop, ...rest } = m;
+                      return rest;
+                    }
+                    return m[f] === d ? m : { ...m, [f]: d };
+                  })
+                }
                 onAttach={onAttach}
                 onUrlChange={(u) => setBrowserUrl(f, u)}
               />

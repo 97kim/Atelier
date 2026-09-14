@@ -32,6 +32,7 @@ export function BrowserPane({
   visible,
   chatTabId,
   onLabel,
+  onFavicon,
   onAttach,
   onUrlChange,
 }: {
@@ -41,6 +42,8 @@ export function BrowserPane({
   chatTabId?: string;
   /** 탭 스트립에 보일 라벨(호스트 또는 페이지 제목)이 바뀔 때. */
   onLabel?: (label: string) => void;
+  /** 파비콘(data URL)이 정해졌을 때. 없거나 못 받으면 null — 탭은 지구본으로 돌아간다. */
+  onFavicon?: (dataUrl: string | null) => void;
   /** "요소 선택" 결과(HTML·스타일 텍스트 + 스크린샷 조각)를 입력창에 붙인다. */
   onAttach?: (block: string, images?: ChatImageDto[]) => void;
   /** 보고 있는 주소가 바뀔 때. 탭이 내려갔다 올라와도 같은 페이지로 돌아오게 밖에서 들고 있는다. */
@@ -53,6 +56,12 @@ export function BrowserPane({
   const [attached, setAttached] = useState(false);
   const onLabelRef = useRef(onLabel);
   onLabelRef.current = onLabel;
+  const onFaviconRef = useRef(onFavicon);
+  onFaviconRef.current = onFavicon;
+  // 지금 보고 있는 주소와 그 페이지의 제목. sync() 는 did-stop-loading 에도 걸려 있어서,
+  // 조건 없이 되돌리면 먼저 도착한 제목·파비콘을 로딩 끝에 덮어써 버린다(탭이 호스트로 되돌아갔다).
+  const pageRef = useRef("");
+  const titleRef = useRef("");
   const onUrlChangeRef = useRef(onUrlChange);
   onUrlChangeRef.current = onUrlChange;
   const [url, setUrl] = useState(initialUrl ?? "");
@@ -177,10 +186,18 @@ export function BrowserPane({
         setUrl(u);
         setInput(u);
         addHistory(u); // 주소창 자동완성용 — http(s) 가 아니면 recordVisit 이 거른다
+        // 페이지가 실제로 바뀐 첫 순간에만 제목·파비콘을 비운다.
+        const moved = u !== pageRef.current;
+        if (moved) {
+          pageRef.current = u;
+          titleRef.current = "";
+          onFaviconRef.current?.(null); // 새 페이지가 자기 것을 줄 때까지 지구본으로
+        }
         onUrlChangeRef.current?.(u);
         setNav({ back: el.canGoBack(), forward: el.canGoForward() });
         try {
-          onLabelRef.current?.(browserTabLabel(u));
+          // 제목이 이미 왔으면 그걸 둔다 — 크롬처럼 탭에는 제목이 보여야 한다.
+          if (!titleRef.current) onLabelRef.current?.(browserTabLabel(u));
         } catch {
           /* 무시 */
         }
@@ -191,6 +208,7 @@ export function BrowserPane({
     const onTitle = (e: Event) => {
       const t = (e as CustomEvent & { title?: string }).title ?? el.getTitle();
       setTitle(t);
+      titleRef.current = t ?? "";
       if (t) onLabelRef.current?.(t.length > 28 ? `${t.slice(0, 28)}…` : t);
     };
     const onStart = () => {
@@ -208,6 +226,17 @@ export function BrowserPane({
       if (d.errorDescription && d.errorDescription !== "ERR_ABORTED") setError(`${d.errorDescription} — ${d.validatedURL ?? ""}`);
     };
     const onAttach = () => setAttached(true);
+    // 파비콘은 원격 주소라 화면이 바로 못 쓴다 — main 이 받아 data URL 로 바꿔 준다.
+    const onFav = (e: Event) => {
+      const list = (e as Event & { favicons?: string[] }).favicons ?? [];
+      const first = list.find((u) => /^https?:\/\//i.test(u));
+      if (!first) return onFaviconRef.current?.(null);
+      void window.workbench.browser
+        .favicon(first)
+        .then((d) => onFaviconRef.current?.(d))
+        .catch(() => onFaviconRef.current?.(null));
+    };
+    el.addEventListener("page-favicon-updated", onFav);
     el.addEventListener("dom-ready", onAttach);
     el.addEventListener("did-navigate", sync);
     el.addEventListener("did-navigate-in-page", sync);
@@ -216,6 +245,7 @@ export function BrowserPane({
     el.addEventListener("did-stop-loading", onStop);
     el.addEventListener("did-fail-load", onFail);
     return () => {
+      el.removeEventListener("page-favicon-updated", onFav);
       el.removeEventListener("dom-ready", onAttach);
       el.removeEventListener("did-navigate", sync);
       el.removeEventListener("did-navigate-in-page", sync);
@@ -469,7 +499,7 @@ export function BrowserPane({
             }}
             placeholder="주소를 입력하세요 (localhost:3000, example.com …)"
             spellCheck={false}
-            className="mono w-full rounded-md border border-line bg-inset px-2.5 py-1 text-[11.5px] text-fg outline-none placeholder:text-muted focus:border-accent/50"
+            className="w-full rounded-md border border-line bg-inset px-2.5 py-1 text-[12px] text-fg outline-none placeholder:text-muted focus:border-accent/50"
             style={{ userSelect: "text" }}
             data-browser-url
           />
@@ -490,7 +520,7 @@ export function BrowserPane({
                       go(h.url);
                     }}
                     onMouseEnter={() => setSugAt(k)}
-                    className={`mono flex w-full items-center gap-2 px-2.5 py-1 text-left text-[11.5px] ${
+                    className={`flex w-full items-center gap-2 px-2.5 py-1 text-left text-[12px] ${
                       k === sugAt ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2/60"
                     }`}
                   >
