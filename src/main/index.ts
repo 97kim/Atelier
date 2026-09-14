@@ -11,6 +11,7 @@ import {
   ipcMain,
   Menu,
   Notification,
+  session,
   shell,
   webContents,
   type MenuItemConstructorOptions,
@@ -45,6 +46,8 @@ import { lastReplyText } from "@shared/session-state";
 import { PreviewServer } from "./preview-server";
 import { browserNetFailures, clearBrowserNetFailures, watchBrowserNetwork } from "./browser-net";
 import { fetchFavicon } from "./browser-favicon";
+import { forgetSessionCookies, restoreSessionCookies, saveSessionCookies } from "./browser-cookies";
+import { BROWSER_PARTITION } from "./browser-net";
 import { BackgroundJobWatcher } from "./background-jobs";
 import { VerifyRunner, suggestForCwd } from "./verify";
 import { invalidateModels, listModels } from "./models";
@@ -896,6 +899,7 @@ function appSettings(): AppSettingsDto {
     // 환경변수는 설정 파일에 값이 없을 때의 기본값으로만 쓴다.
     maxConcurrent: clamp(raw.maxConcurrent, MAX_CONCURRENT_MIN, MAX_CONCURRENT_MAX, Number(process.env.WORKBENCH_MAX_CONCURRENT) || MAX_CONCURRENT_DEFAULT),
     notifyOnDone: isNotifyOnDone(raw.notifyOnDone) ? raw.notifyOnDone : NOTIFY_ON_DONE_DEFAULT,
+    keepBrowserLogin: raw.keepBrowserLogin !== false,
   };
 }
 
@@ -1305,6 +1309,11 @@ function registerIpc() {
       const n = Number(patch.sessionIdleMinutes);
       if (!Number.isFinite(n) || n < SESSION_IDLE_MINUTES_MIN || n > SESSION_IDLE_MINUTES_MAX) throw new Error(`유휴 시간은 ${SESSION_IDLE_MINUTES_MIN}~${SESSION_IDLE_MINUTES_MAX}분 사이여야 합니다.`);
       next.sessionIdleMinutes = Math.round(n);
+    }
+    if (patch.keepBrowserLogin !== undefined) {
+      next.keepBrowserLogin = patch.keepBrowserLogin === true;
+      // 끄면 적어 둔 것을 지운다 — 설정만 바꾸고 파일이 남아 있으면 끈 게 아니다.
+      if (!next.keepBrowserLogin) forgetSessionCookies(app.getPath("userData"));
     }
     if (patch.notifyOnDone !== undefined) {
       if (!isNotifyOnDone(patch.notifyOnDone)) throw new Error("잘못된 알림 설정");
@@ -2188,12 +2197,17 @@ if (!app.requestSingleInstanceLock()) {
     win.focus();
   });
 }
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   bootstrap();
   registerIpc();
   buildMenu();
   // 브라우저 탭의 실패한 요청 수집 — webRequest 는 세션에 한 번만 걸 수 있어 창보다 먼저 건다
   watchBrowserNetwork();
+  // 세션 쿠키 되돌리기도 창보다 먼저 — 첫 페이지부터 로그인 상태여야 한다.
+  if (appSettings().keepBrowserLogin) {
+    const n = await restoreSessionCookies(session.fromPartition(BROWSER_PARTITION), app.getPath("userData"));
+    if (n > 0) console.log(`[browser] 세션 쿠키 ${n}개 복원`);
+  }
   startBackgroundJobWatcher();
   void startControlServer();
   mainWindow = createWindow();
@@ -2217,7 +2231,18 @@ app.whenReady().then(() => {
 });
 
 // 창 닫힘 ≠ 세션 종료. 앱이 실제로 끝날 때 모든 SDK 프로세스를 abort 하고 버퍼를 디스크에 내린다.
-app.on("before-quit", () => {
+/** 세션 쿠키 저장은 비동기다 — 종료를 한 번만 미루고, 두 번째 호출에서 원래 정리를 한다. */
+let sessionCookiesSaved = false;
+app.on("before-quit", (e) => {
+  if (!sessionCookiesSaved && appSettings().keepBrowserLogin) {
+    sessionCookiesSaved = true;
+    e.preventDefault();
+    void saveSessionCookies(session.fromPartition(BROWSER_PARTITION), app.getPath("userData"))
+      .then((n) => console.log(`[browser] 세션 쿠키 ${n}개 저장`))
+      .catch(() => {})
+      .finally(() => app.quit());
+    return;
+  }
   orchestrator?.stop();
   verifyRunner.dispose();
   previewServer.close();

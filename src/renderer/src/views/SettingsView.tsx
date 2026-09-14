@@ -523,6 +523,29 @@ function GeneralSection() {
         )}
       </div>
 
+      <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="keep-browser-login">
+        <div className="mb-1 flex items-center gap-2 font-medium">
+          <Icon name="shield" size={14} className="text-accent" />
+          앱 안 브라우저 로그인 유지
+        </div>
+        <p className="mb-3 text-[12px] leading-5 text-muted">
+          로그인 세션은 대개 만료가 없는 쿠키라 앱을 끄면 사라집니다. 켜 두면 끌 때 받아 적고 켤 때 되돌려 놓아,
+          껐다 켜도 로그인이 풀리지 않습니다(크롬의 "이전 세션 계속하기" 와 같습니다).
+          <br />
+          로그인 증표를 앱 데이터 디렉토리에 두는 일입니다 — 끄면 적어 둔 것을 바로 지웁니다.
+        </p>
+        <label className="flex cursor-pointer items-center gap-2 text-[12.5px]">
+          <input
+            type="checkbox"
+            checked={settings?.keepBrowserLogin ?? true}
+            disabled={!settings}
+            onChange={(e) => void save({ keepBrowserLogin: e.target.checked })}
+            data-keep-browser-login
+          />
+          <span>껐다 켜도 로그인 유지</span>
+        </label>
+      </div>
+
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="link-open">
         <div className="mb-1 flex items-center gap-2 font-medium">
           <Icon name="globe" size={14} className="text-accent" />
