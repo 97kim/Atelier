@@ -3,12 +3,15 @@
 // 크롬의 "이전 세션 계속하기" 와 같은 일을 한다 — 끌 때 받아 적고 켤 때 되돌려 놓는다.
 //
 // 이건 사실상 로그인 증표를 디스크에 두는 일이다. 그래서 설정으로 끌 수 있고, 끄면 적어 둔 것을 지운다.
-// 값은 safeStorage(macOS 는 키체인)로 암호화해 둔다 — Chromium 이 자기 쿠키 DB 에 하는 것과 같은 방식이다.
-// 파일 권한(600)만으로는 백업·동기화에 평문이 그대로 실려 나간다.
+//
+// 암호화하지 않고 소유자만 읽는 권한(600)으로 둔다. 한때 safeStorage(키체인)로 암호화했지만 되돌렸다:
+// 키체인을 쓰면 macOS 가 접근 허용을 묻고, 이 앱은 ad-hoc 서명이라 빌드가 바뀔 때마다 다시 묻는다.
+// 이 파일을 읽을 수 있는 주체에게 세션 인증정보가 노출되는 위험은 받아들인 것이다 —
+// 보호가 같아서가 아니라, 혼자 쓰는 로컬 도구에서 그 위험보다 프롬프트 부담이 크다고 판단했다.
+// 옆의 Chromium 쿠키 DB 도 평문이지만(퓨즈 EnableCookieEncryption 꺼짐) 그건 근거가 아니라 정황이다.
 
 import fs from "node:fs";
 import path from "node:path";
-import { safeStorage } from "electron";
 import type { Cookie, CookiesSetDetails, Session } from "electron";
 
 /** 적어 둘 쿠키의 최소 정보. Electron 의 Cookie 를 그대로 쓰지 않는 이유는 되돌릴 때 필요한 것만 남기려고. */
@@ -84,18 +87,18 @@ export function parseSaved(raw: string): SavedCookie[] {
 }
 
 export function cookieFilePath(userData: string): string {
-  return path.join(userData, "browser-session-cookies.enc");
-}
-
-/** 암호화 전에 쓰던 평문 파일. 있으면 한 번 옮겨 담고 지운다. */
-export function legacyCookieFilePath(userData: string): string {
   return path.join(userData, "browser-session-cookies.json");
 }
 
 /**
- * 종료 직전에 부른다. 실패해도 종료를 막지 않는다.
- * 암호화를 못 쓰는 환경이면 저장하지 않는다 — 편의를 잃는 편이 평문으로 남기는 것보다 낫다.
+ * 암호화를 쓰던 시절의 파일. 풀려면 키체인을 건드려야 하는데 그게 바로 없애려던 프롬프트다 —
+ * 그래서 풀지 않고 지운다. 저장돼 있던 로그인은 그 한 번만 풀린다.
  */
+export function encryptedCookieFilePath(userData: string): string {
+  return path.join(userData, "browser-session-cookies.enc");
+}
+
+/** 종료 직전에 부른다. 실패해도 종료를 막지 않는다. */
 export async function saveSessionCookies(ses: Session, userData: string): Promise<number> {
   const file = cookieFilePath(userData);
   try {
@@ -105,13 +108,7 @@ export async function saveSessionCookies(ses: Session, userData: string): Promis
       forgetSessionCookies(userData);
       return 0;
     }
-    if (!safeStorage.isEncryptionAvailable()) {
-      console.error("[browser] 암호화를 쓸 수 없어 세션 쿠키를 저장하지 않습니다(로그인이 유지되지 않습니다).");
-      forgetSessionCookies(userData);
-      return 0;
-    }
-    fs.writeFileSync(file, safeStorage.encryptString(JSON.stringify(saved)), { mode: 0o600 });
-    fs.rmSync(legacyCookieFilePath(userData), { force: true }); // 평문이 남아 있으면 지운다
+    fs.writeFileSync(file, JSON.stringify(saved), { encoding: "utf8", mode: 0o600 });
     return saved.length;
   } catch (e) {
     console.error("[browser] 세션 쿠키 저장 실패:", e);
@@ -119,25 +116,16 @@ export async function saveSessionCookies(ses: Session, userData: string): Promis
   }
 }
 
-/** 암호문 또는 (예전) 평문에서 목록을 읽는다. 못 읽으면 빈 목록 — 로그인만 풀린다. */
+/** 저장해 둔 목록을 읽는다. 못 읽으면 빈 목록 — 로그인만 풀린다. */
 function readSaved(userData: string): SavedCookie[] {
-  const enc = cookieFilePath(userData);
+  // 암호화하던 시절의 파일은 풀지 않고 버린다(푸는 순간 키체인이 허용을 묻는다).
+  const enc = encryptedCookieFilePath(userData);
   if (fs.existsSync(enc)) {
-    try {
-      return parseSaved(safeStorage.decryptString(fs.readFileSync(enc)));
-    } catch (e) {
-      // 키체인이 바뀌었거나 다른 기기에서 옮겨 온 파일 — 되살릴 수 없으니 버린다.
-      console.error("[browser] 세션 쿠키를 풀지 못해 버립니다:", e);
-      fs.rmSync(enc, { force: true });
-      return [];
-    }
+    fs.rmSync(enc, { force: true });
+    console.log("[browser] 암호화해 두었던 세션 쿠키를 버립니다(키체인을 건드리지 않기 위해). 로그인은 한 번 풀립니다.");
   }
-  const legacy = legacyCookieFilePath(userData);
   try {
-    const list = parseSaved(fs.readFileSync(legacy, "utf8"));
-    fs.rmSync(legacy, { force: true }); // 한 번 읽고 지운다 — 다음부터는 암호문만 남는다
-    if (list.length > 0) console.log(`[browser] 평문 세션 쿠키 ${list.length}개를 옮겨 담습니다`);
-    return list;
+    return parseSaved(fs.readFileSync(cookieFilePath(userData), "utf8"));
   } catch {
     return [];
   }
@@ -159,9 +147,9 @@ export async function restoreSessionCookies(ses: Session, userData: string): Pro
   return ok;
 }
 
-/** 설정을 끄거나 사용자가 지울 때. 평문으로 쓰던 시절의 파일도 같이 지운다. */
+/** 설정을 끄거나 사용자가 지울 때. 암호화하던 시절의 파일도 같이 지운다. */
 export function forgetSessionCookies(userData: string): void {
-  for (const f of [cookieFilePath(userData), legacyCookieFilePath(userData)]) {
+  for (const f of [cookieFilePath(userData), encryptedCookieFilePath(userData)]) {
     try {
       fs.rmSync(f, { force: true });
     } catch {
