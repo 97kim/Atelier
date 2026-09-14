@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cookieUrl, parseSaved, toSetDetails, type SavedCookie } from "./browser-cookies";
+import { cookieFilePath, cookieUrl, legacyCookieFilePath, parseSaved, toSetDetails, type SavedCookie } from "./browser-cookies";
 
 const c = (o: Partial<SavedCookie>): SavedCookie => ({
   name: "sid", value: "v", domain: "example.com", path: "/", secure: true, httpOnly: true, hostOnly: true, ...o,
@@ -28,4 +28,10 @@ test("디스크의 값은 믿지 않는다", () => {
   const ok = parseSaved('[{"name":"s","value":"v","domain":"a.io","path":"/"},{"name":1},{"value":"x"}]');
   assert.equal(ok.length, 1);
   assert.equal(ok[0].name, "s");
+});
+
+test("암호문 파일과 평문 파일은 이름이 다르다 — 옮겨 담고 지울 수 있게", () => {
+  assert.match(cookieFilePath("/u"), /browser-session-cookies\.enc$/);
+  assert.match(legacyCookieFilePath("/u"), /browser-session-cookies\.json$/);
+  assert.notEqual(cookieFilePath("/u"), legacyCookieFilePath("/u"));
 });

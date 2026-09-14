@@ -3,10 +3,12 @@
 // 크롬의 "이전 세션 계속하기" 와 같은 일을 한다 — 끌 때 받아 적고 켤 때 되돌려 놓는다.
 //
 // 이건 사실상 로그인 증표를 디스크에 두는 일이다. 그래서 설정으로 끌 수 있고, 끄면 적어 둔 것을 지운다.
-// 파일은 소유자만 읽게 만든다.
+// 값은 safeStorage(macOS 는 키체인)로 암호화해 둔다 — Chromium 이 자기 쿠키 DB 에 하는 것과 같은 방식이다.
+// 파일 권한(600)만으로는 백업·동기화에 평문이 그대로 실려 나간다.
 
 import fs from "node:fs";
 import path from "node:path";
+import { safeStorage } from "electron";
 import type { Cookie, CookiesSetDetails, Session } from "electron";
 
 /** 적어 둘 쿠키의 최소 정보. Electron 의 Cookie 를 그대로 쓰지 않는 이유는 되돌릴 때 필요한 것만 남기려고. */
@@ -82,20 +84,34 @@ export function parseSaved(raw: string): SavedCookie[] {
 }
 
 export function cookieFilePath(userData: string): string {
+  return path.join(userData, "browser-session-cookies.enc");
+}
+
+/** 암호화 전에 쓰던 평문 파일. 있으면 한 번 옮겨 담고 지운다. */
+export function legacyCookieFilePath(userData: string): string {
   return path.join(userData, "browser-session-cookies.json");
 }
 
-/** 종료 직전에 부른다. 실패해도 종료를 막지 않는다. */
+/**
+ * 종료 직전에 부른다. 실패해도 종료를 막지 않는다.
+ * 암호화를 못 쓰는 환경이면 저장하지 않는다 — 편의를 잃는 편이 평문으로 남기는 것보다 낫다.
+ */
 export async function saveSessionCookies(ses: Session, userData: string): Promise<number> {
   const file = cookieFilePath(userData);
   try {
     const all = await ses.cookies.get({});
     const saved = all.map(toSaved).filter((c): c is SavedCookie => c !== null).slice(0, SESSION_COOKIE_MAX);
     if (saved.length === 0) {
-      fs.rmSync(file, { force: true });
+      forgetSessionCookies(userData);
       return 0;
     }
-    fs.writeFileSync(file, JSON.stringify(saved), { encoding: "utf8", mode: 0o600 });
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.error("[browser] 암호화를 쓸 수 없어 세션 쿠키를 저장하지 않습니다(로그인이 유지되지 않습니다).");
+      forgetSessionCookies(userData);
+      return 0;
+    }
+    fs.writeFileSync(file, safeStorage.encryptString(JSON.stringify(saved)), { mode: 0o600 });
+    fs.rmSync(legacyCookieFilePath(userData), { force: true }); // 평문이 남아 있으면 지운다
     return saved.length;
   } catch (e) {
     console.error("[browser] 세션 쿠키 저장 실패:", e);
@@ -103,15 +119,34 @@ export async function saveSessionCookies(ses: Session, userData: string): Promis
   }
 }
 
+/** 암호문 또는 (예전) 평문에서 목록을 읽는다. 못 읽으면 빈 목록 — 로그인만 풀린다. */
+function readSaved(userData: string): SavedCookie[] {
+  const enc = cookieFilePath(userData);
+  if (fs.existsSync(enc)) {
+    try {
+      return parseSaved(safeStorage.decryptString(fs.readFileSync(enc)));
+    } catch (e) {
+      // 키체인이 바뀌었거나 다른 기기에서 옮겨 온 파일 — 되살릴 수 없으니 버린다.
+      console.error("[browser] 세션 쿠키를 풀지 못해 버립니다:", e);
+      fs.rmSync(enc, { force: true });
+      return [];
+    }
+  }
+  const legacy = legacyCookieFilePath(userData);
+  try {
+    const list = parseSaved(fs.readFileSync(legacy, "utf8"));
+    fs.rmSync(legacy, { force: true }); // 한 번 읽고 지운다 — 다음부터는 암호문만 남는다
+    if (list.length > 0) console.log(`[browser] 평문 세션 쿠키 ${list.length}개를 옮겨 담습니다`);
+    return list;
+  } catch {
+    return [];
+  }
+}
+
 /** 창을 띄우기 전에 부른다. 하나씩 심고, 실패한 것은 건너뛴다(사이트 하나 때문에 전부 날리지 않게). */
 export async function restoreSessionCookies(ses: Session, userData: string): Promise<number> {
-  const file = cookieFilePath(userData);
-  let list: SavedCookie[] = [];
-  try {
-    list = parseSaved(fs.readFileSync(file, "utf8"));
-  } catch {
-    return 0;
-  }
+  const list = readSaved(userData);
+  if (list.length === 0) return 0;
   let ok = 0;
   for (const c of list) {
     try {
@@ -124,11 +159,13 @@ export async function restoreSessionCookies(ses: Session, userData: string): Pro
   return ok;
 }
 
-/** 설정을 끄거나 사용자가 지울 때. */
+/** 설정을 끄거나 사용자가 지울 때. 평문으로 쓰던 시절의 파일도 같이 지운다. */
 export function forgetSessionCookies(userData: string): void {
-  try {
-    fs.rmSync(cookieFilePath(userData), { force: true });
-  } catch {
-    /* 없으면 그만 */
+  for (const f of [cookieFilePath(userData), legacyCookieFilePath(userData)]) {
+    try {
+      fs.rmSync(f, { force: true });
+    } catch {
+      /* 없으면 그만 */
+    }
   }
 }
