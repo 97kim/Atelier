@@ -67,9 +67,13 @@ export function MessageList({
   const stickToBottom = useRef(true);
   const contentRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
+  /** 직전 스크롤 위치. "사용자가 위로 올렸나" 는 이 값과 비교해서만 알 수 있다. */
+  const lastTop = useRef(0);
   const scrollToBottom = () => {
     const el = containerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    lastTop.current = el.scrollTop;
   };
 
   // 턴이 돌고 있지만 모델이 아직 말을 시작하지 않은 구간에만 "생각 중 …" 표시:
@@ -92,12 +96,20 @@ export function MessageList({
   }
 
   // 사용자가 위로 스크롤해 읽는 중이면 자동 스크롤을 멈춘다.
+  //
+  // "바닥에서 멀다" 로 판단하면 안 된다. 글이 흐르는 중에는 우리가 맨 아래로 맞춘 직후에 높이가 또 자라서,
+  // 그 사이에 벌어진 간격이 "사용자가 올렸다" 로 읽힌다 — 사람은 손도 안 댔는데 따라가기가 꺼졌다.
+  // 위로 갔는지(scrollTop 이 줄었는지)를 직접 본다. 내용이 자라도 scrollTop 은 그대로다.
   const onScroll = () => {
     const el = containerRef.current;
     if (!el) return;
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    stickToBottom.current = near;
+    const movedUp = el.scrollTop < lastTop.current - 1;
+    lastTop.current = el.scrollTop;
     setAtBottom(near);
+    // 바닥에 닿으면 다시 따라간다. 줄어든 내용 때문에 브라우저가 스크롤을 끌어내린 경우도 여기서 걸러진다.
+    if (near) stickToBottom.current = true;
+    else if (movedUp) stickToBottom.current = false;
   };
   // 블록 수가 늘었을 때: 마지막이 사용자 메시지면(방금 보냄) 맨 아래로 붙이고, 그 밖의 새 블록은 붙어 있을 때만 따라간다.
   const blockCount = blocks.length;
