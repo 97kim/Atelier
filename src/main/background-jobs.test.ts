@@ -8,6 +8,16 @@ import { jobRunningLabel, mergeJobs, parseBackgroundJob, type BackgroundJobDto }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * 검사에 실패해도 감시자를 반드시 끈다. 안 끄면 폴링 타이머와 파일 감시자가 남아
+ * 테스트 러너가 끝나지 않는다 — 실패가 "느린 테스트" 로 보이고 릴리스가 그대로 멈춘다(실제로 겪었다).
+ */
+function watching(events: ConstructorParameters<typeof BackgroundJobWatcher>[0], root: string, t: import("node:test").TestContext): BackgroundJobWatcher {
+  const w = new BackgroundJobWatcher(events, root);
+  t.after(() => w.stop());
+  return w;
+}
+
 const job = (over: Record<string, unknown> = {}) => ({
   id: "task-1",
   sessionId: "sess-a",
@@ -57,7 +67,7 @@ test("jobRunningLabel: 분·초", () => {
   assert.equal(jobRunningLabel(j, 0), "rescue · 0초 경과", "시계가 뒤로 가도 음수는 안 나온다");
 });
 
-test("BackgroundJobWatcher: 시작 때 이미 끝난 작업은 알리지 않고, 돌던 것이 끝나면 알린다", async () => {
+test("BackgroundJobWatcher: 시작 때 이미 끝난 작업은 알리지 않고, 돌던 것이 끝나면 알린다", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "wb-jobs-"));
   const dir = join(root, "codex-plugin", "state", "repo-1");
   mkdirSync(dir, { recursive: true });
@@ -68,7 +78,7 @@ test("BackgroundJobWatcher: 시작 때 이미 끝난 작업은 알리지 않고,
   write([job({ id: "old", status: "completed", completedAt: "2026-09-13T00:01:00.000Z" }), job({ id: "live" })]);
   const changed: BackgroundJobDto[][] = [];
   const finished: BackgroundJobDto[] = [];
-  const w = new BackgroundJobWatcher({ onChanged: (j) => changed.push(j), onFinished: (j) => finished.push(j) }, root);
+  const w = watching({ onChanged: (j) => changed.push(j), onFinished: (j) => finished.push(j) }, root, t);
   await w.start();
   assert.equal(finished.length, 0, "기준선 읽기는 알림을 내지 않는다");
   assert.deepEqual(
@@ -79,7 +89,8 @@ test("BackgroundJobWatcher: 시작 때 이미 끝난 작업은 알리지 않고,
 
   // 돌던 것이 끝난다
   write([job({ id: "old", status: "completed", completedAt: "2026-09-13T00:01:00.000Z" }), job({ id: "live", status: "completed", completedAt: "2026-09-13T00:02:00.000Z" })]);
-  for (let i = 0; i < 40 && finished.length === 0; i++) await wait(100);
+  // 폴링 주기가 4초다. 4초만 기다리면 여유가 없어 부하가 걸릴 때 놓친다.
+  for (let i = 0; i < 150 && finished.length === 0; i++) await wait(100);
   assert.equal(finished.length, 1, "끝난 작업을 한 번 알린다");
   assert.equal(finished[0].id, "live");
   assert.deepEqual(w.current(), [], "끝났으면 도는 목록에서 빠진다");
@@ -94,11 +105,11 @@ test("BackgroundJobWatcher: 시작 때 이미 끝난 작업은 알리지 않고,
   rmSync(root, { recursive: true, force: true });
 });
 
-test("BackgroundJobWatcher: 시작 때 없던 디렉토리에 나중에 생긴 작업도 잡는다", async () => {
+test("BackgroundJobWatcher: 시작 때 없던 디렉토리에 나중에 생긴 작업도 잡는다", async (t) => {
   // 감시자는 없는 디렉토리에 못 붙는다 — 주기적으로 다시 읽지 않으면 영영 못 본다(e2e 에서 실제로 놓쳤던 경우).
   const root = join(mkdtempSync(join(tmpdir(), "wb-jobs3-")), "아직-없음");
   const seen: BackgroundJobDto[][] = [];
-  const w = new BackgroundJobWatcher({ onChanged: (j) => seen.push(j), onFinished: () => {} }, root);
+  const w = watching({ onChanged: (j) => seen.push(j), onFinished: () => {} }, root, t);
   await w.start();
   assert.deepEqual(w.current(), [], "없는 동안은 빈 목록");
 
@@ -116,17 +127,17 @@ test("BackgroundJobWatcher: 시작 때 없던 디렉토리에 나중에 생긴 �
   rmSync(root, { recursive: true, force: true });
 });
 
-test("BackgroundJobWatcher: 깨진 JSON·없는 디렉토리에도 죽지 않는다", async () => {
+test("BackgroundJobWatcher: 깨진 JSON·없는 디렉토리에도 죽지 않는다", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "wb-jobs2-"));
   const dir = join(root, "p", "state", "r");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "state.json"), '{"jobs": [{"id": "x"');
-  const w = new BackgroundJobWatcher({ onChanged: () => {}, onFinished: () => {} }, root);
+  const w = watching({ onChanged: () => {}, onFinished: () => {} }, root, t);
   await w.start();
   assert.deepEqual(w.current(), []);
   w.stop();
 
-  const missing = new BackgroundJobWatcher({ onChanged: () => {}, onFinished: () => {} }, join(root, "없음"));
+  const missing = watching({ onChanged: () => {}, onFinished: () => {} }, join(root, "없음"), t);
   await missing.start();
   assert.deepEqual(missing.current(), []);
   missing.stop();
