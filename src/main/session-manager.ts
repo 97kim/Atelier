@@ -12,6 +12,7 @@ import type {
 import { buildHandoff, estimateTokens, type Handoff } from "@shared/handoff";
 import type { Provider, ProviderRateLimitDto } from "@shared/ipc";
 import type { SlashCommandDto } from "@shared/slash-commands";
+import type { LiveBackgroundTask, TaskFinishedNote } from "@shared/bg-tasks";
 import type { StoredChatImage } from "./chat-attachments";
 import { closeAllClaudeSessions, closeClaudeSession, runClaudeTurn, warmClaudeSession, type ClaudeRuntime } from "./claude-adapter";
 import { closeAllCodexSessions, closeCodexSession, runCodexTurn, warmCodexSession, type CodexRuntime } from "./codex-adapter";
@@ -192,6 +193,10 @@ export interface SessionManagerDeps {
   ): void;
   /** 턴 중 관측한 구독 한도(5시간/주간 창). */
   onRateLimit?(provider: Provider, limit: ProviderRateLimitDto): void;
+  /** 백그라운드 작업 집합이 바뀌었다(턴 밖에서도 온다 — 턴이 끝난 뒤에도 도는 일이 있다). */
+  onBackgroundTasks?(tabId: string, sessionId: string, tasks: LiveBackgroundTask[]): void;
+  /** 백그라운드 작업 하나가 끝났다. */
+  onTaskFinished?(tabId: string, note: TaskFinishedNote): void;
   /** 터미널 모드: 이 탭의 pty 에 CLI 를 띄우고(spawn), 강제 종료(kill)한다. 종료는 terminalExited 로 알려 준다. */
   terminalCli?: {
     /** hookLog 가 있으면(Claude) CLI 에 훅을 주입해 그 파일로 이벤트를 남기게 한다. */
@@ -452,7 +457,16 @@ export class SessionManager {
     if (this.deps.warmEnabled && !this.deps.warmEnabled()) return;
     const s = this.ensure(tabId);
     if (!s.cwd || s.controller !== "app" || this.isBusy(tabId)) return;
-    const req = { sessionKey: tabId, cwd: s.cwd, sessionId: s.sessionId, policy: s.policy, model: s.model, log: (line: string) => this.deps.log?.(tabId, line) };
+    const req = {
+      sessionKey: tabId,
+      cwd: s.cwd,
+      sessionId: s.sessionId,
+      policy: s.policy,
+      model: s.model,
+      log: (line: string) => this.deps.log?.(tabId, line),
+      onBackgroundTasks: (sessionId: string, tasks: LiveBackgroundTask[]) => this.deps.onBackgroundTasks?.(tabId, sessionId, tasks),
+      onTaskFinished: (note: TaskFinishedNote) => this.deps.onTaskFinished?.(tabId, note),
+    };
     try {
       if (s.provider === "claude") {
         const r = await warmClaudeSession(await this.deps.claudeRuntime(), req);
@@ -1198,6 +1212,8 @@ export class SessionManager {
               this.waitPermission(s, req, abort.signal),
             log: (line) => this.deps.log?.(s.tabId, line),
             onCommands: (patch) => this.deps.onSlashCommands?.(s.cwd!, patch),
+            onBackgroundTasks: (sessionId, tasks) => this.deps.onBackgroundTasks?.(s.tabId, sessionId, tasks),
+            onTaskFinished: (note) => this.deps.onTaskFinished?.(s.tabId, note),
             onRateLimit: (limit) => {
               if (limit.rejectedResetsAt) rejectedResetsAt = limit.rejectedResetsAt;
               this.deps.onRateLimit?.("claude", limit);

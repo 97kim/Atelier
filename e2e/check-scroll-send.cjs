@@ -4,6 +4,9 @@ const E2E = __dirname;
 const app = path.join(__dirname, "..", "release/mac-arm64/Atelier.app");
 const cli = (...a) => JSON.parse(execFileSync(app + "/Contents/MacOS/Atelier", [app + "/Contents/Resources/cli/atelier.cjs", ...a], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", ATELIER_USERDATA: E2E + "/userdata" }, encoding: "utf8" }));
 const { chromium } = require("playwright-core");
+let __fails = 0;
+const result = (name, ok, note) => { if (!ok) __fails += 1; console.log(`RESULT (${name}):`, ok ? "PASS" : `FAIL${note ? " " + note : ""}`); };
+
 
 (async () => {
   const b = await chromium.connectOverCDP("http://127.0.0.1:9333");
@@ -42,13 +45,13 @@ const { chromium } = require("playwright-core");
   await page.waitForTimeout(1500);
   const afterSend = await metrics();
   console.log("보낸 직후:", JSON.stringify(afterSend));
-  console.log("RESULT (보내면 맨 아래로 간다):", afterSend && afterSend.gap < 80 ? "PASS" : `FAIL (아래까지 ${afterSend && afterSend.gap}px 남음)`);
+  result("보내면 맨 아래로 간다", afterSend && afterSend.gap < 80, `(아래까지 ${afterSend && afterSend.gap}px 남음)`);
 
   await settle();
   await page.waitForTimeout(1200);
   const afterTurn = await metrics();
   console.log("응답 끝난 뒤:", JSON.stringify(afterTurn));
-  console.log("RESULT (응답까지 따라 내려간다):", afterTurn && afterTurn.gap < 80 ? "PASS" : `FAIL (아래까지 ${afterTurn && afterTurn.gap}px 남음)`);
+  result("응답까지 따라 내려간다", afterTurn && afterTurn.gap < 80, `(아래까지 ${afterTurn && afterTurn.gap}px 남음)`);
 
 
   // 실제 사용 경로: 입력창에 쳐서 Enter. cli 로 넣는 것과 달리 입력창 높이가 바뀐다.
@@ -72,7 +75,7 @@ const { chromium } = require("playwright-core");
   await page.waitForTimeout(1500);
   const typed = await metrics();
   console.log("입력창으로 보낸 직후:", JSON.stringify(typed));
-  console.log("RESULT (입력창으로 보내도 맨 아래로 간다):", typed && typed.gap < 80 ? "PASS" : `FAIL (아래까지 ${typed && typed.gap}px 남음)`);
+  result("입력창으로 보내도 맨 아래로 간다", typed && typed.gap < 80, `(아래까지 ${typed && typed.gap}px 남음)`);
 
   // 응답이 도는 중에 한 번 더 보낸다(대기열로 들어가는 경로)
   await ev(() => { const el = document.querySelector("[data-message-list]"); el.scrollTop = 0; el.dispatchEvent(new Event("scroll")); });
@@ -81,9 +84,10 @@ const { chromium } = require("playwright-core");
   await page.waitForTimeout(1500);
   const queued = await metrics();
   console.log("응답 중에 보낸 직후:", JSON.stringify(queued));
-  console.log("RESULT (응답 중에 보내도 맨 아래로 간다):", queued && queued.gap < 80 ? "PASS" : `FAIL (아래까지 ${queued && queued.gap}px 남음)`);
+  result("응답 중에 보내도 맨 아래로 간다", queued && queued.gap < 80, `(아래까지 ${queued && queued.gap}px 남음)`);
   await settle();
 
   await page.screenshot({ path: E2E + "/shot-scroll-send.png" });
   await b.close();
+  process.exit(__fails ? 1 : 0);
 })().catch((e) => { console.error("ERROR", e); process.exit(1); });

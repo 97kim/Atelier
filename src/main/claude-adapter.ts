@@ -10,6 +10,7 @@ import type {
 } from "@shared/chat-events";
 import type { SlashCommandDto } from "@shared/slash-commands";
 import type { ProviderRateLimitDto } from "@shared/ipc";
+import { parseLiveTasks, parseTaskFinished, type LiveBackgroundTask, type TaskFinishedNote } from "@shared/bg-tasks";
 import { buildClaudeUserMessage, type StoredChatImage } from "./chat-attachments";
 import { ClaudeEventMapper, parseClaudeRateLimit } from "./claude-events";
 import { importClaudeSdk } from "./esm";
@@ -45,6 +46,13 @@ export interface ClaudeTurnRequest {
   onCommands?(patch: { commands?: SlashCommandDto[]; terminal?: string[] }): void;
   /** 구독 한도(5시간/주간 창) 관측값. 턴 중 rate_limit_event 가 올 때마다. */
   onRateLimit?(limit: ProviderRateLimitDto): void;
+  /**
+   * 백그라운드 작업 집합이 바뀌었다. 진행 중인 턴이 없어도 오고, 늘 "살아 있는 전체" 라 갈아 끼우면 된다.
+   * 프로세스가 내려갈 때는 빈 배열로 한 번 부른다 — 그 집합은 그 프로세스의 것이라 남겨 두면 안 된다.
+   */
+  onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[]): void;
+  /** 백그라운드 작업 하나가 끝났다(completed·failed·stopped). */
+  onTaskFinished?(note: TaskFinishedNote): void;
 }
 
 const POLICY_TO_MODE: Record<PermissionPolicy, PermissionMode> = {
@@ -135,6 +143,9 @@ interface LiveSession {
   dead: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
   log?(line: string): void;
+  /** 턴과 무관하게 오는 신호를 보낼 곳. 턴이 새로 시작하면 그 턴의 것으로 갱신한다. */
+  onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[]): void;
+  onTaskFinished?(note: TaskFinishedNote): void;
 }
 
 const live = new Map<string, LiveSession>();
@@ -161,6 +172,8 @@ export function closeClaudeSession(key: string): void {
   }
   s.turn?.reject(new Error("세션이 종료되었습니다."));
   s.turn = null;
+  // 살아 있던 백그라운드 작업 집합은 이 프로세스의 것이다 — 남겨 두면 끝나지 않는 표시가 된다.
+  s.onBackgroundTasks?.(s.sessionId ?? "", []);
 }
 
 export function closeAllClaudeSessions(): void {
@@ -203,6 +216,8 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
     dead: false,
     idleTimer: null,
     log: req.log,
+    onBackgroundTasks: req.onBackgroundTasks,
+    onTaskFinished: req.onTaskFinished,
   };
   const options: SdkOptions = {
     cwd: req.cwd,
@@ -270,6 +285,7 @@ async function pump(s: LiveSession) {
     if (s.idleTimer) clearTimeout(s.idleTimer);
     s.turn?.reject(new Error("Claude 프로세스가 끝났습니다."));
     s.turn = null;
+    s.onBackgroundTasks?.(s.sessionId ?? "", []);
   }
 }
 
@@ -289,6 +305,12 @@ function handleMessage(s: LiveSession, message: SDKMessage) {
         preTokens: m.pre_tokens,
         postTokens: m.post_tokens,
       });
+    } else if (message.subtype === "background_tasks_changed") {
+      // 살아 있는 백그라운드 작업 전체. 턴이 없어도 온다 — 턴에 묶으면 "턴은 끝났는데 일은 도는" 구간을 놓친다.
+      s.onBackgroundTasks?.(message.session_id ?? s.sessionId ?? "", parseLiveTasks(message.tasks));
+    } else if (message.subtype === "task_notification") {
+      const note = parseTaskFinished(message);
+      if (note) s.onTaskFinished?.(note);
     } else if (message.subtype === "commands_changed") {
       t?.req.onCommands?.({
         commands: message.commands.map((c) => ({
@@ -343,7 +365,7 @@ async function sessionFor(runtime: ClaudeRuntime, req: ClaudeTurnRequest): Promi
   return openSession(runtime, req);
 }
 
-export type ClaudeWarmRequest = Pick<ClaudeTurnRequest, "sessionKey" | "cwd" | "sessionId" | "policy" | "model" | "log">;
+export type ClaudeWarmRequest = Pick<ClaudeTurnRequest, "sessionKey" | "cwd" | "sessionId" | "policy" | "model" | "log" | "onBackgroundTasks" | "onTaskFinished">;
 
 /**
  * 예열: 턴 없이 프로세스만 미리 띄운다(기동·MCP 연결·세션 복원을 사용자가 첫 메시지를 보내기 전에 끝내 둔다).
@@ -379,6 +401,9 @@ export async function runClaudeTurn(runtime: ClaudeRuntime, req: ClaudeTurnReque
     clearTimeout(s.idleTimer);
     s.idleTimer = null;
   }
+  // 턴과 무관하게 오는 신호는 가장 최근 턴의 통로로 보낸다(탭마다 고정된 통로라 턴이 끝나도 유효하다).
+  s.onBackgroundTasks = req.onBackgroundTasks;
+  s.onTaskFinished = req.onTaskFinished;
   const done = new Promise<void>((resolve, reject) => {
     s.turn = { req, mapper: new ClaudeEventMapper(), resolve, reject, permissionSeq: 0 };
   });

@@ -1,11 +1,15 @@
 // 백그라운드로 넘긴 명령이 화면에 남는가. 턴은 먼저 끝나고 명령만 계속 도는 구간이 문제였다 —
 // 그때 탭이 놀고 있는 것처럼 보여서, 무엇이 도는지도 끝났는지도 알 수 없었다.
-// 확인: (1) 턴이 끝난 뒤에도 표시가 남는다 (2) 무슨 명령인지 보인다 (3) 끝나면 사라진다.
+// 확인: (1) 턴이 끝난 뒤에도 표시가 남는다 (2) 무슨 일인지 알아볼 수 있다 (3) 끝나면 사라진다.
+// 표시는 SDK 의 background_tasks_changed(살아 있는 전체 집합)를 그대로 갈아 끼운 결과다.
 const path = require("path"), { execFileSync } = require("child_process");
 const E2E = __dirname;
 const app = path.join(__dirname, "..", "release/mac-arm64/Atelier.app");
 const cli = (...a) => JSON.parse(execFileSync(app + "/Contents/MacOS/Atelier", [app + "/Contents/Resources/cli/atelier.cjs", ...a], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", ATELIER_USERDATA: E2E + "/userdata" }, encoding: "utf8" }));
 const { chromium } = require("playwright-core");
+let __fails = 0;
+const result = (name, ok, note) => { if (!ok) __fails += 1; console.log(`RESULT (${name}):`, ok ? "PASS" : `FAIL${note ? " " + note : ""}`); };
+
 
 const MARK = "백그라운드시험";
 
@@ -37,15 +41,16 @@ const MARK = "백그라운드시험";
   await page.waitForTimeout(1500);
   const idle = await jobs();
   console.log("턴이 끝난 뒤:", JSON.stringify({ status: st && st.status, ...idle }));
-  console.log("RESULT (턴이 끝나도 도는 명령이 보인다):", idle.n > 0 ? "PASS" : "FAIL");
-  console.log("RESULT (무슨 명령인지 보인다):", /sleep 30/.test(idle.text) ? "PASS" : `FAIL (${idle.text})`);
+  result("턴이 끝나도 도는 명령이 보인다", idle.n > 0);
+  result("무슨 일인지 알아볼 수 있다", /명령/.test(idle.text) && idle.text.replace(/\s+/g, "").length > 12, `(${idle.text})`);
 
   await page.screenshot({ path: E2E + "/shot-bg-bash.png" });
 
   // 명령이 끝나면 목록에서 빠진다
   let gone = false;
   for (let i = 0; i < 40; i++) { await page.waitForTimeout(2000); if ((await jobs()).n === 0) { gone = true; break; } }
-  console.log("RESULT (끝나면 표시가 사라진다):", gone ? "PASS" : "FAIL");
+  result("끝나면 표시가 사라진다", gone);
 
   await b.close();
+  process.exit(__fails ? 1 : 0);
 })().catch((e) => { console.error("ERROR", e); process.exit(1); });

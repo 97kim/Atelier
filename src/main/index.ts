@@ -50,7 +50,7 @@ import { forgetSessionCookies, restoreSessionCookies, saveSessionCookies } from 
 import { BROWSER_PARTITION } from "./browser-net";
 import { BackgroundJobWatcher } from "./background-jobs";
 import type { BackgroundJobDto } from "@shared/background-jobs";
-import { BashJobWatcher } from "./bg-bash-jobs";
+import { BackgroundTaskRegistry } from "./bg-tasks";
 import { VerifyRunner, suggestForCwd } from "./verify";
 import { invalidateModels, listModels } from "./models";
 import { OrchError, Orchestrator, workerSnapshotFrom } from "./orchestration";
@@ -230,11 +230,12 @@ async function cliDiagnostics(): Promise<CliDiagnosticsDto> {
 
 let mainWindow: BrowserWindow | null = null;
 let jobWatcher: BackgroundJobWatcher | null = null;
-let bashJobs: BashJobWatcher | null = null;
+/** Claude Code 가 백그라운드로 돌리는 일(명령·하위 에이전트). SDK 가 살아 있는 전체 집합을 준다. */
+const bgTasks = new BackgroundTaskRegistry();
 
 /** 사용자에게 "아직 도는 일" 은 한 종류다 — 플러그인 작업과 백그라운드 명령을 합쳐 한 목록으로 보낸다. */
 function allBackgroundJobs(): BackgroundJobDto[] {
-  return [...(jobWatcher?.current() ?? []), ...(bashJobs?.current() ?? [])];
+  return [...(jobWatcher?.current() ?? []), ...bgTasks.current()];
 }
 
 function sendBackgroundJobs() {
@@ -261,9 +262,7 @@ function onBackgroundJobFinished(job: BackgroundJobDto) {
  */
 function startBackgroundJobWatcher() {
   if (jobWatcher) return;
-  const events = { onChanged: () => sendBackgroundJobs(), onFinished: onBackgroundJobFinished };
-  jobWatcher = new BackgroundJobWatcher(events);
-  bashJobs = new BashJobWatcher(events);
+  jobWatcher = new BackgroundJobWatcher({ onChanged: () => sendBackgroundJobs(), onFinished: onBackgroundJobFinished });
   void jobWatcher.start();
 }
 
@@ -1011,12 +1010,6 @@ function bootstrap() {
     emit(tabId, event) {
       sendAll(IPC.chatEvent, { tabId, event } satisfies ChatEventEnvelope);
       attention.event(tabId, event);
-      // 백그라운드로 넘어간 명령은 턴이 끝난 뒤에도 돈다. 시작은 여기서 알고, 끝은 출력 파일 꼬리로 안다.
-      if (event.type === "tool_use" && !event.partial && !event.preview) bashJobs?.noteToolUse(event.toolUseId, event.name, event.input);
-      if (event.type === "tool_result" && bashJobs?.hasPending(event.toolUseId)) {
-        const snap = sessions.snapshot(tabId);
-        bashJobs.noteToolResult(event.toolUseId, event.output, snap.sessionId, snap.cwd);
-      }
       // 어댑터가 직접 흘린 status(waiting_permission 등)도 사이드바 상태에 반영한다.
       if (event.type === "status") workspaces.onStatus(tabId, event.status);
       const title = tabTitleOf(tabId);
@@ -1062,6 +1055,22 @@ function bootstrap() {
     log(tabId, line) {
       if (process.env.WORKBENCH_DEBUG_SDK)
         console.log(`[sdk:${tabId}] ${line}`);
+    },
+    onBackgroundTasks(tabId, sessionId, tasks) {
+      // 늘 "살아 있는 전체" 라 갈아 끼운다. 턴이 끝난 뒤에도 오므로, 노는 것처럼 보이던 구간이 채워진다.
+      bgTasks.replace(tabId, sessionId, sessions.snapshot(tabId).cwd ?? "", tasks);
+      sendBackgroundJobs();
+    },
+    onTaskFinished(tabId, note) {
+      // 사용자가 세운 것(stopped)은 알리지 않는다 — 자기가 한 일이다.
+      if (note.status === "stopped") return;
+      const job = bgTasks.recall(note.id);
+      const ok = note.status === "completed";
+      notify(
+        `${ok ? "백그라운드 작업 완료" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
+        note.summary || job?.summary || job?.title || "백그라운드 작업",
+        tabId,
+      );
     },
     onSlashCommands: (cwd, patch) => slashCommands.apply(cwd, patch),
     onRateLimit: (provider, limit) => {

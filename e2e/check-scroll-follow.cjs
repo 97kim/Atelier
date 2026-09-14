@@ -10,6 +10,9 @@ const E2E = __dirname;
 const app = path.join(__dirname, "..", "release/mac-arm64/Atelier.app");
 const cli = (...a) => JSON.parse(execFileSync(app + "/Contents/MacOS/Atelier", [app + "/Contents/Resources/cli/atelier.cjs", ...a], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", ATELIER_USERDATA: E2E + "/userdata" }, encoding: "utf8" }));
 const { chromium } = require("playwright-core");
+let __fails = 0;
+const result = (name, ok, note) => { if (!ok) __fails += 1; console.log(`RESULT (${name}):`, ok ? "PASS" : `FAIL${note ? " " + note : ""}`); };
+
 
 const LONG = "1부터 150까지를 마크다운 목록으로 출력해라. 각 줄은 정확히 `- N` 형식이고 다른 말은 하지 마라.";
 
@@ -39,8 +42,11 @@ const LONG = "1부터 150까지를 마크다운 목록으로 출력해라. 각 �
     if ((await statusOf()) === "idle" && i > 4) break;
   }
   const loose = during.filter((x) => x.gap > 80).length;
+  // 정지 화면에서도 통과하면 검사가 아니다 — 표본을 뜨는 동안 실제로 내용이 자랐는지 본다.
+  const grew = during.length > 1 && during[during.length - 1].sh - during[0].sh > 500;
+  result("표본을 뜨는 동안 글이 실제로 흘렀다", grew, `(높이 ${during[0]?.sh} → ${during[during.length - 1]?.sh})`);
   console.log("흐르는 동안 표본:", during.length, "· 바닥에서 떨어진 표본:", loose, "· 최대 간격:", Math.max(...during.map((x) => x.gap)));
-  console.log("RESULT (흐르는 동안 맨 아래를 따라간다):", loose === 0 ? "PASS" : "FAIL");
+  result("흐르는 동안 맨 아래를 따라간다", loose === 0);
   await settle();
   await page.waitForTimeout(800);
 
@@ -56,7 +62,7 @@ const LONG = "1부터 150까지를 마크다운 목록으로 출력해라. 각 �
   for (let i = 0; i < 10; i++) { await page.waitForTimeout(500); stayed.push(await m()); if ((await statusOf()) === "idle" && i > 2) break; }
   const pulled = stayed.filter((x) => x.gap < 200).length;
   console.log("올린 뒤 표본:", stayed.map((x) => x.gap).join(","));
-  console.log("RESULT (올려 읽는 중에는 끌어내리지 않는다):", justUp.gap > 300 && pulled === 0 ? "PASS" : `FAIL (끌려 내려간 표본 ${pulled}개)`);
+  result("올려 읽는 중에는 끌어내리지 않는다", justUp.gap > 300 && pulled === 0, `(끌려 내려간 표본 ${pulled}개)`);
 
   // (3) 보내면 맨 아래로
   await settle();
@@ -66,9 +72,10 @@ const LONG = "1부터 150까지를 마크다운 목록으로 출력해라. 각 �
   await page.waitForTimeout(2000);
   const afterSend = await m();
   console.log("보낸 직후:", JSON.stringify(afterSend));
-  console.log("RESULT (보내면 맨 아래로 간다):", afterSend.gap < 80 ? "PASS" : `FAIL (${afterSend.gap}px 남음)`);
+  result("보내면 맨 아래로 간다", afterSend.gap < 80, `(${afterSend.gap}px 남음)`);
 
   await settle();
   await page.screenshot({ path: E2E + "/shot-scroll-follow.png" });
   await b.close();
+  process.exit(__fails ? 1 : 0);
 })().catch((e) => { console.error("ERROR", e); process.exit(1); });

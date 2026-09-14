@@ -13,6 +13,9 @@ import { VerifyCard } from "./VerifyCard";
 import { FanoutCard } from "./FanoutCard";
 import { OrchestrationCard } from "./OrchestrationCard";
 
+/** 이만큼 위로 올라오면 "사람이 올렸다" 로 본다. 손떨림·서브픽셀 잔동은 넘기고, 한 번의 휠은 넘는다. */
+const UP_SLOP = 4;
+
 export function MessageList({
   tabId,
   blocks,
@@ -67,13 +70,16 @@ export function MessageList({
   const stickToBottom = useRef(true);
   const contentRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
-  /** 직전 스크롤 위치. "사용자가 위로 올렸나" 는 이 값과 비교해서만 알 수 있다. */
-  const lastTop = useRef(0);
+  /**
+   * 지금까지 본 가장 아래 위치. "사용자가 위로 올렸나" 는 이 기준에서 얼마나 올라왔는지로 본다.
+   * 직전 위치와만 비교하면 1px 씩 여러 번 올리는 스크롤을 영영 못 잡는다(매번 기준이 따라 올라가므로).
+   */
+  const anchorTop = useRef(0);
   const scrollToBottom = () => {
     const el = containerRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-    lastTop.current = el.scrollTop;
+    anchorTop.current = el.scrollTop;
   };
 
   // 턴이 돌고 있지만 모델이 아직 말을 시작하지 않은 구간에만 "생각 중 …" 표시:
@@ -104,12 +110,19 @@ export function MessageList({
     const el = containerRef.current;
     if (!el) return;
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    const movedUp = el.scrollTop < lastTop.current - 1;
-    lastTop.current = el.scrollTop;
+    const movedUp = el.scrollTop < anchorTop.current - UP_SLOP;
     setAtBottom(near);
-    // 바닥에 닿으면 다시 따라간다. 줄어든 내용 때문에 브라우저가 스크롤을 끌어내린 경우도 여기서 걸러진다.
-    if (near) stickToBottom.current = true;
-    else if (movedUp) stickToBottom.current = false;
+    if (near) {
+      // 바닥에 닿으면 다시 따라간다. 내용이 줄어 브라우저가 스크롤을 끌어내린 경우도 여기로 들어온다.
+      stickToBottom.current = true;
+      anchorTop.current = el.scrollTop;
+    } else if (movedUp) {
+      stickToBottom.current = false;
+      anchorTop.current = el.scrollTop;
+    } else {
+      // 내용이 자란 것뿐이다 — scrollTop 은 그대로다.
+      anchorTop.current = Math.max(anchorTop.current, el.scrollTop);
+    }
   };
   // 블록 수가 늘었을 때: 마지막이 사용자 메시지면(방금 보냄) 맨 아래로 붙이고, 그 밖의 새 블록은 붙어 있을 때만 따라간다.
   const blockCount = blocks.length;
