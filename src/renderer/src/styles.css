@@ -336,6 +336,9 @@ kbd,
   -webkit-box-orient: vertical;
   overflow: hidden;
   white-space: pre-line;
+  /* 생각에는 공백 없는 긴 경로·URL 이 자주 섞인다. 감길 자리가 없으면 첫 줄에서 가로로 잘려
+     나가고 둘째 줄이 비는데, 토큰 안에서 감기게 하면 두 줄을 다 쓴다. */
+  overflow-wrap: anywhere;
   animation: reasoning-in 0.25s ease-out;
 }
 @keyframes reasoning-in {
