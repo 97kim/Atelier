@@ -228,7 +228,9 @@ function Thinking({
           <span />
         </div>
         {tail && (
-          <div key={tail} className="reasoning-tail mt-1 max-w-[640px] text-[12px] leading-relaxed text-muted-2" data-thinking-text>
+          // 폭 상한을 두지 않는다. 목록이 820px 로 묶여 있어 칼럼은 778px 에서 더 안 커지고,
+          // 두 줄 제한이 이미 길이를 잡아 준다. 좁히면 그만큼 글만 더 잘려 나간다(실측 159자 → 188자).
+          <div key={tail} className="reasoning-tail mt-1 text-[12px] leading-relaxed text-muted-2" data-thinking-text>
             {tail}
           </div>
         )}
