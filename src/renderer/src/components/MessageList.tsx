@@ -215,7 +215,7 @@ function Thinking({
   const label = afterTool ? `${afterTool} 결과 보는 중` : "생각 중";
   return (
     <div className={`flex gap-3 ${withAvatar ? "items-start" : "-mt-3"}`} aria-live="polite" data-thinking>
-      {withAvatar ? <Avatar provider={provider} /> : <div className="w-8 shrink-0" />}
+      {withAvatar ? <Avatar provider={provider} /> : <div className="avatar-gap" />}
       <div className="min-w-0 flex-1">
         {/* 아바타(32px + 위 여백 2px)와 같은 높이로 두고 세로 가운데 — 생각 텍스트가 붙으면 그 아래로 이어진다 */}
         <div className={`thinking-dots flex items-center gap-1.5 text-muted ${withAvatar ? "min-h-[34px]" : ""}`}>
@@ -261,7 +261,7 @@ function BackgroundJobsFooter({ sessionId }: { sessionId: string | null }) {
   }, [mine.length]);
   if (mine.length === 0) return null;
   return (
-    <div className="ml-11 flex flex-col gap-1" data-background-jobs={mine.length}>
+    <div className="content-indent flex flex-col gap-1" data-background-jobs={mine.length}>
       {mine.map((j) => (
         <div key={j.id} className="flex items-center gap-2 text-[11px] text-muted-2" data-background-job={j.id}>
           <span className="spin inline-block h-2.5 w-2.5 rounded-full border-[1.5px] border-warn border-t-transparent" />
@@ -297,7 +297,7 @@ function RunningFooter({ since, blocks, status }: { since: number; blocks: Block
   const askingQuestion = blocks.some((b) => b.kind === "tool" && b.permission === "pending" && b.name === "AskUserQuestion");
   const label = status === "queued" ? "대기열 (요청 후)" : status === "waiting_permission" ? (askingQuestion ? "답변 대기" : "권한 대기") : running > 0 ? `도구 실행 중` : "응답 중";
   return (
-    <div className="ml-11 flex items-center gap-2 text-[11px] text-muted-2" data-turn-elapsed={secs}>
+    <div className="content-indent flex items-center gap-2 text-[11px] text-muted-2" data-turn-elapsed={secs}>
       <span className="spin inline-block h-2.5 w-2.5 rounded-full border-[1.5px] border-accent border-t-transparent" />
       <span className="shimmer" style={{ "--shimmer-base": "var(--color-muted)", "--shimmer-hi": "var(--color-fg)" } as React.CSSProperties}>
         {label}
@@ -369,7 +369,7 @@ function Group({
   if (group.kind === "error") {
     const b = group.blocks[0];
     return b.kind === "error" ? (
-      <div className="ml-11 flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-muted">
+      <div className="content-indent flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-muted">
         <Icon name="info" size={13} className="shrink-0 text-warn" />
         <span style={{ userSelect: "text" }}>{b.message}</span>
       </div>
@@ -500,7 +500,7 @@ function ReviewCard({ block }: { block: ReviewBlock }) {
   const name = block.reviewer === "claude" ? "Claude Code" : "Codex";
   const secs = Math.max(0, Math.floor((now - block.ts) / 1000));
   return (
-    <div className="ml-11 rounded-lg border border-line bg-panel" data-review-card={block.id} data-review-status={block.status}>
+    <div className="content-indent rounded-lg border border-line bg-panel" data-review-card={block.id} data-review-status={block.status}>
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <ProviderLogo provider={block.reviewer} size={18} />
         <span className="font-medium">교차 리뷰 · {name}</span>

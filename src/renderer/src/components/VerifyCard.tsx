@@ -81,7 +81,7 @@ export function VerifyCard({ block, tabId, onRerun }: { block: VerifyBlock; tabI
   const total = running ? elapsed : (block.endedAt ?? block.ts) - block.ts;
   const tone = block.status === "passed" ? "text-ok" : block.status === "failed" ? "text-err" : block.status === "aborted" ? "text-warn" : "text-accent";
   return (
-    <div className="ml-11 rounded-lg border border-line bg-panel" data-verify-card={block.id} data-verify-status={block.status}>
+    <div className="content-indent rounded-lg border border-line bg-panel" data-verify-card={block.id} data-verify-status={block.status}>
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded ${block.status === "passed" ? "bg-ok/15" : block.status === "failed" ? "bg-err/15" : "bg-panel-2"}`}>
           {running ? <span className="spin inline-block h-3 w-3 rounded-full border-[1.5px] border-accent border-t-transparent" /> : <Icon name={block.status === "passed" ? "check" : block.status === "failed" ? "x" : "minus"} size={11} className={tone} />}

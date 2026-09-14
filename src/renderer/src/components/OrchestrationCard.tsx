@@ -26,7 +26,7 @@ const EXEC_LABEL: Record<string, string> = {
 export function OrchestrationCard({ block, onOpen }: { block: OrchestrationBlock; onOpen: (runId: string) => void }) {
   const attention = block.questions + block.escalations;
   return (
-    <div className="ml-11 rounded-lg border border-line bg-panel" data-orch-card={block.id} data-orch-status={block.status}>
+    <div className="content-indent rounded-lg border border-line bg-panel" data-orch-card={block.id} data-orch-status={block.status}>
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <Icon name="list" size={13} className="shrink-0 text-accent" />
         <span className="font-medium">오케스트레이션</span>

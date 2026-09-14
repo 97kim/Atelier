@@ -45,7 +45,7 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
   const secs = Math.max(0, Math.floor((now - block.ts) / 1000));
   const canCompare = block.variants.some((v) => v.status === "done" || v.status === "failed");
   return (
-    <div className="ml-11 rounded-lg border border-line bg-panel" data-fanout-card={block.id} data-fanout-status={block.status}>
+    <div className="content-indent rounded-lg border border-line bg-panel" data-fanout-card={block.id} data-fanout-status={block.status}>
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <Icon name="sparkles" size={13} className="shrink-0 text-accent" />
         <span className="font-medium">팬아웃</span>

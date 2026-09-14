@@ -103,6 +103,20 @@ kbd,
   font-variant-ligatures: none;
 }
 
+/*
+ * 어시스턴트 본문 칼럼에 맞춘 들여쓰기. 아바타는 32px 로 고정이고 그 옆 간격은 gap-3 이다.
+ * 이걸 rem 유틸(ml-11 = 2.75rem)로 흉내 내면 이 앱의 rem 이 13px 이라 6px 짧아져
+ * 도구 카드보다 왼쪽으로 밀린다 — 아바타 없는 줄(진행 표시·푸터·카드)이 전부 어긋났다.
+ */
+.content-indent {
+  margin-left: calc(32px + 0.75rem);
+}
+/* 같은 칼럼을 flex 자리로 잡을 때(아바타 자리를 비워 둘 때) 쓴다. */
+.avatar-gap {
+  width: 32px;
+  flex-shrink: 0;
+}
+
 /* 디자인의 소문자 라벨: 모노 · 작은 · 자간 넓게 */
 .label {
   font-family: var(--font-mono);
