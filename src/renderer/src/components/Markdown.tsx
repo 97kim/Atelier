@@ -305,7 +305,7 @@ function MdWebLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLA
             <span className="mono text-[10px] text-muted">⌥클릭</span>
           </button>
           <button role="menuitem" onClick={() => decide("external")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-panel-2" data-link-open-external>
-            <Icon name="arrowUp" size={12} className="rotate-45 text-muted" />
+            <Icon name="externalLink" size={12} className="text-muted" />
             <span className="flex-1">기본 브라우저에서 열기</span>
             <span className="mono text-[10px] text-muted">⌘클릭</span>
           </button>

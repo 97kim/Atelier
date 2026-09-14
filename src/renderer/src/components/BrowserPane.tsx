@@ -603,7 +603,7 @@ export function BrowserPane({
           title="기본 브라우저에서 열기"
           data-browser-external
         >
-          <Icon name="globe" size={13} />
+          <Icon name="externalLink" size={13} />
         </button>
       </div>
       {error && (
