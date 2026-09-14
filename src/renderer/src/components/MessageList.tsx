@@ -407,6 +407,20 @@ function Group({
     );
   }
 
+  // 압축처럼 말 없이 끝나는 턴이 있다 — 그때는 통계 블록만 온다.
+  // 이름표와 아바타를 그리면 "클로드가 무언가 말했는데 비어 있다" 로 보인다. 통계 한 줄만 남긴다.
+  if (group.blocks.every((b) => b.kind === "turn")) {
+    return (
+      <div className="content-indent" data-silent-turn>
+        {group.blocks.map((b) => (
+          <div key={b.id} data-block-id={b.id}>
+            <BlockView block={b} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="flex gap-3">
       <Avatar provider={provider} />

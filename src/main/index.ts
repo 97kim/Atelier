@@ -49,6 +49,8 @@ import { fetchFavicon } from "./browser-favicon";
 import { forgetSessionCookies, restoreSessionCookies, saveSessionCookies } from "./browser-cookies";
 import { BROWSER_PARTITION } from "./browser-net";
 import { BackgroundJobWatcher } from "./background-jobs";
+import type { BackgroundJobDto } from "@shared/background-jobs";
+import { BashJobWatcher } from "./bg-bash-jobs";
 import { VerifyRunner, suggestForCwd } from "./verify";
 import { invalidateModels, listModels } from "./models";
 import { OrchError, Orchestrator, workerSnapshotFrom } from "./orchestration";
@@ -228,29 +230,40 @@ async function cliDiagnostics(): Promise<CliDiagnosticsDto> {
 
 let mainWindow: BrowserWindow | null = null;
 let jobWatcher: BackgroundJobWatcher | null = null;
+let bashJobs: BashJobWatcher | null = null;
+
+/** 사용자에게 "아직 도는 일" 은 한 종류다 — 플러그인 작업과 백그라운드 명령을 합쳐 한 목록으로 보낸다. */
+function allBackgroundJobs(): BackgroundJobDto[] {
+  return [...(jobWatcher?.current() ?? []), ...(bashJobs?.current() ?? [])];
+}
+
+function sendBackgroundJobs() {
+  const jobs = allBackgroundJobs();
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.backgroundJobsChanged, jobs);
+}
+
+function onBackgroundJobFinished(job: BackgroundJobDto) {
+  const tabId = sessions.tabForSessionId(job.sessionId);
+  // 이 앱이 시킨 작업이 아니면(다른 터미널의 Claude Code) 알리지 않는다
+  if (!tabId) return;
+  const ok = job.status === "completed";
+  notify(
+    `${ok ? "백그라운드 작업 완료" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
+    `${job.label} — ${job.summary || job.title}`,
+    tabId,
+  );
+}
 
 /**
- * 턴이 끝난 뒤에도 도는 작업(백그라운드 Codex 등)을 지켜본다.
- * 프로세스가 앱에서 떨어져 나가므로 계보로는 못 찾고, 플러그인이 쓰는 작업 목록 파일이 유일한 단서다.
+ * 턴이 끝난 뒤에도 도는 작업을 지켜본다. 두 갈래다 —
+ * 플러그인 작업(백그라운드 Codex 등)은 프로세스가 앱에서 떨어져 나가 작업 목록 파일이 유일한 단서고,
+ * Claude Code 가 백그라운드로 돌린 명령은 대화 이벤트로 시작을 알고 출력 파일 꼬리로 끝을 안다.
  */
 function startBackgroundJobWatcher() {
   if (jobWatcher) return;
-  jobWatcher = new BackgroundJobWatcher({
-    onChanged: (jobs) => {
-      for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.backgroundJobsChanged, jobs);
-    },
-    onFinished: (job) => {
-      const tabId = sessions.tabForSessionId(job.sessionId);
-      // 이 앱이 시킨 작업이 아니면(다른 터미널의 Claude Code) 알리지 않는다
-      if (!tabId) return;
-      const ok = job.status === "completed";
-      notify(
-        `${ok ? "백그라운드 작업 완료" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
-        `${job.label} — ${job.summary || job.title}`,
-        tabId,
-      );
-    },
-  });
+  const events = { onChanged: () => sendBackgroundJobs(), onFinished: onBackgroundJobFinished };
+  jobWatcher = new BackgroundJobWatcher(events);
+  bashJobs = new BashJobWatcher(events);
   void jobWatcher.start();
 }
 
@@ -998,6 +1011,12 @@ function bootstrap() {
     emit(tabId, event) {
       sendAll(IPC.chatEvent, { tabId, event } satisfies ChatEventEnvelope);
       attention.event(tabId, event);
+      // 백그라운드로 넘어간 명령은 턴이 끝난 뒤에도 돈다. 시작은 여기서 알고, 끝은 출력 파일 꼬리로 안다.
+      if (event.type === "tool_use" && !event.partial && !event.preview) bashJobs?.noteToolUse(event.toolUseId, event.name, event.input);
+      if (event.type === "tool_result" && bashJobs?.hasPending(event.toolUseId)) {
+        const snap = sessions.snapshot(tabId);
+        bashJobs.noteToolResult(event.toolUseId, event.output, snap.sessionId, snap.cwd);
+      }
       // 어댑터가 직접 흘린 status(waiting_permission 등)도 사이드바 상태에 반영한다.
       if (event.type === "status") workspaces.onStatus(tabId, event.status);
       const title = tabTitleOf(tabId);
@@ -1794,7 +1813,7 @@ function registerIpc() {
     const url = await previewServer.urlFor(root, isAbsolute(path) ? path : resolve(cwd, path));
     return url ? { ok: true, url } : { ok: false, error: "저장소 안의 파일만 미리 볼 수 있습니다." };
   });
-  ipcMain.handle(IPC.backgroundJobs, () => jobWatcher?.current() ?? []);
+  ipcMain.handle(IPC.backgroundJobs, () => allBackgroundJobs());
   ipcMain.on(IPC.browserRegister, (_e, tabId: unknown, webContentsId: unknown, url: unknown) => {
     if (typeof tabId !== "string") return;
     if (typeof webContentsId === "number" && Number.isInteger(webContentsId))

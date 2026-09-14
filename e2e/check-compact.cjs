@@ -62,6 +62,15 @@ const { chromium } = require("playwright-core");
   console.log("RESULT (압축 경계가 화면에 남았다):", seen ? "PASS" : "FAIL");
   console.log("RESULT (세션이 끊기지 않았다):", after.sessionId && after.sessionId === before.sessionId ? "PASS" : "FAIL");
 
+  // 압축 턴은 말 없이 통계만 온다. 그때 아바타와 "Claude" 이름표까지 그리면 빈 말풍선으로 보인다.
+  const tail = await ev(() => {
+    const div = document.querySelector("[data-compacted]");
+    const next = div?.nextElementSibling ?? null;
+    return next ? { silent: next.hasAttribute("data-silent-turn"), text: next.textContent.trim().slice(0, 80) } : null;
+  });
+  console.log("구분선 다음 요소:", JSON.stringify(tail));
+  console.log("RESULT (압축 뒤 빈 말풍선이 없다):", tail && tail.silent && !/Claude/.test(tail.text) ? "PASS" : "FAIL");
+
   await page.screenshot({ path: E2E + "/shot-compact.png" });
   await b.close();
 })().catch((e) => { console.error("ERROR", e); process.exit(1); });
