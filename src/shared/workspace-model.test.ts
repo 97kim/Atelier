@@ -18,6 +18,7 @@ import {
   removeWorkspace,
   reopenTab,
   reorderTabs,
+  reorderWorkspaces,
   titleFromMessage,
   updateTab,
   workspaceTabs,
@@ -227,4 +228,24 @@ test("createWorkspace/updateWorkspace/tabCwd: 이름만으로 만들고, 탭 경
   assert.equal(m.workspaces[0].name, "결제 개편"); // 빈 이름은 무시
   assert.equal(createWorkspace(m, "", T0, "w2").workspace.name, "새 워크스페이스");
   assert.equal(updateWorkspace(m, "nope", { name: "x" }), m);
+});
+
+test("reorderWorkspaces: 끌어 옮긴 순서대로, 빠진 것은 뒤에", () => {
+  let m = emptyModel();
+  m = addWorkspace(m, "/a", 1, "wa").model;
+  m = addWorkspace(m, "/b", 2, "wb").model;
+  m = addWorkspace(m, "/c", 3, "wc").model;
+  const ids = () => m.workspaces.map((w) => w.id);
+  assert.deepEqual(ids(), ["wa", "wb", "wc"]);
+
+  m = reorderWorkspaces(m, ["wc", "wa", "wb"]);
+  assert.deepEqual(ids(), ["wc", "wa", "wb"]);
+
+  // 낡은 요청: 모르는 id 는 무시하고, 안 적힌 것은 원래 순서를 지켜 뒤에 붙인다
+  m = reorderWorkspaces(m, ["없는id", "wb"]);
+  assert.deepEqual(ids(), ["wb", "wc", "wa"]);
+
+  // 빈 요청이면 그대로
+  m = reorderWorkspaces(m, []);
+  assert.deepEqual(ids(), ["wb", "wc", "wa"]);
 });

@@ -19,6 +19,7 @@ import {
   removeWorkspace,
   reopenTab,
   reorderTabs,
+  reorderWorkspaces,
   titleFromMessage,
   updateTab,
   type WorkbenchModel,
@@ -222,6 +223,10 @@ export class WorkspaceService {
   renameTab(tabId: string, title: string) {
     const t = title.trim();
     this.commit(updateTab(this.model, tabId, { title: t || null, titleCustom: t.length > 0 }, Date.now()));
+  }
+
+  reorderWorkspaces(workspaceIds: string[]) {
+    this.commit(reorderWorkspaces(this.model, workspaceIds));
   }
 
   reorderTabs(openTabIds: string[]) {

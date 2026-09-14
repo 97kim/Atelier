@@ -220,6 +220,8 @@ export function App() {
         onRemoveWorkspace={(wsId) => void api.remove(wsId)}
         onCloseTab={(id) => void closeTab(id)}
         onRenameTab={(id, title) => void api.renameTab(id, title)}
+        onReorderTabs={(ids) => void api.reorderTabs(ids)}
+        onReorderWorkspaces={(ids) => void api.reorderWorkspaces(ids)}
         onDeleteTab={(id) =>
           void api.deleteTab(id).then((r) => {
             if (r.ok) {

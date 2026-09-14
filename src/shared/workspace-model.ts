@@ -263,6 +263,24 @@ export function updateTab(
   };
 }
 
+/**
+ * 사이드바에서 끌어 옮긴 워크스페이스 순서. 낡은 요청이 와도 목록을 잃지 않게,
+ * 모르는 id 는 무시하고 빠진 것은 뒤에 붙인다(reorderTabs 와 같은 규칙).
+ */
+export function reorderWorkspaces(m: WorkbenchModel, workspaceIds: string[]): WorkbenchModel {
+  const rest = new Map(m.workspaces.map((w) => [w.id, w]));
+  const next: Workspace[] = [];
+  for (const id of workspaceIds) {
+    const w = rest.get(id);
+    if (w) {
+      next.push(w);
+      rest.delete(id);
+    }
+  }
+  for (const w of m.workspaces) if (rest.has(w.id)) next.push(w);
+  return { ...m, workspaces: next };
+}
+
 export function reorderTabs(m: WorkbenchModel, openTabIds: string[]): WorkbenchModel {
   const current = new Set(m.openTabIds);
   const next = openTabIds.filter((id) => current.has(id));

@@ -1976,6 +1976,9 @@ function registerIpc() {
   ipcMain.handle(IPC.tabReorder, (_e, ids: string[]) =>
     workspaces.reorderTabs(ids),
   );
+  ipcMain.handle(IPC.workspaceReorder, (_e, ids: string[]) =>
+    workspaces.reorderWorkspaces(ids),
+  );
 
   ipcMain.handle(IPC.usageQuery, (_e, filter: UsageFilter) =>
     querySummary(filter),

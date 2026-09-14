@@ -232,6 +232,7 @@ export const IPC = {
   tabActivate: "tab:activate",
   tabRename: "tab:rename",
   tabReorder: "tab:reorder",
+  workspaceReorder: "workspace:reorder",
   shortcut: "app:shortcut",
   usageQuery: "usage:query",
   usageStatus: "usage:status",
@@ -641,6 +642,8 @@ export interface WorkspaceApi {
   activateTab(tabId: string): Promise<void>;
   renameTab(tabId: string, title: string): Promise<void>;
   reorderTabs(openTabIds: string[]): Promise<void>;
+  /** 사이드바에서 끌어 옮긴 워크스페이스 순서. */
+  reorderWorkspaces(workspaceIds: string[]): Promise<void>;
   onChanged(listener: (state: WorkspaceStateDto) => void): () => void;
 }
 

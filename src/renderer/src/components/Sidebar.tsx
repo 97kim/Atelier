@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SessionStatus } from "@shared/chat-events";
 import type { AppInfoDto, WorkspaceStateDto, SessionAttention } from "@shared/ipc";
 import {
@@ -7,6 +7,7 @@ import {
   type TabMeta,
   type Workspace,
 } from "@shared/workspace-model";
+import { moveNextTo } from "@shared/reorder";
 import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
 import { Logo } from "./Logo";
@@ -55,6 +56,8 @@ export function Sidebar({
   onExportTab,
   onJumpAttention,
   onNewWorktreeIn,
+  onReorderTabs,
+  onReorderWorkspaces,
   railed,
   onToggleRail,
 }: {
@@ -86,6 +89,9 @@ export function Sidebar({
   onClearWorkspacePath: (workspaceId: string) => void;
   onRemoveWorkspace: (workspaceId: string) => void;
   onSwitchWorkspace: () => void;
+  /** 끌어 옮긴 열린 세션 순서(모든 워크스페이스를 통틀어). */
+  onReorderTabs: (openTabIds: string[]) => void;
+  onReorderWorkspaces: (workspaceIds: string[]) => void;
 }) {
   const { model, statuses, attention } = ws;
   const attentionCount = model.openTabIds.filter((id) => attention[id]).length;
@@ -95,10 +101,66 @@ export function Sidebar({
       model.workspaces.find((w) => w.id === activeTab.workspaceId)) ??
     [...model.workspaces].sort((a, b) => b.lastUsedAt - a.lastUsedAt)[0] ??
     null;
-  const workspaces = useMemo(
-    () => [...model.workspaces].sort((a, b) => b.lastUsedAt - a.lastUsedAt),
-    [model.workspaces],
-  );
+  // 사용자가 끌어서 정한 순서를 따른다. 최근 사용순으로 자동 정렬하면 자리가 계속 바뀌어
+  // 손으로 맞춘 순서가 남지 않는다 — 둘은 같이 쓸 수 없다.
+  const workspaces = model.workspaces;
+
+  // 끌어 옮기기. 워크스페이스끼리, 그리고 같은 워크스페이스의 "열린" 세션끼리만 자리를 바꾼다
+  // (닫힌 세션은 최근 순으로 보여 주므로 자리를 정할 수 없다).
+  type DragItem = { kind: "ws" | "tab"; id: string; wsId: string };
+  // 끌고 있는 것은 ref 로도 들고 있는다 — 상태만 쓰면 dragstart 직후의 dragover 가 아직 옛 값을 본다.
+  const dragRef = useRef<DragItem | null>(null);
+  const [drag, setDrag] = useState<DragItem | null>(null);
+  const dropRef = useRef<{ id: string; after: boolean } | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null);
+  const endDrag = () => {
+    dragRef.current = null;
+    dropRef.current = null;
+    setDrag(null);
+    setDropAt(null);
+  };
+  const dragProps = (kind: "ws" | "tab", id: string, wsId: string, enabled = true) => {
+    const mine = () => {
+      const d = dragRef.current;
+      return d !== null && d.kind === kind && (kind === "ws" || d.wsId === wsId) && d.id !== id;
+    };
+    return {
+      draggable: enabled,
+      onDragStart: (e: React.DragEvent) => {
+        dragRef.current = { kind, id, wsId };
+        setDrag({ kind, id, wsId });
+        // 텍스트로도 실어 둔다 — 브라우저가 드래그를 시작하려면 무엇이든 담겨 있어야 한다.
+        e.dataTransfer?.setData("text/plain", id);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      },
+      onDragEnd: endDrag,
+      onDragOver: (e: React.DragEvent) => {
+        if (!mine()) return;
+        e.preventDefault();
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const after = e.clientY > r.top + r.height / 2;
+        dropRef.current = { id, after };
+        setDropAt((prev) => (prev && prev.id === id && prev.after === after ? prev : { id, after }));
+      },
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        const moved = dragRef.current;
+        if (mine() && moved) {
+          const drop = dropRef.current;
+          const after = drop?.id === id ? drop.after : false;
+          if (kind === "ws") onReorderWorkspaces(moveNextTo(model.workspaces.map((w) => w.id), moved.id, id, after));
+          else onReorderTabs(moveNextTo(model.openTabIds, moved.id, id, after));
+        }
+        endDrag();
+      },
+      // 선이 들어가도 자리가 밀리지 않게 그림자로 그린다.
+      style: (dropAt?.id === id
+        ? { boxShadow: `inset 0 ${dropAt.after ? "-2px" : "2px"} 0 var(--color-accent)` }
+        : undefined) as React.CSSProperties | undefined,
+      "data-dragging": drag?.id === id ? "true" : undefined,
+      "data-drop": dropAt?.id === id ? (dropAt.after ? "after" : "before") : undefined,
+    };
+  };
 
   // 워크스페이스 접힘 상태 (저장).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
@@ -398,6 +460,8 @@ export function Sidebar({
                 />
               ) : (
                 <div
+                  {...dragProps("ws", w.id, w.id, renamingWs?.id !== w.id)}
+                  data-workspace-head={w.id}
                   onClick={() => toggleCollapsed(w.id)}
                   onContextMenu={(e) =>
                     openMenu(e, {
@@ -408,6 +472,8 @@ export function Sidebar({
                     })
                   }
                   className={`group flex cursor-default items-center gap-1.5 rounded-md py-1.5 pl-1 pr-1 ${
+                    drag?.id === w.id ? "opacity-50" : ""
+                  } ${
                     menu?.kind === "ws" && menu.id === w.id
                       ? "bg-panel-2"
                       : "hover:bg-panel-2/60"
@@ -496,6 +562,8 @@ export function Sidebar({
                         />
                       ) : (
                         <SessionRow
+                          drag={dragProps("tab", tab.id, w.id, tab.open && renaming?.tabId !== tab.id)}
+                          dragging={drag?.id === tab.id}
                           tab={tab}
                           status={statuses[tab.id] ?? "idle"}
                           attention={attention[tab.id] ?? null}
@@ -680,6 +748,8 @@ export function Sidebar({
 }
 
 function SessionRow({
+  drag,
+  dragging,
   tab,
   status,
   attention,
@@ -709,15 +779,19 @@ function SessionRow({
   onRenameCancel: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onX: () => void;
+  /** 끌어 옮기기 핸들러 묶음(사이드바가 만든다). 닫힌 세션·이름 바꾸는 중이면 꺼져 있다. */
+  drag: React.HTMLAttributes<HTMLDivElement> & { draggable: boolean };
+  dragging: boolean;
 }) {
   return (
     <div
+      {...drag}
       onClick={onOpen}
       onDoubleClick={onStartRename}
       onContextMenu={onContextMenu}
       className={`group flex cursor-default items-center gap-2 rounded-md py-1.5 pl-2 pr-1 ${
-        active || highlighted ? "bg-panel-2" : "hover:bg-panel-2/60"
-      }`}
+        dragging ? "opacity-50" : ""
+      } ${active || highlighted ? "bg-panel-2" : "hover:bg-panel-2/60"}`}
       data-session={tab.id}
       data-open={tab.open ? "true" : "false"}
     >

@@ -68,6 +68,8 @@ const api: WorkbenchApi = {
       ipcRenderer.invoke(IPC.tabRename, tabId, title),
     reorderTabs: (openTabIds: string[]) =>
       ipcRenderer.invoke(IPC.tabReorder, openTabIds),
+    reorderWorkspaces: (workspaceIds: string[]) =>
+      ipcRenderer.invoke(IPC.workspaceReorder, workspaceIds),
     onChanged: (listener) => {
       const handler = (_e: IpcRendererEvent, state: WorkspaceStateDto) =>
         listener(state);
