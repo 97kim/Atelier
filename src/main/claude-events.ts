@@ -19,9 +19,18 @@ interface StreamBlock {
   previewKey?: string;
 }
 
+/** 기억해 둘 툴 호출 id 수. 긴 대화에서 무한정 늘지 않게. */
+const EMITTED_TOOLS_MAX = 2000;
+
 export class ClaudeEventMapper {
   private messageId: string | null = null;
   private readonly seenStreamMessages = new Set<string>();
+  /**
+   * 스트림으로 이미 완성해 내보낸 툴 호출. 메시지 단위로 "봤다" 를 판단하면,
+   * 스트림이 중간에 끊겨 블록 이벤트가 안 온 호출은 완성 메시지에서도 건너뛰어 영영 사라진다
+   * (결과만 남아 이름 없는 카드가 된다). 블록 단위로 본다.
+   */
+  private readonly emittedTools = new Set<string>();
   /** 메인 루프의 마지막 assistant 메시지가 든 입력 컨텍스트 크기. result 의 usage 는 턴 누적치라 따로 든다. */
   private lastContextTokens: number | null = null;
   private readonly blocks = new Map<number, StreamBlock>();
@@ -159,6 +168,8 @@ export class ClaudeEventMapper {
       case "content_block_stop": {
         const block = this.blocks.get(event.index as number);
         if (!block || block.kind !== "tool_use") return [];
+        this.emittedTools.add(block.toolUseId!);
+        if (this.emittedTools.size > EMITTED_TOOLS_MAX) this.emittedTools.delete(this.emittedTools.values().next().value as string);
         return [
           {
             type: "tool_use",
@@ -191,7 +202,8 @@ export class ClaudeEventMapper {
     if (mu)
       this.lastContextTokens =
         (mu.input_tokens ?? 0) + (mu.cache_read_input_tokens ?? 0) + (mu.cache_creation_input_tokens ?? 0);
-    if (this.seenStreamMessages.has(msg.message.id)) return events; // 스트림으로 이미 처리
+    // 스트림으로 흘린 메시지라도 블록 하나하나는 다시 본다 — 흘리지 못한 블록이 있으면 여기서 메운다.
+    const streamed = this.seenStreamMessages.has(msg.message.id);
     const raw: unknown = msg.message.content;
     const content: unknown[] = Array.isArray(raw) ? raw : [];
     content.forEach((block: unknown, i: number) => {
@@ -204,12 +216,16 @@ export class ClaudeEventMapper {
       };
       const blockId = `${msg.message.id}:${i}`;
       if (b.type === "text" && typeof b.text === "string") {
+        if (streamed) return; // 글자는 delta 로 이미 흘렀다
         events.push({ type: "assistant_text", ts, blockId, text: b.text });
       } else if (b.type === "tool_use") {
+        const toolUseId = b.id ?? blockId;
+        if (this.emittedTools.has(toolUseId)) return; // 스트림으로 이미 완성해 냈다
+        this.emittedTools.add(toolUseId);
         events.push({
           type: "tool_use",
           ts,
-          toolUseId: b.id ?? blockId,
+          toolUseId,
           name: b.name ?? "tool",
           input: b.input ?? {},
         });

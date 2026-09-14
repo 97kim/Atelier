@@ -437,3 +437,63 @@ test("하위 에이전트(parent_tool_use_id) 메시지는 카드용 subagent_ac
   const out = mapper.map(m({ type: "assistant", parent_tool_use_id: "toolu_parent", uuid: "u", session_id: "s", message: { id: "sub1", role: "assistant", content: [{ type: "tool_use", id: "y", name: "Read", input: { file_path: "/a.ts" } }] } }), 8);
   assert.deepEqual(out, [{ type: "subagent_activity", ts: 8, parentToolUseId: "toolu_parent", tool: "Read", input: { file_path: "/a.ts" } }]);
 });
+
+test("스트림이 끊겨 블록 이벤트가 안 와도 완성 메시지에서 툴 호출을 메운다", () => {
+  // 실제로 겪은 일: message_start 만 오고 content_block_start/stop 이 오지 않았다.
+  // 메시지 단위로 "스트림에서 봤다" 를 판단하면 이 호출이 통째로 사라지고, 결과만 남아 이름 없는 카드가 된다.
+  const mapper = new ClaudeEventMapper();
+  mapper.map(stream({ type: "message_start", message: { id: "msg_broken" } }), 1);
+  const ev = mapper.map(
+    m({
+      type: "assistant",
+      message: { id: "msg_broken", content: [{ type: "tool_use", id: "toolu_1", name: "Bash", input: { command: "ls" } }] },
+      parent_tool_use_id: null,
+      uuid: "u",
+      session_id: "s",
+    }),
+    2,
+  );
+  assert.deepEqual(ev, [{ type: "tool_use", ts: 2, toolUseId: "toolu_1", name: "Bash", input: { command: "ls" } }]);
+});
+
+test("정상 스트림이면 완성 메시지에서 같은 툴 호출을 두 번 내지 않는다", () => {
+  const mapper = new ClaudeEventMapper();
+  const evs = [
+    stream({ type: "message_start", message: { id: "msg_ok" } }),
+    stream({ type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "toolu_2", name: "Bash" } }),
+    stream({ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"command":"ls"}' } }),
+    stream({ type: "content_block_stop", index: 0 }),
+  ].flatMap((x) => mapper.map(x, 1));
+  const done = evs.filter((e) => e.type === "tool_use" && !e.partial);
+  assert.equal(done.length, 1);
+
+  const after = mapper.map(
+    m({
+      type: "assistant",
+      message: { id: "msg_ok", content: [{ type: "tool_use", id: "toolu_2", name: "Bash", input: { command: "ls" } }] },
+      parent_tool_use_id: null,
+      uuid: "u",
+      session_id: "s",
+    }),
+    2,
+  );
+  assert.deepEqual(after, []);
+});
+
+test("스트림으로 흐른 글자는 완성 메시지에서 다시 내지 않는다", () => {
+  const mapper = new ClaudeEventMapper();
+  mapper.map(stream({ type: "message_start", message: { id: "msg_t" } }), 1);
+  mapper.map(stream({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }), 1);
+  mapper.map(stream({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "안녕" } }), 1);
+  const after = mapper.map(
+    m({
+      type: "assistant",
+      message: { id: "msg_t", content: [{ type: "text", text: "안녕" }] },
+      parent_tool_use_id: null,
+      uuid: "u",
+      session_id: "s",
+    }),
+    2,
+  );
+  assert.deepEqual(after, []);
+});
