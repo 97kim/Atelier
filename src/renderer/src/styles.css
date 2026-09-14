@@ -83,6 +83,13 @@ body,
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  /*
+   * 한국어 낱말을 줄 끝에서 쪼개지 않는다. 기본값은 한글을 글자 단위로 끊을 수 있다고 보아
+   * "확인하겠습니다" 가 "확인하겠습" / "니다" 로 갈린다 — 읽는 눈이 한 번 걸린다.
+   * 줄 수는 그대로이면서 쪼개짐만 사라진다(실측). 경로·URL 처럼 한 낱말이 줄보다 길어
+   * 쪼개야 하는 곳은 overflow-wrap 으로 따로 연다.
+   */
+  word-break: keep-all;
 }
 
 /* macOS hiddenInset 타이틀바 영역을 드래그 핸들로 */
@@ -216,7 +223,8 @@ kbd,
 /* ===== markdown ===== */
 .md {
   line-height: 1.65;
-  word-break: break-word;
+  /* break-word 는 낱말 안 어디서나 끊는다 — keep-all(body)을 무력화한다. 긴 낱말만 쪼개는 쪽으로. */
+  overflow-wrap: break-word;
   font-size: 13.5px;
 }
 .md > *:first-child {
@@ -337,7 +345,9 @@ kbd,
   overflow: hidden;
   white-space: pre-line;
   /* 생각에는 공백 없는 긴 경로·URL 이 자주 섞인다. 감길 자리가 없으면 첫 줄에서 가로로 잘려
-     나가고 둘째 줄이 비는데, 토큰 안에서 감기게 하면 두 줄을 다 쓴다. */
+     나가고 둘째 줄이 비는데, 토큰 안에서 감기게 하면 두 줄을 다 쓴다.
+     다만 anywhere 는 한국어 낱말까지 아무 데서나 끊으므로 keep-all 을 같이 건다. */
+  word-break: keep-all;
   overflow-wrap: anywhere;
   animation: reasoning-in 0.25s ease-out;
 }
