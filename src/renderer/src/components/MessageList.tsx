@@ -219,7 +219,8 @@ function Thinking({
       <div className="min-w-0 flex-1">
         {/* 아바타(32px + 위 여백 2px)와 같은 높이로 두고 세로 가운데 — 생각 텍스트가 붙으면 그 아래로 이어진다 */}
         <div className={`thinking-dots flex items-center gap-1.5 text-muted ${withAvatar ? "min-h-[34px]" : ""}`}>
-          <span className="mr-1 text-[12.5px]">
+          {/* 라벨에 긴 MCP 도구 이름이 들어온다 — 줄어들 수 있게 하고(min-w-0), 공백이 없으면 토큰 안에서 감기게. */}
+          <span className="mr-1 min-w-0 break-words text-[12.5px]">
             <span className="shimmer">{label}</span>
           </span>
           <span />

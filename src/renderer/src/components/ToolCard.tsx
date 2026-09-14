@@ -187,7 +187,11 @@ export function ToolCard({ block }: { block: ToolBlock }) {
             <span className="spin pointer-events-none absolute -inset-[3px] rounded-md border border-transparent border-t-accent" aria-hidden />
           )}
         </span>
-        <span className="font-medium">{block.name}</span>
+        {/* MCP 도구 이름은 길고 공백이 없다(mcp__playwright__playwright_evaluate) — flex 항목의 기본
+            min-width:auto 로는 줄어들지 못해 카드 밖으로 삐져나온다. 줄이고 말줄임, 전체 이름은 툴팁으로. */}
+        <span className="min-w-0 shrink truncate font-medium" title={block.name}>
+          {block.name}
+        </span>
         {filePath ? (
           // 헤더 버튼(펼치기) 안의 경로만 코드 뷰어로 연결. 펼침 토글은 막는다.
           <span
