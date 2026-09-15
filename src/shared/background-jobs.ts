@@ -68,8 +68,18 @@ export function mergeJobs(jobs: BackgroundJobDto[]): BackgroundJobDto[] {
 }
 
 /** 진행 줄에 쓸 한 줄. "rescue · 3분 12초 경과" */
-export function jobRunningLabel(job: BackgroundJobDto, now: number): string {
+export function jobElapsed(job: BackgroundJobDto, now: number): string {
   const secs = Math.max(0, Math.floor((now - job.startedAt) / 1000));
-  const elapsed = secs >= 60 ? `${Math.floor(secs / 60)}분 ${secs % 60}초` : `${secs}초`;
-  return `${job.label} · ${elapsed} 경과`;
+  return secs >= 60 ? `${Math.floor(secs / 60)}분 ${secs % 60}초` : `${secs}초`;
+}
+
+export function jobRunningLabel(job: BackgroundJobDto, now: number): string {
+  return `${job.label} · ${jobElapsed(job, now)} 경과`;
+}
+
+/** 여러 개일 때 접어 두는 한 줄. 가장 오래 돈 것을 기준으로 삼는다 — 사람이 궁금한 것은 "얼마나 됐나" 다. */
+export function jobsSummaryLabel(jobs: BackgroundJobDto[], now: number): string {
+  if (jobs.length === 0) return "";
+  const oldest = jobs.reduce((a, j) => (j.startedAt < a.startedAt ? j : a), jobs[0]);
+  return `${jobs.length}개 · 가장 오래 ${jobElapsed(oldest, now)} 경과`;
 }

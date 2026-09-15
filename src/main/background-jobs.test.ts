@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BackgroundJobWatcher } from "./background-jobs";
-import { jobRunningLabel, mergeJobs, parseBackgroundJob, type BackgroundJobDto } from "@shared/background-jobs";
+import { jobRunningLabel, jobsSummaryLabel, mergeJobs, parseBackgroundJob, type BackgroundJobDto } from "@shared/background-jobs";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -142,4 +142,18 @@ test("BackgroundJobWatcher: 깨진 JSON·없는 디렉토리에도 죽지 않는
   assert.deepEqual(missing.current(), []);
   missing.stop();
   rmSync(root, { recursive: true, force: true });
+});
+
+test("여러 개일 때의 한 줄 — 가장 오래 돈 것 기준", () => {
+  const at = (id: string, startedAt: number): BackgroundJobDto => ({
+    id, sessionId: "s", label: "명령", title: id, status: "running", summary: id, startedAt, completedAt: null, root: "/r",
+  });
+  const now = 100_000;
+  assert.equal(jobsSummaryLabel([], now), "");
+  assert.equal(jobsSummaryLabel([at("a", now - 5_000)], now), "1개 · 가장 오래 5초 경과");
+  // 순서가 뒤섞여 있어도 가장 오래된 것을 고른다
+  assert.equal(
+    jobsSummaryLabel([at("a", now - 5_000), at("b", now - 130_000), at("c", now - 60_000)], now),
+    "3개 · 가장 오래 2분 10초 경과",
+  );
 });
