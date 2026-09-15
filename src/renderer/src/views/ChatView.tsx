@@ -22,6 +22,7 @@ import { type WorktreeMeta,
   type TabMeta,
   type Workspace,
 } from "@shared/workspace-model";
+import { BackgroundJobsBar } from "../components/BackgroundJobsBar";
 import { Composer } from "../components/Composer";
 import { ContextPanel, shorten } from "../components/ContextPanel";
 import { LocateFileContext, OpenFileContext, type LocateFile, type OpenFile } from "../components/FileViewer";
@@ -848,6 +849,8 @@ export function ChatView({
                 )}
               </div>
             )}
+
+            <BackgroundJobsBar sessionId={config?.sessionId ?? null} />
 
             <Composer
               disabled={!cwd || terminalControlled}

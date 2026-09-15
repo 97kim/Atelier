@@ -44,6 +44,17 @@ const MARK = "백그라운드시험";
   result("턴이 끝나도 도는 명령이 보인다", idle.n > 0);
   result("무슨 일인지 알아볼 수 있다", /명령/.test(idle.text) && idle.text.replace(/\s+/g, "").length > 12, `(${idle.text})`);
 
+  // 대화를 위로 올려도 보여야 한다 — 예전엔 대화 맨 끝에 있어 화면 밖으로 밀렸다.
+  await ev(() => { const el = document.querySelector("[data-message-list]"); if (el) el.scrollTop = 0; });
+  await page.waitForTimeout(500);
+  const pinned = await ev(() => {
+    const el = document.querySelector("[data-background-jobs]");
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), h: window.innerHeight };
+  });
+  result("위로 올려 읽어도 표시가 보인다", !!pinned && pinned.bottom > 0 && pinned.top < pinned.h, `(${JSON.stringify(pinned)})`);
+
   await page.screenshot({ path: E2E + "/shot-bg-bash.png" });
 
   // 명령이 끝나면 목록에서 빠진다

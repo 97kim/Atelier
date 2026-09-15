@@ -11,3 +11,10 @@ export function moveNextTo(ids: string[], movedId: string, targetId: string, aft
   next.splice(after ? at + 1 : at, 0, movedId);
   return next;
 }
+
+/** 목록에서 id 의 이웃(위/아래). 끝이면 null — 메뉴에서 그 방향을 잠근다. */
+export function neighborOf(ids: string[], id: string, dir: "up" | "down"): string | null {
+  const i = ids.indexOf(id);
+  if (i === -1) return null;
+  return ids[dir === "up" ? i - 1 : i + 1] ?? null;
+}

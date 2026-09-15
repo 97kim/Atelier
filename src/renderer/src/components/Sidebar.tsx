@@ -7,7 +7,7 @@ import {
   type TabMeta,
   type Workspace,
 } from "@shared/workspace-model";
-import { moveNextTo } from "@shared/reorder";
+import { moveNextTo, neighborOf } from "@shared/reorder";
 import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
 import { Logo } from "./Logo";
@@ -26,6 +26,9 @@ const NAV: { id: View; label: string; icon: "chat" | "usage" | "settings" }[] =
 /** 워크스페이스마다 닫힌 세션은 이만큼만. 그 아래는 "n개 더" 로 접는다. */
 const CLOSED_LIMIT = 12;
 const COLLAPSED_KEY = "workbench.sidebar.collapsed";
+/** 드래그 중 자동 스크롤이 작동하는 가장자리 폭과 최대 속도(px/s). */
+const EDGE_PX = 24;
+const MAX_SCROLL_SPEED = 360;
 
 type Menu =
   | { kind: "tab"; id: string; x: number; y: number }
@@ -113,7 +116,59 @@ export function Sidebar({
   const [drag, setDrag] = useState<DragItem | null>(null);
   const dropRef = useRef<{ id: string; after: boolean } | null>(null);
   const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null);
+  // 드래그 중 목록 자동 스크롤. 세션이 많으면 목적지가 화면 밖이라 끌고 갈 수가 없다.
+  // 가장자리 EDGE_PX 안에서만 움직이고, 가장자리에 가까울수록 빨라진다.
+  const autoScroll = useRef<{ el: HTMLElement; speed: number } | null>(null);
+  const rafRef = useRef(0);
+  const stopAutoScroll = () => {
+    autoScroll.current = null;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+  };
+  const onTreeDragOver = (e: React.DragEvent) => {
+    if (!dragRef.current) return;
+    const el = e.currentTarget as HTMLElement;
+    const r = el.getBoundingClientRect();
+    const fromTop = e.clientY - r.top;
+    const fromBottom = r.bottom - e.clientY;
+    let speed = 0;
+    if (fromTop < EDGE_PX) speed = -MAX_SCROLL_SPEED * Math.min(1, (EDGE_PX - fromTop) / EDGE_PX);
+    else if (fromBottom < EDGE_PX) speed = MAX_SCROLL_SPEED * Math.min(1, (EDGE_PX - fromBottom) / EDGE_PX);
+    if (speed === 0) {
+      stopAutoScroll();
+      return;
+    }
+    autoScroll.current = { el, speed };
+    if (rafRef.current) return; // 이미 돌고 있다 — 속도만 갱신했다
+    let prev = performance.now();
+    const step = (t: number) => {
+      const cur = autoScroll.current;
+      if (!cur) {
+        rafRef.current = 0;
+        return;
+      }
+      cur.el.scrollTop += (cur.speed * (t - prev)) / 1000;
+      prev = t;
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+  };
+
+  // 끌기 말고도 자리를 옮길 수 있어야 한다 — 마우스를 끌기 어려운 경우도 있고,
+  // 목록이 길면 한 칸 옮기는 데도 끌고 가야 한다. 메뉴는 클릭·키보드 양쪽에서 열린다.
+  const openTabIdsOf = (wsId: string) => workspaceTabs(model, wsId).filter((t) => t.open).map((t) => t.id);
+  const moveTabBy = (tabId: string, wsId: string, dir: "up" | "down") => {
+    const neighbor = neighborOf(openTabIdsOf(wsId), tabId, dir);
+    if (neighbor) onReorderTabs(moveNextTo(model.openTabIds, tabId, neighbor, dir === "down"));
+  };
+  const moveWsBy = (wsId: string, dir: "up" | "down") => {
+    const ids = model.workspaces.map((w) => w.id);
+    const neighbor = neighborOf(ids, wsId, dir);
+    if (neighbor) onReorderWorkspaces(moveNextTo(ids, wsId, neighbor, dir === "down"));
+  };
+
   const endDrag = () => {
+    stopAutoScroll();
     dragRef.current = null;
     dropRef.current = null;
     setDrag(null);
@@ -403,6 +458,13 @@ export function Sidebar({
 
       <div
         className="no-drag mt-4 min-h-0 flex-1 overflow-y-auto px-3 pb-3"
+        onDragOver={onTreeDragOver}
+        onDrop={stopAutoScroll}
+        onDragLeave={(e) => {
+          const to = e.relatedTarget as Node | null;
+          // 목록을 아주 벗어났을 때만 멈춘다 — 안쪽 행 사이를 지나는 것은 벗어난 것이 아니다.
+          if (!to || !(e.currentTarget as HTMLElement).contains(to)) stopAutoScroll();
+        }}
         data-workspace-tree
       >
         <div className="label mb-1 flex items-center justify-between px-1">
@@ -678,6 +740,26 @@ export function Sidebar({
                   });
                 }}
               />
+              {menuTab.open && (
+                <>
+                  <MenuItem
+                    label="위로 이동"
+                    disabled={!neighborOf(openTabIdsOf(menuTab.workspaceId), menuTab.id, "up")}
+                    onPick={() => {
+                      setMenu(null);
+                      moveTabBy(menuTab.id, menuTab.workspaceId, "up");
+                    }}
+                  />
+                  <MenuItem
+                    label="아래로 이동"
+                    disabled={!neighborOf(openTabIdsOf(menuTab.workspaceId), menuTab.id, "down")}
+                    onPick={() => {
+                      setMenu(null);
+                      moveTabBy(menuTab.id, menuTab.workspaceId, "down");
+                    }}
+                  />
+                </>
+              )}
               <MenuItem
                 label="마크다운으로 내보내기…"
                 onPick={() => {
@@ -724,6 +806,22 @@ export function Sidebar({
                 onPick={() => {
                   setMenu(null);
                   setRenamingWs({ id: menuWs.id, draft: menuWs.name });
+                }}
+              />
+              <MenuItem
+                label="위로 이동"
+                disabled={!neighborOf(model.workspaces.map((w) => w.id), menuWs.id, "up")}
+                onPick={() => {
+                  setMenu(null);
+                  moveWsBy(menuWs.id, "up");
+                }}
+              />
+              <MenuItem
+                label="아래로 이동"
+                disabled={!neighborOf(model.workspaces.map((w) => w.id), menuWs.id, "down")}
+                onPick={() => {
+                  setMenu(null);
+                  moveWsBy(menuWs.id, "down");
                 }}
               />
               <MenuItem
@@ -905,16 +1003,23 @@ function MenuItem({
   label,
   onPick,
   danger,
+  disabled,
 }: {
   label: string;
   onPick: () => void;
   danger?: boolean;
+  /** 지금은 할 수 없는 동작(맨 위에서 "위로 이동" 처럼). 감추지 않고 잠근다 — 자리가 흔들리지 않게. */
+  disabled?: boolean;
 }) {
   return (
     <button
       role="menuitem"
       onClick={onPick}
-      className={`flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] hover:bg-panel-2 ${danger ? "text-err" : "text-fg"}`}
+      disabled={disabled}
+      aria-disabled={disabled}
+      className={`flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+        disabled ? "cursor-default text-muted-2 opacity-60" : `hover:bg-panel-2 ${danger ? "text-err" : "text-fg"}`
+      }`}
     >
       {label}
     </button>

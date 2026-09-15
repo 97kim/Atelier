@@ -31,6 +31,11 @@ const A = `/tmp/atelier-drag-a-${stamp}`, B = `/tmp/atelier-drag-b-${stamp}`;
     const w = document.querySelector(`[data-workspace="${id}"]`);
     return w ? [...w.querySelectorAll("[data-session]")].map((e) => e.getAttribute("data-session")) : [];
   }, wsId);
+  // 닫힌 세션은 자리를 정할 수 없다 — 순서를 볼 때는 열린 것만 센다.
+  const openSessionsIn = (wsId) => ev((id) => {
+    const w = document.querySelector(`[data-workspace="${id}"]`);
+    return w ? [...w.querySelectorAll('[data-session][data-open="true"]')].map((e) => e.getAttribute("data-session")) : [];
+  }, wsId);
 
   // 사람 없이 드래그를 재현한다 — React 는 이 이벤트들을 그대로 받는다.
   // 실제 드래그처럼 이벤트 사이에 틈을 둔다(한 틱에 몰아 쏘면 화면이 아직 갱신되지 않은 상태를 시험하게 된다).
@@ -122,6 +127,60 @@ const A = `/tmp/atelier-drag-a-${stamp}`, B = `/tmp/atelier-drag-b-${stamp}`;
   await fire(`[data-session="${t1}"]`, "dragend", yOver);
   result("유효한 자리에는 선이 뜬다", shown !== null, `(data-drop=${shown})`);
   result("벗어나면 선이 지워진다", cleared === null, `(data-drop=${cleared})`);
+
+  // 드래그 중 자동 스크롤 — 목적지가 화면 밖일 때 끌고 갈 수 있어야 한다
+  const treeState = () => ev(() => {
+    const el = document.querySelector("[data-workspace-tree]");
+    return el ? { top: Math.round(el.scrollTop), max: Math.round(el.scrollHeight - el.clientHeight), rect: el.getBoundingClientRect().toJSON() } : null;
+  });
+  const t0 = await treeState();
+  if (!t0 || t0.max < 60) {
+    console.log("SKIP (목록이 스크롤될 만큼 길지 않다)");
+  } else {
+    await ev(() => { document.querySelector("[data-workspace-tree]").scrollTop = 0; });
+    await fire(`[data-session="${t1}"]`, "dragstart", 0);
+    await page.waitForTimeout(150);
+    // 목록 아래 가장자리 안쪽으로 끌고 간다
+    const y = Math.round(t0.rect.bottom - 8);
+    for (let i = 0; i < 8; i++) { await fire("[data-workspace-tree]", "dragover", y); await page.waitForTimeout(100); }
+    const t1s = await treeState();
+    await fire(`[data-session="${t1}"]`, "dragend", y);
+    await page.waitForTimeout(300);
+    const t2s = await treeState();
+    result("가장자리로 끌면 목록이 스스로 내려간다", t1s.top > 20, `(scrollTop=${t1s?.top})`);
+    result("드래그가 끝나면 스크롤도 멈춘다", Math.abs(t2s.top - t1s.top) < 40, `(${t1s?.top} → ${t2s?.top})`);
+  }
+
+  // 우클릭 메뉴로도 옮긴다(끌기 대안)
+  const menuPick = async (sel, label) => {
+    await ev((s) => {
+      const el = document.querySelector(s);
+      el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 100, clientY: 200 }));
+    }, sel);
+    await page.waitForTimeout(400);
+    return ev((l) => {
+      const items = [...document.querySelectorAll("[data-session-menu] [role=menuitem]")];
+      const it = items.find((e) => e.textContent.trim() === l);
+      if (!it) return "없음";
+      if (it.disabled) return "잠김";
+      it.click();
+      return "눌림";
+    }, label);
+  };
+
+  const beforeMenu = await openSessionsIn(wsA);
+  const last = beforeMenu[beforeMenu.length - 1];
+  const picked = await menuPick(`[data-session="${last}"]`, "위로 이동");
+  await page.waitForTimeout(700);
+  const afterMenu = await openSessionsIn(wsA);
+  result("메뉴의 '위로 이동' 이 있다", picked === "눌림", `(${picked})`);
+  result("메뉴로 순서가 바뀐다", afterMenu.indexOf(last) === beforeMenu.indexOf(last) - 1, `(${beforeMenu.indexOf(last)} → ${afterMenu.indexOf(last)})`);
+
+  // 맨 위에서는 '위로 이동' 이 잠겨 있다
+  const first = (await openSessionsIn(wsA))[0];
+  const lockedPick = await menuPick(`[data-session="${first}"]`, "위로 이동");
+  await ev(() => document.body.click());
+  result("맨 위에서는 '위로 이동' 이 잠긴다", lockedPick === "잠김", `(${lockedPick})`);
 
   await page.screenshot({ path: E2E + "/shot-sidebar-drag.png" });
   await b.close();

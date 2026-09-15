@@ -3,7 +3,6 @@ import { clearReveal, onReveal, pendingReveal } from "../reveal";
 import type { SessionStatus } from "@shared/chat-events";
 import type { Provider } from "@shared/ipc";
 import type { Block, ReviewBlock } from "@shared/session-state";
-import { jobRunningLabel, type BackgroundJobDto } from "@shared/background-jobs";
 import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
 import { Logo } from "./Logo";
@@ -186,7 +185,6 @@ export function MessageList({
           />
         )}
         {status !== "idle" && status !== "error" && (turnStartedAt ?? lastUserTs) !== null && <RunningFooter since={status === "queued" ? lastUserTs! : (turnStartedAt ?? lastUserTs!)} blocks={blocks} status={status} />}
-        <BackgroundJobsFooter sessionId={sessionId} />
         <div ref={endRef} />
       </div>
     </div>
@@ -269,40 +267,6 @@ function Thinking({
  * 턴이 끝난 뒤에도 도는 작업(백그라운드 Codex 등). 탭은 "대기" 인데 일은 남아 있다는 것을 여기서만 알 수 있다 —
  * 그 프로세스는 앱에서 떨어져 나가 하위 에이전트 표시에도 안 잡힌다.
  */
-function BackgroundJobsFooter({ sessionId }: { sessionId: string | null }) {
-  const [jobs, setJobs] = useState<BackgroundJobDto[]>([]);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    let alive = true;
-    void window.workbench.jobs.list().then((j) => alive && setJobs(j));
-    const off = window.workbench.jobs.onChanged((j) => setJobs(j));
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-  const mine = sessionId ? jobs.filter((j) => j.sessionId === sessionId) : [];
-  useEffect(() => {
-    if (mine.length === 0) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [mine.length]);
-  if (mine.length === 0) return null;
-  return (
-    <div className="content-indent flex flex-col gap-1" data-background-jobs={mine.length}>
-      {mine.map((j) => (
-        <div key={j.id} className="flex items-center gap-2 text-[11px] text-muted-2" data-background-job={j.id}>
-          <span className="spin inline-block h-2.5 w-2.5 rounded-full border-[1.5px] border-warn border-t-transparent" />
-          <span className="shimmer" style={{ "--shimmer-base": "var(--color-muted)", "--shimmer-hi": "var(--color-fg)" } as React.CSSProperties}>
-            백그라운드
-          </span>
-          <span className="mono truncate">{jobRunningLabel(j, now)}</span>
-          {j.summary && <span className="min-w-0 flex-1 truncate opacity-70">{j.summary}</span>}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function RunningFooter({ since, blocks, status }: { since: number; blocks: Block[]; status: SessionStatus }) {
   const [now, setNow] = useState(() => Date.now());
