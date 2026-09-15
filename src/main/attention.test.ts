@@ -61,3 +61,29 @@ test("AttentionTracker: 권한 대기·미확인 완료·확인 시 해제·Dock
   t.status("e", "running");
   assert.equal(t.snapshot().e, undefined);
 });
+
+test("백그라운드 작업이 끝나면 보고 있지 않은 탭에 표시를 남긴다", () => {
+  let viewing = false;
+  const seen: Record<string, string>[] = [];
+  const a = new AttentionTracker({ isViewing: () => viewing, onChange: (m) => seen.push(m) });
+
+  a.backgroundJob("t1", false);
+  assert.equal(a.snapshot().t1, "done");
+  a.backgroundJob("t1", true);
+  assert.equal(a.snapshot().t1, "error");
+
+  // 탭을 보면 지운다
+  a.viewed("t1");
+  assert.equal(a.snapshot().t1, undefined);
+
+  // 보고 있는 탭에는 남기지 않는다 — 이미 눈앞에 있다
+  viewing = true;
+  a.backgroundJob("t2", false);
+  assert.equal(a.snapshot().t2, undefined);
+
+  // 권한 대기는 덮지 않는다(그쪽이 더 급하다)
+  viewing = false;
+  a.status("t3", "waiting_permission");
+  a.backgroundJob("t3", false);
+  assert.equal(a.snapshot().t3, "permission");
+});

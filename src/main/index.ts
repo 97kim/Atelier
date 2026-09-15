@@ -248,6 +248,7 @@ function onBackgroundJobFinished(job: BackgroundJobDto) {
   // 이 앱이 시킨 작업이 아니면(다른 터미널의 Claude Code) 알리지 않는다
   if (!tabId) return;
   const ok = job.status === "completed";
+  attention.backgroundJob(tabId, !ok);
   notify(
     `${ok ? "백그라운드 작업 완료" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
     `${job.label} — ${job.summary || job.title}`,
@@ -1066,6 +1067,8 @@ function bootstrap() {
       if (note.status === "stopped") return;
       const job = bgTasks.recall(note.id);
       const ok = note.status === "completed";
+      // 배너는 잠깐이다. 보고 있지 않았다면 탭에도 표시를 남긴다 — 자리를 비웠다 와도 알아보게.
+      attention.backgroundJob(tabId, !ok);
       notify(
         `${ok ? "백그라운드 작업 완료" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
         note.summary || job?.summary || job?.title || "백그라운드 작업",

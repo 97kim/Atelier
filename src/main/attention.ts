@@ -48,6 +48,17 @@ export class AttentionTracker {
     }
   }
 
+  /**
+   * 턴 밖에서 도는 백그라운드 작업이 끝났다. 턴 결과와 같은 취급 —
+   * 알림 배너는 잠깐 떴다 사라지므로, 보고 있지 않았다면 탭에 표시를 남겨야 나중에 알아본다.
+   * 권한 대기 중이면 덮지 않는다(그쪽이 더 급하다).
+   */
+  backgroundJob(tabId: string, failed: boolean): void {
+    if (this.deps.isViewing(tabId)) return;
+    if (this.map.get(tabId) === "permission") return;
+    this.set(tabId, failed ? "error" : "done");
+  }
+
   /** 터미널 모드의 권한 대기(훅 감지)가 켜지거나 꺼졌다. */
   terminalPermission(tabId: string, waiting: boolean): void {
     if (waiting) this.set(tabId, "permission");
