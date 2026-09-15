@@ -77,9 +77,13 @@ export function jobRunningLabel(job: BackgroundJobDto, now: number): string {
   return `${job.label} · ${jobElapsed(job, now)} 경과`;
 }
 
-/** 여러 개일 때 접어 두는 한 줄. 가장 오래 돈 것을 기준으로 삼는다 — 사람이 궁금한 것은 "얼마나 됐나" 다. */
+/**
+ * 여러 개일 때 접어 두는 한 줄. 시간은 가장 오래 돈 것 기준이지만 그렇다고 쓰지는 않는다 —
+ * "가장 오래 12초 경과" 는 읽고 무슨 뜻인지 되묻게 된다. 여럿을 띄울 땐 대개 같이 시작해 차이가 작고,
+ * 펼치면 각 줄에 자기 시간이 따로 나오므로 여기서까지 정확할 필요가 없다.
+ */
 export function jobsSummaryLabel(jobs: BackgroundJobDto[], now: number): string {
   if (jobs.length === 0) return "";
   const oldest = jobs.reduce((a, j) => (j.startedAt < a.startedAt ? j : a), jobs[0]);
-  return `${jobs.length}개 · 가장 오래 ${jobElapsed(oldest, now)} 경과`;
+  return `${jobs.length}개 · ${jobElapsed(oldest, now)} 경과`;
 }
