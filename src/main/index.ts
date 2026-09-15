@@ -997,11 +997,14 @@ function bootstrap() {
     isViewing: (tabId) =>
       workspaces.state().model.activeTabId === tabId &&
       BrowserWindow.getAllWindows().some((w) => w.isFocused()),
-    onChange: () => {
+    onChange: (map) => {
       workspaces.onAttention();
       updateDockBadge();
+      // 껐다 켜도 남게. "안 본 응답" 표시가 업데이트 한 번에 사라지면 믿을 수 없는 표시가 된다.
+      store.saveAttention(map);
     },
   });
+  attention.restore(store.loadAttention());
   workspaces.attentionSource = () => attention.snapshot();
   workspaces.attentionHooks = {
     viewed: (tabId) => attention.viewed(tabId),

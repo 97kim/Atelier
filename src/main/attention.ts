@@ -18,6 +18,16 @@ export class AttentionTracker {
 
   constructor(private readonly deps: AttentionDeps) {}
 
+  /**
+   * 지난 실행에서 남은 표시를 되살린다. 권한 대기는 되살리지 않는다 —
+   * 그 프롬프트는 프로세스와 함께 사라졌으므로 "답할 것이 있다" 가 거짓이 된다.
+   */
+  restore(saved: Record<string, string>): void {
+    for (const [tabId, kind] of Object.entries(saved)) {
+      if (kind === "done" || kind === "error") this.map.set(tabId, kind);
+    }
+  }
+
   snapshot(): Record<string, AttentionKind> {
     return Object.fromEntries(this.map);
   }

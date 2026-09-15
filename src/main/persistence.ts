@@ -24,12 +24,42 @@ const QUEUE_MAX_ITEMS = 20;
 export class Store {
   private readonly modelPath: string;
   private readonly threadsDir: string;
+  private readonly attentionPath: string;
   private readonly buffers = new Map<string, string[]>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly dir: string) {
     this.modelPath = path.join(dir, "workspaces.json");
     this.threadsDir = path.join(dir, "threads");
+    this.attentionPath = path.join(dir, "attention.json");
+  }
+
+  // ===== 확인하지 않은 응답 =====
+  // 앱을 껐다 켜도 남아야 한다. 안 그러면 "안 본 것" 표시가 업데이트 한 번에 사라져 믿을 수 없게 된다.
+
+  saveAttention(map: Record<string, string>): void {
+    try {
+      if (Object.keys(map).length === 0) {
+        fs.rmSync(this.attentionPath, { force: true });
+        return;
+      }
+      fs.mkdirSync(this.dir, { recursive: true });
+      fs.writeFileSync(this.attentionPath, JSON.stringify(map), "utf8");
+    } catch (e) {
+      console.error("[store] attention 저장 실패:", e);
+    }
+  }
+
+  loadAttention(): Record<string, string> {
+    try {
+      const v: unknown = JSON.parse(fs.readFileSync(this.attentionPath, "utf8"));
+      if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+      const out: Record<string, string> = {};
+      for (const [k, kind] of Object.entries(v as Record<string, unknown>)) if (typeof kind === "string") out[k] = kind;
+      return out;
+    } catch {
+      return {};
+    }
   }
 
   // ===== model =====

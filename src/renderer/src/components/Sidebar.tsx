@@ -12,7 +12,7 @@ import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
 import { Logo } from "./Logo";
 import { SidebarLimits } from "./SidebarLimits";
-import { StatusDot } from "./StatusDot";
+import { ATTENTION_LABEL, StatusDot } from "./StatusDot";
 
 export type View = "chat" | "usage" | "settings";
 
@@ -519,6 +519,8 @@ export function Sidebar({
         {workspaces.map((w) => {
           const tabs = workspaceTabs(model, w.id);
           const openCount = tabs.filter((t) => t.open).length;
+          // 접어 둔 워크스페이스 안에서 응답이 와도 알 수 있어야 한다.
+          const unread = tabs.filter((t) => t.open && attention[t.id]).length;
           const isCollapsed = collapsed.has(w.id);
           const isActiveWs = activeWs?.id === w.id;
           const closedTabs = tabs.filter((t) => !t.open);
@@ -603,10 +605,20 @@ export function Sidebar({
                       {w.name}
                     </span>
                   )}
-                  {openCount > 0 && (
-                    <span className="label shrink-0 text-muted-2 group-hover:hidden">
-                      {openCount}
+                  {unread > 0 ? (
+                    <span
+                      className="label shrink-0 rounded-full bg-accent/20 px-1.5 font-medium text-accent group-hover:hidden"
+                      title={`확인하지 않은 응답 ${unread}개`}
+                      data-ws-unread={unread}
+                    >
+                      {unread}
                     </span>
+                  ) : (
+                    openCount > 0 && (
+                      <span className="label shrink-0 text-muted-2 group-hover:hidden">
+                        {openCount}
+                      </span>
+                    )
                   )}
                   <button
                     onClick={(e) => {
@@ -903,6 +915,7 @@ function SessionRow({
   drag: React.HTMLAttributes<HTMLDivElement> & { draggable: boolean };
   dragging: boolean;
 }) {
+  const unread = tab.open ? attention : null;
   return (
     <div
       {...drag}
@@ -939,15 +952,19 @@ function SessionRow({
       ) : (
         <span
           className={`min-w-0 flex-1 truncate ${
-            tab.open
-              ? attention
-                ? "font-medium text-fg"
-                : "text-fg"
-              : "text-muted"
+            tab.open ? (unread ? "font-semibold text-fg" : "text-fg") : "text-muted"
           }`}
         >
           {tabTitle(tab)}
         </span>
+      )}
+      {/* 안 본 응답은 목록을 훑을 때 바로 눈에 들어와야 한다 — 왼쪽 상태 점은 색만 바뀌어 잘 안 보인다. */}
+      {unread && (
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${unread === "error" ? "bg-err" : unread === "permission" ? "bg-warn" : "bg-accent"}`}
+          title={ATTENTION_LABEL[unread]}
+          data-unread={unread}
+        />
       )}
       <ProviderLogo provider={tab.provider} size={13} className="opacity-80 group-hover:hidden" />
       <button

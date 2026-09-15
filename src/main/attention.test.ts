@@ -87,3 +87,12 @@ test("백그라운드 작업이 끝나면 보고 있지 않은 탭에 표시를 
   a.backgroundJob("t3", false);
   assert.equal(a.snapshot().t3, "permission");
 });
+
+test("지난 실행의 표시를 되살린다 — 권한 대기는 빼고", () => {
+  const a = new AttentionTracker({ isViewing: () => false, onChange: () => {} });
+  a.restore({ t1: "done", t2: "error", t3: "permission", t4: "이상한값" });
+  assert.deepEqual(a.snapshot(), { t1: "done", t2: "error" });
+  // 되살린 것도 탭을 보면 지워진다
+  a.viewed("t1");
+  assert.equal(a.snapshot().t1, undefined);
+});
