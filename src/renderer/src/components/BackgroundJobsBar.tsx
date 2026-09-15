@@ -33,9 +33,9 @@ export function BackgroundJobsBar({ sessionId }: { sessionId: string | null }) {
   const shown = mine.slice(0, VISIBLE_MAX);
   const hidden = mine.length - shown.length;
   return (
-    <div className="flex flex-col gap-1 border-t border-line px-4 pb-1.5 pt-2" data-background-jobs={mine.length}>
+    <div className="flex flex-col items-center gap-1 border-t border-line px-4 pb-1.5 pt-2" data-background-jobs={mine.length}>
       {shown.map((j) => (
-        <div key={j.id} className="flex items-center gap-2 text-[11px] text-muted-2" data-background-job={j.id}>
+        <div key={j.id} className="flex max-w-full items-center gap-2 text-[11px] text-muted-2" data-background-job={j.id}>
           <span className="spin inline-block h-2.5 w-2.5 shrink-0 rounded-full border-[1.5px] border-warn border-t-transparent" />
           <span
             className="shrink-0 shimmer"
@@ -44,7 +44,7 @@ export function BackgroundJobsBar({ sessionId }: { sessionId: string | null }) {
             백그라운드
           </span>
           <span className="mono shrink-0">{jobRunningLabel(j, now)}</span>
-          {j.summary && <span className="min-w-0 flex-1 truncate opacity-70">{j.summary}</span>}
+          {j.summary && <span className="min-w-0 truncate opacity-70">{j.summary}</span>}
         </div>
       ))}
       {hidden > 0 && <div className="text-[11px] text-muted-2">외 {hidden}개</div>}
