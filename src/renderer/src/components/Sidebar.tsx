@@ -119,28 +119,48 @@ export function Sidebar({
     setDrag(null);
     setDropAt(null);
   };
-  const dragProps = (kind: "ws" | "tab", id: string, wsId: string, enabled = true) => {
+  // 끄는 쪽과 받는 쪽을 나눈다. 워크스페이스는 헤더에서 끌지만 받는 자리는 그룹 전체다 —
+  // 헤더에만 선을 그리면 "A 뒤" 가 A 의 세션들 위에 그려져, 실제로 들어갈 자리(A 그룹 다음)와 어긋난다.
+  const dragSource = (kind: "ws" | "tab", id: string, wsId: string, canDrag: boolean) => ({
+    draggable: canDrag,
+    onDragStart: (e: React.DragEvent) => {
+      dragRef.current = { kind, id, wsId };
+      setDrag({ kind, id, wsId });
+      // 텍스트로도 실어 둔다 — 브라우저가 드래그를 시작하려면 무엇이든 담겨 있어야 한다.
+      e.dataTransfer?.setData("text/plain", id);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    },
+    onDragEnd: endDrag,
+    "data-dragging": drag?.id === id ? "true" : undefined,
+  });
+
+  const dropTarget = (kind: "ws" | "tab", id: string, wsId: string, canDrop: boolean) => {
+    // 받을 수 없는 자리에는 선을 그리지 않는다. draggable=false 는 출발만 막을 뿐이라,
+    // 닫힌 세션 위에도 선이 떠서 "될 것처럼 보이고 아무 일도 안 일어나는" 상태가 됐었다.
     const mine = () => {
       const d = dragRef.current;
-      return d !== null && d.kind === kind && (kind === "ws" || d.wsId === wsId) && d.id !== id;
+      return canDrop && d !== null && d.kind === kind && (kind === "ws" || d.wsId === wsId) && d.id !== id;
+    };
+    const clear = () => {
+      if (dropRef.current?.id !== id) return;
+      dropRef.current = null;
+      setDropAt(null);
     };
     return {
-      draggable: enabled,
-      onDragStart: (e: React.DragEvent) => {
-        dragRef.current = { kind, id, wsId };
-        setDrag({ kind, id, wsId });
-        // 텍스트로도 실어 둔다 — 브라우저가 드래그를 시작하려면 무엇이든 담겨 있어야 한다.
-        e.dataTransfer?.setData("text/plain", id);
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-      },
-      onDragEnd: endDrag,
       onDragOver: (e: React.DragEvent) => {
         if (!mine()) return;
         e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const after = e.clientY > r.top + r.height / 2;
         dropRef.current = { id, after };
         setDropAt((prev) => (prev && prev.id === id && prev.after === after ? prev : { id, after }));
+      },
+      // 벗어나면 선을 지운다. 안쪽 요소로 옮겨 다니는 것은 벗어난 것이 아니다.
+      onDragLeave: (e: React.DragEvent) => {
+        const to = e.relatedTarget as Node | null;
+        if (to && (e.currentTarget as HTMLElement).contains(to)) return;
+        clear();
       },
       onDrop: (e: React.DragEvent) => {
         e.preventDefault();
@@ -157,7 +177,6 @@ export function Sidebar({
       style: (dropAt?.id === id
         ? { boxShadow: `inset 0 ${dropAt.after ? "-2px" : "2px"} 0 var(--color-accent)` }
         : undefined) as React.CSSProperties | undefined,
-      "data-dragging": drag?.id === id ? "true" : undefined,
       "data-drop": dropAt?.id === id ? (dropAt.after ? "after" : "before") : undefined,
     };
   };
@@ -447,7 +466,7 @@ export function Sidebar({
           const visible =
             hiddenClosed > 0 ? tabs.slice(0, tabs.length - hiddenClosed) : tabs;
           return (
-            <div key={w.id} className="mb-1.5" data-workspace={w.id}>
+            <div key={w.id} className="mb-1.5" data-workspace={w.id} {...dropTarget("ws", w.id, w.id, true)}>
               {confirm?.kind === "ws" && confirm.id === w.id ? (
                 <ConfirmRow
                   text="세션 기록까지 제거할까요?"
@@ -460,7 +479,7 @@ export function Sidebar({
                 />
               ) : (
                 <div
-                  {...dragProps("ws", w.id, w.id, renamingWs?.id !== w.id)}
+                  {...dragSource("ws", w.id, w.id, renamingWs?.id !== w.id)}
                   data-workspace-head={w.id}
                   onClick={() => toggleCollapsed(w.id)}
                   onContextMenu={(e) =>
@@ -472,7 +491,7 @@ export function Sidebar({
                     })
                   }
                   className={`group flex cursor-default items-center gap-1.5 rounded-md py-1.5 pl-1 pr-1 ${
-                    drag?.id === w.id ? "opacity-50" : ""
+                    drag?.id === w.id ? "opacity-70" : ""
                   } ${
                     menu?.kind === "ws" && menu.id === w.id
                       ? "bg-panel-2"
@@ -562,7 +581,10 @@ export function Sidebar({
                         />
                       ) : (
                         <SessionRow
-                          drag={dragProps("tab", tab.id, w.id, tab.open && renaming?.tabId !== tab.id)}
+                          drag={{
+                            ...dragSource("tab", tab.id, w.id, tab.open && renaming?.tabId !== tab.id),
+                            ...dropTarget("tab", tab.id, w.id, tab.open),
+                          }}
                           dragging={drag?.id === tab.id}
                           tab={tab}
                           status={statuses[tab.id] ?? "idle"}
@@ -790,7 +812,7 @@ function SessionRow({
       onDoubleClick={onStartRename}
       onContextMenu={onContextMenu}
       className={`group flex cursor-default items-center gap-2 rounded-md py-1.5 pl-2 pr-1 ${
-        dragging ? "opacity-50" : ""
+        dragging ? "opacity-70" : ""
       } ${active || highlighted ? "bg-panel-2" : "hover:bg-panel-2/60"}`}
       data-session={tab.id}
       data-open={tab.open ? "true" : "false"}

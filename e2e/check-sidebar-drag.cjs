@@ -34,13 +34,14 @@ const A = `/tmp/atelier-drag-a-${stamp}`, B = `/tmp/atelier-drag-b-${stamp}`;
 
   // 사람 없이 드래그를 재현한다 — React 는 이 이벤트들을 그대로 받는다.
   // 실제 드래그처럼 이벤트 사이에 틈을 둔다(한 틱에 몰아 쏘면 화면이 아직 갱신되지 않은 상태를 시험하게 된다).
-  const fire = (sel, type, y) => ev(([s, t, yy]) => {
+  const fire = (sel, type, y, outside = false) => ev(([s, t, yy, out]) => {
     const el = document.querySelector(s);
     if (!el) return "없음";
     window.__dt = window.__dt || new DataTransfer();
-    el.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: window.__dt, clientY: yy }));
+    el.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: window.__dt, clientY: yy, relatedTarget: out ? document.body : null }));
     return "ok";
-  }, [sel, type, y]);
+  }, [sel, type, y, outside]);
+  const dropMark = (sel) => ev((s) => document.querySelector(s)?.getAttribute("data-drop") ?? null, sel);
   const midY = (sel, af) => ev(([s, a]) => {
     const r = document.querySelector(s).getBoundingClientRect();
     return r.top + r.height * (a ? 0.75 : 0.25);
@@ -91,6 +92,36 @@ const A = `/tmp/atelier-drag-a-${stamp}`, B = `/tmp/atelier-drag-b-${stamp}`;
     return el ? el.getAttribute("draggable") : null;
   }, t2);
   result("닫힌 세션은 끌 수 없다", closedDraggable === "false", `(draggable=${closedDraggable})`);
+
+  // 닫힌 세션은 받지도 않아야 한다. draggable=false 는 출발만 막는다 —
+  // 선이 뜨고 드롭까지 받으면 "될 것처럼 보이고 아무 일도 안 일어나는" 상태가 된다.
+  const beforeClosed = await sessionsIn(wsA);
+  await fire(`[data-session="${t1}"]`, "dragstart", 0);
+  await page.waitForTimeout(150);
+  const yClosed = await midY(`[data-session="${t2}"]`, false);
+  await fire(`[data-session="${t2}"]`, "dragover", yClosed);
+  await page.waitForTimeout(200);
+  const markOnClosed = await dropMark(`[data-session="${t2}"]`);
+  await fire(`[data-session="${t2}"]`, "drop", yClosed);
+  await fire(`[data-session="${t1}"]`, "dragend", yClosed);
+  await page.waitForTimeout(500);
+  const afterClosed = await sessionsIn(wsA);
+  result("닫힌 세션 위에는 선이 뜨지 않는다", markOnClosed === null, `(data-drop=${markOnClosed})`);
+  result("닫힌 세션에 떨어뜨려도 순서가 그대로다", afterClosed.join() === beforeClosed.join());
+
+  // 유효한 자리를 벗어나면 선을 지운다
+  await fire(`[data-session="${t1}"]`, "dragstart", 0);
+  await page.waitForTimeout(150);
+  const yOver = await midY(`[data-session="${t3}"]`, false);
+  await fire(`[data-session="${t3}"]`, "dragover", yOver);
+  await page.waitForTimeout(200);
+  const shown = await dropMark(`[data-session="${t3}"]`);
+  await fire(`[data-session="${t3}"]`, "dragleave", yOver, true);
+  await page.waitForTimeout(200);
+  const cleared = await dropMark(`[data-session="${t3}"]`);
+  await fire(`[data-session="${t1}"]`, "dragend", yOver);
+  result("유효한 자리에는 선이 뜬다", shown !== null, `(data-drop=${shown})`);
+  result("벗어나면 선이 지워진다", cleared === null, `(data-drop=${cleared})`);
 
   await page.screenshot({ path: E2E + "/shot-sidebar-drag.png" });
   await b.close();
