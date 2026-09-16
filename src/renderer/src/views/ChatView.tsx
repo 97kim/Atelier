@@ -132,6 +132,18 @@ export function ChatView({
     [editorWidth],
   );
 
+  // 막대를 두 번 누르면 반반으로. 끌어서 눈대중으로 맞추는 것보다 빠르고,
+  // 돌아올 기준점이 있으면 마음 놓고 끌 수 있다.
+  const onEditorSplitEven = useCallback((e: React.MouseEvent) => {
+    const bar = e.currentTarget as HTMLElement;
+    // 막대 양옆 두 영역만 반으로 나눈다. 같은 행에 우측 패널도 들어 있어 "행의 절반" 은 답이 아니다.
+    const left = bar.previousElementSibling as HTMLElement | null;
+    const right = bar.nextElementSibling as HTMLElement | null;
+    if (!left || !right) return;
+    const half = (left.getBoundingClientRect().width + right.getBoundingClientRect().width) / 2;
+    setEditorWidth(Math.min(1200, Math.max(360, Math.round(half))));
+  }, []);
+
   // 통합 터미널 패널. 한 번 열리면 닫아도 마운트를 유지해 스크롤백을 보존한다.
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [terminalMounted, setTerminalMounted] = useState(false);
@@ -877,6 +889,8 @@ export function ChatView({
               {!editorMaximized && (
                 <div
                   onMouseDown={onEditorDragStart}
+                  onDoubleClick={onEditorSplitEven}
+                  title="끌어서 넓이 조절 · 두 번 누르면 반반"
                   className="w-1 shrink-0 cursor-col-resize hover:bg-accent/30"
                   data-editor-resizer
                 />
