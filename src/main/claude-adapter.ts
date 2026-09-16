@@ -53,6 +53,13 @@ export interface ClaudeTurnRequest {
   onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[]): void;
   /** 백그라운드 작업 하나가 끝났다(completed·failed·stopped). */
   onTaskFinished?(note: TaskFinishedNote): void;
+  /**
+   * 우리가 시작하지 않은 턴의 이벤트. 백그라운드 작업이 끝나면 CLI 가 스스로 이어서 일하는데,
+   * 그 턴을 버리면 그 사이의 일이 통째로 사라진다(릴리즈가 끝났는데 화면엔 아무 말도 없는 것처럼).
+   */
+  onAmbientEvent?(event: ChatEvent): void;
+  /** 그 턴에서 온 권한 요청. 턴이 없다고 거부하면 하던 일이 거기서 멈춘다. */
+  requestAmbientPermission?(req: PermissionRequestEvent): Promise<PermissionAnswer>;
 }
 
 const POLICY_TO_MODE: Record<PermissionPolicy, PermissionMode> = {
@@ -147,6 +154,11 @@ interface LiveSession {
    * 여기서 허용해 주면 같은 결과가 된다. 반대 방향(조이기)은 프로세스가 아예 묻지 않으므로 할 수 없다.
    */
   autoApprove: boolean;
+  /** 우리가 시작하지 않은 턴을 그리기 위한 통로와 매퍼. 매퍼는 그 턴이 끝나면 버린다. */
+  onAmbientEvent?(event: ChatEvent): void;
+  requestAmbientPermission?(req: PermissionRequestEvent): Promise<PermissionAnswer>;
+  ambientMapper: ClaudeEventMapper | null;
+  ambientSeq: number;
   log?(line: string): void;
   /** 턴과 무관하게 오는 신호를 보낼 곳. 턴이 새로 시작하면 그 턴의 것으로 갱신한다. */
   onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[]): void;
@@ -221,6 +233,10 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
     dead: false,
     idleTimer: null,
     autoApprove: req.policy === "full",
+    onAmbientEvent: req.onAmbientEvent,
+    requestAmbientPermission: req.requestAmbientPermission,
+    ambientMapper: null,
+    ambientSeq: 0,
     log: req.log,
     onBackgroundTasks: req.onBackgroundTasks,
     onTaskFinished: req.onTaskFinished,
@@ -250,13 +266,16 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
     // 권한 요청은 "지금 진행 중인 턴" 의 콜백으로 — 프로세스는 턴을 넘어 살기 때문에 options 에 고정할 수 없다.
     canUseTool: async (toolName, toolInput, ctx) => {
       const t = s.turn;
-      if (!t) return { behavior: "deny", message: "진행 중인 턴이 없습니다.", interrupt: false };
+      // 우리가 시작하지 않은 턴도 승인을 받아야 한다 — 거부하면 하던 일이 거기서 멈춘다.
+      const onEvent = t ? t.req.onEvent : s.onAmbientEvent;
+      const ask = t ? t.req.requestPermission : s.requestAmbientPermission;
+      if (!onEvent || !ask) return { behavior: "deny", message: "진행 중인 턴이 없습니다.", interrupt: false };
       // 도중에 "전부 자동" 으로 바꾼 경우 여기서 끊는다 — 화면까지 왕복하지 않는다.
       // AskUserQuestion 은 권한이 아니라 질문이라 사람이 답해야 한다(빈 답은 거부와 같다).
       if (s.autoApprove && toolName !== "AskUserQuestion") {
         return permissionResultFor(toolName, toolInput, { behavior: "allow" }, ctx.suggestions);
       }
-      const requestId = `${ctx.toolUseID}#${++t.permissionSeq}`;
+      const requestId = `${ctx.toolUseID}#${t ? ++t.permissionSeq : ++s.ambientSeq}`;
       const event: PermissionRequestEvent = {
         type: "permission_request",
         ts: Date.now(),
@@ -268,11 +287,11 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
         description: ctx.description,
         canAlwaysAllow: Boolean(ctx.suggestions && ctx.suggestions.length > 0),
       };
-      t.req.onEvent(event);
-      t.req.onEvent({ type: "status", ts: Date.now(), status: "waiting_permission" });
-      const answer = await t.req.requestPermission(event);
-      t.req.onEvent({ type: "permission_resolved", ts: Date.now(), requestId, behavior: answer.behavior });
-      t.req.onEvent({ type: "status", ts: Date.now(), status: "running" });
+      onEvent(event);
+      onEvent({ type: "status", ts: Date.now(), status: "waiting_permission" });
+      const answer = await ask(event);
+      onEvent({ type: "permission_resolved", ts: Date.now(), requestId, behavior: answer.behavior });
+      onEvent({ type: "status", ts: Date.now(), status: "running" });
       return permissionResultFor(toolName, toolInput, answer, ctx.suggestions);
     },
   };
@@ -338,8 +357,13 @@ function handleMessage(s: LiveSession, message: SDKMessage) {
     if (limit) t?.req.onRateLimit?.(limit);
   }
   if (!t) {
-    // 턴 밖에서 온 메시지(백그라운드 태스크 알림 등)는 기록할 턴이 없다 — 로그만.
-    if (message.type !== "system") s.log?.(`[claude ${s.key}] 턴 밖 메시지 ${message.type}`);
+    // 우리가 시작하지 않은 턴(백그라운드 작업이 끝나 CLI 가 스스로 이어갈 때)도 그대로 보여 준다.
+    // 예전엔 여기서 버렸다 — 그 사이에 한 일이 통째로 사라져, 끝났는데 아무 말도 없는 것처럼 보였다.
+    const onEvent = s.onAmbientEvent;
+    if (!onEvent) return;
+    if (!s.ambientMapper) s.ambientMapper = new ClaudeEventMapper();
+    for (const e of s.ambientMapper.map(message, Date.now())) onEvent(e);
+    if (message.type === "result") s.ambientMapper = null;
     return;
   }
   for (const e of t.mapper.map(message, Date.now())) t.req.onEvent(e);
@@ -405,7 +429,7 @@ function describeErr(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export type ClaudeWarmRequest = Pick<ClaudeTurnRequest, "sessionKey" | "cwd" | "sessionId" | "policy" | "model" | "log" | "onBackgroundTasks" | "onTaskFinished">;
+export type ClaudeWarmRequest = Pick<ClaudeTurnRequest, "sessionKey" | "cwd" | "sessionId" | "policy" | "model" | "log" | "onBackgroundTasks" | "onTaskFinished" | "onAmbientEvent" | "requestAmbientPermission">;
 
 /**
  * 예열: 턴 없이 프로세스만 미리 띄운다(기동·MCP 연결·세션 복원을 사용자가 첫 메시지를 보내기 전에 끝내 둔다).
@@ -444,6 +468,8 @@ export async function runClaudeTurn(runtime: ClaudeRuntime, req: ClaudeTurnReque
   // 턴과 무관하게 오는 신호는 가장 최근 턴의 통로로 보낸다(탭마다 고정된 통로라 턴이 끝나도 유효하다).
   s.onBackgroundTasks = req.onBackgroundTasks;
   s.onTaskFinished = req.onTaskFinished;
+  s.onAmbientEvent = req.onAmbientEvent;
+  s.requestAmbientPermission = req.requestAmbientPermission;
   const done = new Promise<void>((resolve, reject) => {
     s.turn = { req, mapper: new ClaudeEventMapper(), resolve, reject, permissionSeq: 0 };
   });

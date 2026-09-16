@@ -466,6 +466,8 @@ export class SessionManager {
       log: (line: string) => this.deps.log?.(tabId, line),
       onBackgroundTasks: (sessionId: string, tasks: LiveBackgroundTask[]) => this.deps.onBackgroundTasks?.(tabId, sessionId, tasks),
       onTaskFinished: (note: TaskFinishedNote) => this.deps.onTaskFinished?.(tabId, note),
+      onAmbientEvent: (event: ChatEvent) => this.ambientEvent(tabId, event),
+      requestAmbientPermission: (req: PermissionRequestEvent) => this.waitPermission(this.ensure(tabId), req, new AbortController().signal),
     };
     try {
       if (s.provider === "claude") {
@@ -1216,6 +1218,9 @@ export class SessionManager {
             onCommands: (patch) => this.deps.onSlashCommands?.(s.cwd!, patch),
             onBackgroundTasks: (sessionId, tasks) => this.deps.onBackgroundTasks?.(s.tabId, sessionId, tasks),
             onTaskFinished: (note) => this.deps.onTaskFinished?.(s.tabId, note),
+            onAmbientEvent: (event) => this.ambientEvent(s.tabId, event),
+            // 이 턴은 우리가 시작한 게 아니라 끊을 abort 가 없다 — 사용자가 답할 때까지 기다린다.
+            requestAmbientPermission: (req) => this.waitPermission(s, req, new AbortController().signal),
             onRateLimit: (limit) => {
               if (limit.rejectedResetsAt) rejectedResetsAt = limit.rejectedResetsAt;
               this.deps.onRateLimit?.("claude", limit);
@@ -1371,6 +1376,33 @@ export class SessionManager {
       if (s.pendingReqs.get(requestId)?.tool === "AskUserQuestion") continue;
       this.answerPermission(tabId, requestId, { behavior: "allow" });
     }
+  }
+
+  /**
+   * 우리가 시작하지 않은 턴의 이벤트(백그라운드 작업이 끝나 CLI 가 스스로 이어갈 때).
+   * 기록·전달은 평소와 같고, 화면이 "도는 중" 으로 보이도록 상태만 우리가 올려 준다.
+   */
+  private ambientEvent(tabId: string, e: ChatEvent): void {
+    const s = this.sessions.get(tabId);
+    if (!s) return;
+    if (e.type === "turn_result") {
+      this.record(s, e);
+      s.turnStartedAt = null;
+      this.setStatus(s, e.isError ? "error" : "idle");
+      this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
+      return;
+    }
+    if (e.type === "status") {
+      s.status = e.status;
+      this.record(s, e);
+      return;
+    }
+    if (s.status === "idle" || s.status === "error") {
+      s.turnStartedAt = Date.now();
+      this.setStatus(s, "running");
+      this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
+    }
+    this.record(s, e);
   }
 
   answerPermission(
