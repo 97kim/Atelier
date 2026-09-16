@@ -14,7 +14,7 @@ import type { Provider, ProviderRateLimitDto } from "@shared/ipc";
 import type { SlashCommandDto } from "@shared/slash-commands";
 import type { LiveBackgroundTask, TaskFinishedNote } from "@shared/bg-tasks";
 import type { StoredChatImage } from "./chat-attachments";
-import { closeAllClaudeSessions, closeClaudeSession, runClaudeTurn, warmClaudeSession, type ClaudeRuntime } from "./claude-adapter";
+import { applyClaudePolicy, closeAllClaudeSessions, closeClaudeSession, runClaudeTurn, warmClaudeSession, type ClaudeRuntime } from "./claude-adapter";
 import { closeAllCodexSessions, closeCodexSession, runCodexTurn, warmCodexSession, type CodexRuntime } from "./codex-adapter";
 import { randomUUID } from "node:crypto";
 import {
@@ -961,8 +961,10 @@ export class SessionManager {
       meta.cwd = patch.cwd;
     }
     if (patch.policy) {
+      const changed = patch.policy !== s.policy;
       s.policy = patch.policy;
       meta.policy = patch.policy;
+      if (changed) this.applyPolicyNow(tabId, s, patch.policy);
     }
     if ("model" in patch) {
       s.model = patch.model || undefined;
@@ -1349,6 +1351,26 @@ export class SessionManager {
     this.rejectAllPending(s);
     s.abort.abort();
     return true;
+  }
+
+  /**
+   * 권한 변경을 지금 반영한다. 다음 턴까지 기다리면 "계속 물어봐서 바꿨는데 그 턴 내내 계속 묻는" 일이 생긴다.
+   * 느슨해지는 방향만 즉시 먹는다 — 조이는 쪽은 프로세스가 우리에게 묻지 않으므로 다음 턴부터다.
+   */
+  private applyPolicyNow(tabId: string, s: Session, policy: PermissionPolicy): void {
+    if (s.provider !== "claude") return;
+    void applyClaudePolicy(tabId, policy)
+      .then((r) => {
+        if (r !== "none") this.deps.log?.(tabId, `[claude] 권한 ${policy} — ${r === "applied" ? "이번 턴부터" : "다음 턴부터"}`);
+      })
+      .catch(() => {});
+    if (policy !== "full") return;
+    // 이미 떠 있는 승인 창은 게이트가 지나쳐 버린 요청이라 따로 풀어 준다.
+    for (const requestId of [...s.pending.keys()]) {
+      // 질문은 권한이 아니다 — 사람이 답해야 한다(빈 답은 거부와 같다).
+      if (s.pendingReqs.get(requestId)?.tool === "AskUserQuestion") continue;
+      this.answerPermission(tabId, requestId, { behavior: "allow" });
+    }
   }
 
   answerPermission(

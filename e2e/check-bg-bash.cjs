@@ -30,7 +30,7 @@ const MARK = "백그라운드시험";
       text: wrap ? wrap.textContent.replace(/\s+/g, " ").trim().slice(0, 120) : "",
     };
   });
-  const status = () => ev((id) => window.workbench.chat.snapshot(id).status, tabId).catch(() => null);
+  const status = () => ev(async (id) => (await window.workbench.chat.snapshot(id)).status, tabId).catch(() => null);
 
   cli("tab", "send", "--tab", tabId, "--text",
     `Bash 도구를 run_in_background:true 로 \`sleep 30 && echo ${MARK}\` 를 실행하고, 기다리지 말고 즉시 '시작했습니다' 한 마디만 답해라.`);

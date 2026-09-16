@@ -142,6 +142,11 @@ interface LiveSession {
   turn: TurnCtx | null;
   dead: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * 턴 도중에 "전부 자동" 으로 바뀌었다. 프로세스 시작 플래그는 못 바꾸지만 승인 게이트가 우리 것이라
+   * 여기서 허용해 주면 같은 결과가 된다. 반대 방향(조이기)은 프로세스가 아예 묻지 않으므로 할 수 없다.
+   */
+  autoApprove: boolean;
   log?(line: string): void;
   /** 턴과 무관하게 오는 신호를 보낼 곳. 턴이 새로 시작하면 그 턴의 것으로 갱신한다. */
   onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[]): void;
@@ -215,6 +220,7 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
     turn: null,
     dead: false,
     idleTimer: null,
+    autoApprove: req.policy === "full",
     log: req.log,
     onBackgroundTasks: req.onBackgroundTasks,
     onTaskFinished: req.onTaskFinished,
@@ -245,6 +251,11 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
     canUseTool: async (toolName, toolInput, ctx) => {
       const t = s.turn;
       if (!t) return { behavior: "deny", message: "진행 중인 턴이 없습니다.", interrupt: false };
+      // 도중에 "전부 자동" 으로 바꾼 경우 여기서 끊는다 — 화면까지 왕복하지 않는다.
+      // AskUserQuestion 은 권한이 아니라 질문이라 사람이 답해야 한다(빈 답은 거부와 같다).
+      if (s.autoApprove && toolName !== "AskUserQuestion") {
+        return permissionResultFor(toolName, toolInput, { behavior: "allow" }, ctx.suggestions);
+      }
       const requestId = `${ctx.toolUseID}#${++t.permissionSeq}`;
       const event: PermissionRequestEvent = {
         type: "permission_request",
@@ -363,6 +374,35 @@ async function sessionFor(runtime: ClaudeRuntime, req: ClaudeTurnRequest): Promi
     closeClaudeSession(req.sessionKey);
   }
   return openSession(runtime, req);
+}
+
+/**
+ * 턴 도중에 권한 설정이 바뀌었다. 살아 있는 프로세스에 바로 반영한다 — 다음 턴까지 기다리면
+ * "계속 물어봐서 바꿨는데 그 턴 내내 계속 묻는" 일이 생긴다.
+ *
+ * 돌려주는 값: applied = 지금 턴부터 먹는다 · next-turn = 다음 턴부터다 · none = 살아 있는 세션이 없다.
+ */
+export async function applyClaudePolicy(sessionKey: string, policy: PermissionPolicy): Promise<"applied" | "next-turn" | "none"> {
+  const s = live.get(sessionKey);
+  if (!s || s.dead) return "none";
+  s.autoApprove = policy === "full";
+  if (policy === "full") return "applied";
+  // bypassPermissions 로 띄운 프로세스는 우리에게 묻지 않는다 — 조이는 변경은 다음 턴에 새로 띄우며 적용된다.
+  if (s.mode === "bypassPermissions") return "next-turn";
+  const mode = POLICY_TO_MODE[policy];
+  if (mode === s.mode) return "applied";
+  try {
+    await s.q.setPermissionMode(mode);
+    s.mode = mode;
+    return "applied";
+  } catch (e) {
+    s.log?.(`[claude ${sessionKey}] 권한 모드 변경 실패: ${describeErr(e)}`);
+    return "next-turn";
+  }
+}
+
+function describeErr(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 export type ClaudeWarmRequest = Pick<ClaudeTurnRequest, "sessionKey" | "cwd" | "sessionId" | "policy" | "model" | "log" | "onBackgroundTasks" | "onTaskFinished">;
