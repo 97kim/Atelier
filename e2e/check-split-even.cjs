@@ -78,6 +78,29 @@ const result = (name, ok, note) => { if (!ok) __fails += 1; console.log(`RESULT 
     result("치우쳐 있어도 반반으로 돌아온다", Math.abs(back.left - back.right) <= 8, `(왼쪽 ${back.left} · 오른쪽 ${back.right})`);
   }
 
+  // ===== 터미널(위아래 분할) =====
+  console.log("터미널 열기:", await clickTitle("터미널 패널"));
+  await page.waitForTimeout(1500);
+  const heights = () => ev(() => {
+    const bar = document.querySelector("[data-terminal-resizer]");
+    if (!bar) return null;
+    const panel = bar.parentElement;
+    const above = panel.previousElementSibling;
+    const h = (e) => Math.round(e.getBoundingClientRect().height);
+    return { above: h(above), panel: h(panel) };
+  });
+  const t0 = await heights();
+  console.log("터미널 연 직후:", JSON.stringify(t0));
+  result("터미널 막대가 있다", !!t0);
+  if (t0) {
+    await ev(() => document.querySelector("[data-terminal-resizer]").dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    await page.waitForTimeout(500);
+    const t1 = await heights();
+    console.log("두 번 누른 뒤:", JSON.stringify(t1));
+    result("터미널도 두 번 누르면 반반이 된다", Math.abs(t1.above - t1.panel) <= 8, `(위 ${t1.above} · 아래 ${t1.panel})`);
+    result("위아래 합은 그대로다", Math.abs(t1.above + t1.panel - (t0.above + t0.panel)) <= 4, `(${t0.above + t0.panel} → ${t1.above + t1.panel})`);
+  }
+
   await page.screenshot({ path: E2E + "/shot-split-even.png" });
   // 다음 시험에 영향이 없게 되돌린다
   console.log("우측 패널 펼치기:", await clickTitle("펼치기"));

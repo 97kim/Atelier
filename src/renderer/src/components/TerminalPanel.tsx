@@ -136,6 +136,16 @@ export function TerminalPanel({
     window.addEventListener("mouseup", up);
   };
 
+  // 두 번 누르면 위아래 반반. 에디터 분할과 같은 규칙이다 — 막대 양옆 두 영역만 기준으로 삼는다.
+  const onSplitEven = (e: React.MouseEvent) => {
+    const panel = (e.currentTarget as HTMLElement).parentElement;
+    const above = panel?.previousElementSibling as HTMLElement | null;
+    if (!panel || !above) return;
+    const max = Math.max(MIN_HEIGHT, Math.floor(window.innerHeight * 0.7));
+    const half = (above.getBoundingClientRect().height + panel.getBoundingClientRect().height) / 2;
+    setHeight(Math.min(max, Math.max(MIN_HEIGHT, Math.round(half))));
+  };
+
   return (
     <div
       className="no-drag relative shrink-0 border-t border-line bg-inset"
@@ -145,7 +155,10 @@ export function TerminalPanel({
     >
       <div
         onMouseDown={onDragStart}
+        onDoubleClick={onSplitEven}
+        title="끌어서 높이 조절 · 두 번 누르면 반반"
         className="absolute -top-1 left-0 right-0 z-10 h-2 cursor-row-resize"
+        data-terminal-resizer
       />
       <div className="flex h-8 items-center gap-1 px-2">
         <Icon name="terminal" size={12} className="ml-1 shrink-0 text-muted" />
