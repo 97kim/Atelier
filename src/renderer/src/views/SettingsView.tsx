@@ -157,7 +157,7 @@ export function SettingsView({
             ) : section === "snippets" ? (
               <SnippetsSection workspaces={workspaces} />
             ) : section === "schedules" ? (
-              <SchedulesSection />
+              <SchedulesSection workspaces={workspaces} />
             ) : (
               <>
             <div className="mb-5 flex items-start justify-between gap-6">

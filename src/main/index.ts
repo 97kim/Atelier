@@ -43,6 +43,7 @@ import { setCodexSessionIdleMs, type CodexRuntime } from "./codex-adapter";
 import { buildReviewPrompt, otherProvider, reviewPermissionDecision, reviewScope, reviewTabTitle } from "@shared/cross-review";
 import { handoffBriefPrompt, handoffNotePermission, NOTE_FILE } from "@shared/handoff";
 import { lastReplyText } from "@shared/session-state";
+import { parseCron } from "@shared/cron";
 import { PreviewServer } from "./preview-server";
 import { browserNetFailures, clearBrowserNetFailures, watchBrowserNetwork } from "./browser-net";
 import { fetchFavicon } from "./browser-favicon";
@@ -302,6 +303,12 @@ function schedulesApi() {
             // 껐다 다시 켜면 그 시점부터 센다 — 꺼 둔 동안의 회차를 만회하지 않는다.
             activeSince: existing && existing.enabled === enabled ? existing.activeSince : now,
           };
+          // 화면과 CLI 가 같은 문을 쓰므로 검증도 여기 둔다. 못 도는 예약을 그대로 저장하면
+          // 목록에는 있는데 영영 안 도는 것이 되고, 사용자는 기다리다가 알게 된다.
+          if (!next.name.trim()) throw new Error("이름을 적어 주세요.");
+          if (!next.prompt.trim()) throw new Error("보낼 말을 적어 주세요.");
+          if (!parseCron(next.cron)) throw new Error("cron 형식이 아닙니다(분 시 일 월 요일).");
+          if (!cwdForTarget(next.target)) throw new Error("실행할 워크스페이스를 고르세요(기본 경로가 있어야 합니다).");
           store.upsertSchedule(next);
           sendAll(IPC.schedulesChanged, scheduleSnapshot());
           return next;
@@ -371,8 +378,16 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
     const made = workspaces.createTab(wsId, { cwd: r.worktree.path, worktree: r.worktree, title: `${schedule.name} · 예약` });
     if (!made) {
       // 탭을 못 만들면 방금 만든 worktree 는 아무도 모르는 디렉터리로 남는다. 되돌린다.
-      await worktreeRemove(env, r.worktree, { force: true }).catch(() => {});
-      throw new Error("세션을 만들지 못했습니다.");
+      // 되돌리기까지 실패하면 경로를 사유에 적는다. 조용히 삼키면 사람이 모르는 폴더가 계속 쌓인다.
+      const undo = await worktreeRemove(env, r.worktree, { force: true }).catch((e: unknown) => ({
+        ok: false as const,
+        error: e instanceof Error ? e.message : String(e),
+      }));
+      throw new Error(
+        undo.ok
+          ? "세션을 만들지 못했습니다."
+          : `세션을 만들지 못했고, 만들어 둔 작업 폴더도 치우지 못했습니다(${r.worktree.path}): ${undo.error}`,
+      );
     }
     tabId = made;
     runCwd = r.worktree.path;

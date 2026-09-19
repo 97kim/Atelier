@@ -1,6 +1,6 @@
 // 예약 실행. 정해진 시각에 스스로 깨어나 돌고, 끝을 정확히 판정하고, 이력에 남는가.
 // 손으로 확인한 흐름(45초 running → 55초 completed)을 그대로 고정한다.
-const path = require("path"), { execFileSync } = require("child_process");
+const path = require("path"), fs = require("fs"), { execFileSync } = require("child_process");
 const E2E = __dirname;
 const app = path.join(__dirname, "..", "release/mac-arm64/Atelier.app");
 const cli = (...a) => JSON.parse(execFileSync(app + "/Contents/MacOS/Atelier", [app + "/Contents/Resources/cli/atelier.cjs", ...a], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", ATELIER_USERDATA: E2E + "/userdata" }, encoding: "utf8" }));
@@ -52,6 +52,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   cli("schedule", "rm", "--id", id);
   result("지우면 목록에서 사라진다", !cli("schedule", "list").schedules.some((s) => s.id === id));
+
+  // 격리 회차가 정말 worktree 안에서 도는가. 위의 프롬프트는 도구를 금지해서 이걸 못 본다 —
+  // 실제로 configure 가 작업 경로를 워크스페이스 경로로 덮어써 격리가 풀린 적이 있다. 파일을 만들게 해서 확인한다.
+  const mark = `cwd-check-${Date.now()}.txt`;
+  const isoId = cli("schedule", "add", "--name", "e2e격리", "--cron", "0 0 1 1 *",
+    "--prompt", `지금 작업 폴더에 ${mark} 라는 빈 파일을 만들어라. 다른 말은 하지 마라.`,
+    "--ws", ws, "--policy", "full", "--worktree").schedule.id;
+  let iso = cli("schedule", "run", "--id", isoId).run;
+  for (let i = 0; i < 60; i += 1) {
+    await sleep(2500);
+    iso = cli("schedule", "runs", "--id", isoId).runs[0];
+    if (iso && ["completed", "failed", "interrupted"].includes(iso.status)) break;
+  }
+  result("격리 회차가 끝난다", iso?.status === "completed", `(${iso?.status} ${iso?.reason ?? ""})`);
+  const isoCwd = iso?.tabId ? cli("tab", "status", "--tab", iso.tabId).tab.cwd : null;
+  console.log("격리 작업 경로:", isoCwd);
+  result("격리 회차는 원본 저장소에서 돌지 않는다", Boolean(isoCwd) && path.resolve(isoCwd) !== path.resolve(E2E, "repo"));
+  result("작업 결과가 worktree 안에 남는다", Boolean(isoCwd) && fs.existsSync(path.join(isoCwd, mark)));
+  result("원본 저장소는 건드리지 않는다", !fs.existsSync(path.join(E2E, "repo", mark)));
+
+  // 치운다 — 탭을 닫아도 worktree 는 남는다.
+  if (iso?.tabId) try { cli("tab", "close", "--tab", iso.tabId); } catch { /* 이미 닫힘 */ }
+  if (isoCwd) try { execFileSync("git", ["worktree", "remove", "--force", isoCwd], { cwd: path.join(E2E, "repo") }); } catch { /* 이미 없음 */ }
+  cli("schedule", "rm", "--id", isoId);
 
   process.exit(__fails ? 1 : 0);
 })().catch((e) => { console.error("ERROR", e); process.exit(1); });
