@@ -217,6 +217,23 @@ export function closeAllClaudeSessions(): void {
   for (const key of [...live.keys()]) closeClaudeSession(key);
 }
 
+/**
+ * 지금 도는 것을 끊는다. 프로세스는 살려 둔다.
+ * 우리가 시작한 턴에는 abort 가 달려 있지만, 백그라운드가 끝나 CLI 가 스스로 이어간 턴에는 그게 없다 —
+ * 그 턴을 멈출 수 있는 곳은 여기뿐이다. 유예 안에 안 끝나면 그때는 프로세스를 내린다.
+ */
+export function interruptClaudeSession(key: string): boolean {
+  const s = live.get(key);
+  if (!s || s.dead) return false;
+  void s.q.interrupt().catch(() => {});
+  setTimeout(() => {
+    // 아직도 돌고 있으면 내린다. interrupt 를 무시하는 CLI 를 붙잡아 두면
+    // 사용자는 중단을 눌렀는데 일이 계속되는 것을 보게 된다.
+    if (live.get(key) === s && !s.dead && (s.turn || s.ambientMapper)) closeClaudeSession(key, "중단했습니다.");
+  }, INTERRUPT_GRACE_MS);
+  return true;
+}
+
 function armIdle(s: LiveSession) {
   if (s.idleTimer) clearTimeout(s.idleTimer);
   s.idleTimer = setTimeout(() => {

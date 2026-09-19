@@ -30,3 +30,39 @@ test("staleRunEvents: 진행 중으로 남은 verify/fanout/review 만 닫는 �
   assert.equal(r.status, "failed");
   assert.deepEqual(staleRunEvents([]), []);
 });
+
+test("staleRunEvents: 결과가 오지 않은 도구와 도는 중으로 남은 상태를 닫는다", () => {
+  const events: ChatEvent[] = [
+    { type: "status", ts: 1, status: "running" },
+    { type: "tool_use", ts: 2, toolUseId: "t1", name: "Bash", input: {} },
+    { type: "tool_result", ts: 3, toolUseId: "t1", output: "ok", isError: false },
+    { type: "tool_use", ts: 4, toolUseId: "t2", name: "Bash", input: {} },
+    { type: "tool_use", ts: 5, toolUseId: "t2", name: "Bash", input: { cmd: "…" }, partial: true },
+  ];
+  const out = staleRunEvents(events, 100);
+  // 끝나지 않은 t2 하나만 닫는다(같은 toolUseId 가 여러 번 와도 카드는 하나다)
+  const results = out.filter((e) => e.type === "tool_result");
+  assert.equal(results.length, 1);
+  const r = results[0];
+  if (r.type !== "tool_result") return assert.fail("tool_result");
+  assert.equal(r.toolUseId, "t2");
+  assert.equal(r.isError, true);
+  assert.match(r.output, /재시작/);
+  // 끊겼다는 것을 글로 남기고 상태를 내린다 — 조용히 idle 로 바꾸면 끝난 것처럼 보인다
+  const tail = out.slice(-2);
+  assert.equal(tail[0].type, "error");
+  if (tail[0].type !== "error") return assert.fail("error");
+  assert.match(tail[0].message, /중단됨/);
+  assert.equal(tail[0].fatal, false);
+  assert.deepEqual(tail[1], { type: "status", ts: 100, status: "idle" });
+});
+
+test("staleRunEvents: 정상으로 끝난 기록에는 아무것도 더하지 않는다", () => {
+  const events: ChatEvent[] = [
+    { type: "status", ts: 1, status: "running" },
+    { type: "tool_use", ts: 2, toolUseId: "t1", name: "Bash", input: {} },
+    { type: "tool_result", ts: 3, toolUseId: "t1", output: "ok", isError: false },
+    { type: "status", ts: 4, status: "idle" },
+  ];
+  assert.deepEqual(staleRunEvents(events, 100), []);
+});

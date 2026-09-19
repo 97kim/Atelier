@@ -15,7 +15,7 @@ import type { SlashCommandDto } from "@shared/slash-commands";
 import type { LiveBackgroundTask, TaskFinishedNote } from "@shared/bg-tasks";
 import type { StoredChatImage } from "./chat-attachments";
 import type { BackgroundTasksSource } from "./claude-adapter";
-import { applyClaudePolicy, closeAllClaudeSessions, closeClaudeSession, runClaudeTurn, warmClaudeSession, type ClaudeRuntime } from "./claude-adapter";
+import { applyClaudePolicy, closeAllClaudeSessions, closeClaudeSession, interruptClaudeSession, runClaudeTurn, warmClaudeSession, type ClaudeRuntime } from "./claude-adapter";
 import { closeAllCodexSessions, closeCodexSession, runCodexTurn, warmCodexSession, type CodexRuntime } from "./codex-adapter";
 import { randomUUID } from "node:crypto";
 import {
@@ -113,6 +113,8 @@ interface Session {
   status: SessionStatus;
   sessionId: string | null;
   abort: AbortController | null;
+  /** 우리가 시작하지 않은 턴을 사용자가 끊었다. 뒤늦게 오는 이벤트가 상태를 다시 "도는 중" 으로 올리지 않게 한다. */
+  ambientStopped: boolean;
   pending: Map<string, (answer: PermissionAnswer) => void>;
   /** 대기 중인 권한 요청 본문(requestId → 이벤트). 교차 리뷰처럼 사람이 안 보는 탭을 main 이 대신 판정할 때 본다. */
   pendingReqs: Map<string, PermissionRequestEvent>;
@@ -304,6 +306,7 @@ export class SessionManager {
         status: "idle",
         sessionId: defaults?.sessionId ?? resolved?.sessionId ?? null,
         abort: null,
+        ambientStopped: false,
         pending: new Map(),
         pendingReqs: new Map(),
         events: null,
@@ -1157,6 +1160,7 @@ export class SessionManager {
     s.queued = null;
     const abort = new AbortController();
     s.abort = abort;
+    s.ambientStopped = false;
     s.startedAt ??= Date.now();
     s.turnStartedAt = Date.now();
     // 턴 시작 시각을 렌더러가 바로 알게(진행 줄의 경과 시간 기준)
@@ -1357,7 +1361,23 @@ export class SessionManager {
       this.setStatus(s, "idle");
       return true;
     }
-    if (!s.abort) return did;
+    if (!s.abort) {
+      // 우리가 시작하지 않은 턴(백그라운드가 끝나 CLI 가 스스로 이어간 턴)에는 끊을 abort 가 없다.
+      // 여기서 그냥 돌아가면 화면은 "도는 중" 인데 중단만 아무 일도 하지 않는다 — 어댑터로 직접 끊는다.
+      if (this.isBusy(tabId)) {
+        // 살아 있으면 끊는다. 프로세스가 이미 없으면(유령 상태) 끊을 것이 없을 뿐,
+        // 화면에 남은 "도는 중" 은 똑같이 정리해 줘야 한다 — 안 그러면 영영 못 멈춘다.
+        if (s.provider === "claude") interruptClaudeSession(tabId);
+        this.rejectAllPending(s);
+        s.ambientStopped = true;
+        s.turnStartedAt = null;
+        this.record(s, { type: "error", ts: Date.now(), message: "중단됨", fatal: false });
+        this.setStatus(s, "idle");
+        this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
+        return true;
+      }
+      return did;
+    }
     this.rejectAllPending(s);
     s.abort.abort();
     return true;
@@ -1393,7 +1413,11 @@ export class SessionManager {
     if (e.type === "turn_result") {
       this.record(s, e);
       s.turnStartedAt = null;
-      this.setStatus(s, e.isError ? "error" : "idle");
+      // 사용자가 끊은 턴은 오류로 끝난 것처럼 오지만(interrupt), 그건 사고가 아니라 시킨 대로 된 것이다.
+      // 우리가 시작한 턴에서도 중단은 idle 로 끝낸다 — 같게 맞춘다.
+      const stopped = s.ambientStopped;
+      s.ambientStopped = false;
+      this.setStatus(s, e.isError && !stopped ? "error" : "idle");
       this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
       return;
     }
@@ -1402,7 +1426,8 @@ export class SessionManager {
       this.record(s, e);
       return;
     }
-    if (s.status === "idle" || s.status === "error") {
+    // 사용자가 끊은 턴이 남긴 이벤트다. 기록은 하되 "도는 중" 으로 되돌리지는 않는다.
+    if (!s.ambientStopped && (s.status === "idle" || s.status === "error")) {
       s.turnStartedAt = Date.now();
       this.setStatus(s, "running");
       this.deps.onSnapshot?.(tabId, this.snapshot(tabId));

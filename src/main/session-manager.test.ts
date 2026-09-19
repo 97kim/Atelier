@@ -8,6 +8,7 @@ import {
   summarizeToolInput,
   type SessionSnapshot,
 } from "./session-manager";
+import { ZERO_USAGE, type ChatEvent } from "@shared/chat-events";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -406,5 +407,44 @@ test("inheritCwd: 워크스페이스 기본 경로가 바뀌면 물려받는 탭
   const n = metas.length;
   manager.inheritCwd("t1", join(root, "new"));
   assert.equal(metas.length, n);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("우리가 시작하지 않은 턴도 중단된다", () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-sess-"));
+  const { manager } = makeManager(root);
+  const inner = manager as unknown as { ambientEvent(tabId: string, e: ChatEvent): void };
+  const text = (t: string): ChatEvent => ({ type: "assistant_text", ts: Date.now(), blockId: t, text: t });
+  manager.snapshot("tab1");
+
+  // 백그라운드가 끝나 CLI 가 스스로 이어간 턴. 화면은 "도는 중" 이 된다.
+  inner.ambientEvent("tab1", text("스스로 이어간다"));
+  assert.equal(manager.snapshot("tab1").status, "running");
+
+  // 이 턴에는 끊을 abort 가 없다 — 예전엔 그래서 중단이 아무 일도 하지 않았다.
+  assert.equal(manager.abort("tab1"), true);
+  assert.equal(manager.snapshot("tab1").status, "idle");
+
+  // 끊기 직전에 출발한 이벤트가 상태를 다시 올리지 않는다
+  inner.ambientEvent("tab1", text("늦게 도착"));
+  assert.equal(manager.snapshot("tab1").status, "idle");
+
+  // 턴이 끝났다는 신호가 오면 빗장이 풀려 다음 턴은 정상으로 보인다
+  inner.ambientEvent("tab1", { type: "turn_result", ts: Date.now(), usage: ZERO_USAGE, costUsd: 0, durationMs: 1, numTurns: 1, modelUsage: {}, isError: false });
+  inner.ambientEvent("tab1", text("다음 턴"));
+  assert.equal(manager.snapshot("tab1").status, "running");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("사용자가 끊은 턴은 오류로 끝난 것처럼 와도 오류가 아니다", () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-sess-"));
+  const { manager } = makeManager(root);
+  const inner = manager as unknown as { ambientEvent(tabId: string, e: ChatEvent): void };
+  manager.snapshot("tab1");
+  inner.ambientEvent("tab1", { type: "assistant_text", ts: Date.now(), blockId: "b", text: "스스로 이어간다" });
+  assert.equal(manager.abort("tab1"), true);
+  // interrupt 로 끝난 턴은 isError 로 온다 — 시킨 대로 된 것이지 사고가 아니다
+  inner.ambientEvent("tab1", { type: "turn_result", ts: Date.now(), usage: ZERO_USAGE, costUsd: 0, durationMs: 1, numTurns: 1, modelUsage: {}, isError: true });
+  assert.equal(manager.snapshot("tab1").status, "idle");
   rmSync(root, { recursive: true, force: true });
 });
