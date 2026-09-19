@@ -1060,7 +1060,8 @@ function bootstrap() {
       if (process.env.WORKBENCH_DEBUG_SDK)
         console.log(`[sdk:${tabId}] ${line}`);
     },
-    onBackgroundTasks(tabId, sessionId, tasks) {
+    onBackgroundTasks(tabId, sessionId, tasks, source) {
+      if (process.env.WORKBENCH_DEBUG_SDK) console.log(`[bgtasks ${tabId.slice(0, 6)}] ${tasks.length}개 출처=${source}`);
       // 늘 "살아 있는 전체" 라 갈아 끼운다. 턴이 끝난 뒤에도 오므로, 노는 것처럼 보이던 구간이 채워진다.
       bgTasks.replace(tabId, sessionId, sessions.snapshot(tabId).cwd ?? "", tasks);
       sendBackgroundJobs();

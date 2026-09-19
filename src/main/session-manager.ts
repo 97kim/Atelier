@@ -14,6 +14,7 @@ import type { Provider, ProviderRateLimitDto } from "@shared/ipc";
 import type { SlashCommandDto } from "@shared/slash-commands";
 import type { LiveBackgroundTask, TaskFinishedNote } from "@shared/bg-tasks";
 import type { StoredChatImage } from "./chat-attachments";
+import type { BackgroundTasksSource } from "./claude-adapter";
 import { applyClaudePolicy, closeAllClaudeSessions, closeClaudeSession, runClaudeTurn, warmClaudeSession, type ClaudeRuntime } from "./claude-adapter";
 import { closeAllCodexSessions, closeCodexSession, runCodexTurn, warmCodexSession, type CodexRuntime } from "./codex-adapter";
 import { randomUUID } from "node:crypto";
@@ -194,7 +195,7 @@ export interface SessionManagerDeps {
   /** 턴 중 관측한 구독 한도(5시간/주간 창). */
   onRateLimit?(provider: Provider, limit: ProviderRateLimitDto): void;
   /** 백그라운드 작업 집합이 바뀌었다(턴 밖에서도 온다 — 턴이 끝난 뒤에도 도는 일이 있다). */
-  onBackgroundTasks?(tabId: string, sessionId: string, tasks: LiveBackgroundTask[]): void;
+  onBackgroundTasks?(tabId: string, sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource): void;
   /** 백그라운드 작업 하나가 끝났다. */
   onTaskFinished?(tabId: string, note: TaskFinishedNote): void;
   /** 터미널 모드: 이 탭의 pty 에 CLI 를 띄우고(spawn), 강제 종료(kill)한다. 종료는 terminalExited 로 알려 준다. */
@@ -464,7 +465,7 @@ export class SessionManager {
       policy: s.policy,
       model: s.model,
       log: (line: string) => this.deps.log?.(tabId, line),
-      onBackgroundTasks: (sessionId: string, tasks: LiveBackgroundTask[]) => this.deps.onBackgroundTasks?.(tabId, sessionId, tasks),
+      onBackgroundTasks: (sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource) => this.deps.onBackgroundTasks?.(tabId, sessionId, tasks, source),
       onTaskFinished: (note: TaskFinishedNote) => this.deps.onTaskFinished?.(tabId, note),
       onAmbientEvent: (event: ChatEvent) => this.ambientEvent(tabId, event),
       requestAmbientPermission: (req: PermissionRequestEvent) => this.waitPermission(this.ensure(tabId), req, new AbortController().signal),
@@ -1216,7 +1217,7 @@ export class SessionManager {
               this.waitPermission(s, req, abort.signal),
             log: (line) => this.deps.log?.(s.tabId, line),
             onCommands: (patch) => this.deps.onSlashCommands?.(s.cwd!, patch),
-            onBackgroundTasks: (sessionId, tasks) => this.deps.onBackgroundTasks?.(s.tabId, sessionId, tasks),
+            onBackgroundTasks: (sessionId, tasks, source) => this.deps.onBackgroundTasks?.(s.tabId, sessionId, tasks, source),
             onTaskFinished: (note) => this.deps.onTaskFinished?.(s.tabId, note),
             onAmbientEvent: (event) => this.ambientEvent(s.tabId, event),
             // 이 턴은 우리가 시작한 게 아니라 끊을 abort 가 없다 — 사용자가 답할 때까지 기다린다.

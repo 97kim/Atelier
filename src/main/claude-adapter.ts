@@ -50,7 +50,7 @@ export interface ClaudeTurnRequest {
    * 백그라운드 작업 집합이 바뀌었다. 진행 중인 턴이 없어도 오고, 늘 "살아 있는 전체" 라 갈아 끼우면 된다.
    * 프로세스가 내려갈 때는 빈 배열로 한 번 부른다 — 그 집합은 그 프로세스의 것이라 남겨 두면 안 된다.
    */
-  onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[]): void;
+  onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource): void;
   /** 백그라운드 작업 하나가 끝났다(completed·failed·stopped). */
   onTaskFinished?(note: TaskFinishedNote): void;
   /**
@@ -61,6 +61,12 @@ export interface ClaudeTurnRequest {
   /** 그 턴에서 온 권한 요청. 턴이 없다고 거부하면 하던 일이 거기서 멈춘다. */
   requestAmbientPermission?(req: PermissionRequestEvent): Promise<PermissionAnswer>;
 }
+
+/**
+ * 백그라운드 작업 목록이 어디서 왔나. "회차가 끝났나" 를 판정할 때 이 둘을 섞으면 안 된다 —
+ * 프로세스가 죽어서 우리가 비운 목록(cleanup)을 근거로 삼으면 크래시가 성공이 된다.
+ */
+export type BackgroundTasksSource = "sdk" | "cleanup";
 
 const POLICY_TO_MODE: Record<PermissionPolicy, PermissionMode> = {
   ask: "default",
@@ -161,7 +167,7 @@ interface LiveSession {
   ambientSeq: number;
   log?(line: string): void;
   /** 턴과 무관하게 오는 신호를 보낼 곳. 턴이 새로 시작하면 그 턴의 것으로 갱신한다. */
-  onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[]): void;
+  onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource): void;
   onTaskFinished?(note: TaskFinishedNote): void;
 }
 
@@ -190,7 +196,8 @@ export function closeClaudeSession(key: string): void {
   s.turn?.reject(new Error("세션이 종료되었습니다."));
   s.turn = null;
   // 살아 있던 백그라운드 작업 집합은 이 프로세스의 것이다 — 남겨 두면 끝나지 않는 표시가 된다.
-  s.onBackgroundTasks?.(s.sessionId ?? "", []);
+  // 출처를 cleanup 으로 밝힌다: 이건 "일이 끝났다" 가 아니라 "더는 모른다" 는 뜻이다.
+  s.onBackgroundTasks?.(s.sessionId ?? "", [], "cleanup");
 }
 
 export function closeAllClaudeSessions(): void {
@@ -305,7 +312,11 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
 async function pump(s: LiveSession) {
   try {
     for await (const message of s.q) handleMessage(s, message);
+    // 예외 없이 끝났다 = 프로세스가 스스로 스트림을 닫았다.
+    if (process.env.WORKBENCH_DEBUG_SDK) console.log(`[sdkend ${s.key.slice(0, 6)}] 정상종료(EOF) turn=${s.turn ? "있음" : "없음"}`);
   } catch (e) {
+    if (process.env.WORKBENCH_DEBUG_SDK)
+      console.log(`[sdkend ${s.key.slice(0, 6)}] 예외 turn=${s.turn ? "있음" : "없음"} ${e instanceof Error ? e.message : String(e)}`);
     s.turn?.reject(e);
     s.turn = null;
   } finally {
@@ -315,12 +326,26 @@ async function pump(s: LiveSession) {
     if (s.idleTimer) clearTimeout(s.idleTimer);
     s.turn?.reject(new Error("Claude 프로세스가 끝났습니다."));
     s.turn = null;
-    s.onBackgroundTasks?.(s.sessionId ?? "", []);
+    s.onBackgroundTasks?.(s.sessionId ?? "", [], "cleanup");
   }
 }
 
 function handleMessage(s: LiveSession, message: SDKMessage) {
   const t = s.turn;
+  // 진단용: 무엇이 어떤 순서로 오는지. 회차 완료 판정처럼 "순서" 가 답인 문제는 이게 없으면 추측이 된다.
+  // WORKBENCH_DEBUG_SDK 일 때만 찍는다.
+  if (process.env.WORKBENCH_DEBUG_SDK) {
+    const m = message as { type: string; subtype?: string; state?: string; status?: string; is_error?: boolean; tasks?: unknown[] };
+    const extra = [
+      m.subtype ? `subtype=${m.subtype}` : "",
+      m.state ? `state=${m.state}` : "",
+      m.status ? `status=${m.status}` : "",
+      m.is_error !== undefined ? `is_error=${m.is_error}` : "",
+      Array.isArray(m.tasks) ? `tasks=${m.tasks.length}` : "",
+      t ? "" : "(턴밖)",
+    ].filter(Boolean).join(" ");
+    console.log(`[sdkmsg ${s.key.slice(0, 6)}] ${m.type} ${extra}`);
+  }
   if (message.type === "system") {
     if (message.subtype === "init") {
       s.sessionId = message.session_id;
@@ -337,7 +362,7 @@ function handleMessage(s: LiveSession, message: SDKMessage) {
       });
     } else if (message.subtype === "background_tasks_changed") {
       // 살아 있는 백그라운드 작업 전체. 턴이 없어도 온다 — 턴에 묶으면 "턴은 끝났는데 일은 도는" 구간을 놓친다.
-      s.onBackgroundTasks?.(message.session_id ?? s.sessionId ?? "", parseLiveTasks(message.tasks));
+      s.onBackgroundTasks?.(message.session_id ?? s.sessionId ?? "", parseLiveTasks(message.tasks), "sdk");
     } else if (message.subtype === "task_notification") {
       const note = parseTaskFinished(message);
       if (note) s.onTaskFinished?.(note);
