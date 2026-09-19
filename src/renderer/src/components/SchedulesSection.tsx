@@ -96,7 +96,47 @@ interface Draft {
   worktree: boolean;
 }
 
-const field = "w-full rounded-md border border-line bg-bg px-2.5 py-1.5 outline-none focus:border-accent/50";
+/** 문장 안에 박히는 값 하나. 칸처럼 보이지 않게 낮게 두되, 누를 수 있다는 것은 테두리로 남긴다. */
+const chip =
+  "rounded-md border border-line bg-inset px-2 py-1 text-fg outline-none transition-colors hover:border-accent/40 focus:border-accent/60";
+
+/**
+ * "언제" 만 한 톤 올린다. 다섯 칸이 전부 같은 무게면 문장으로 바꾼 보람이 없다 —
+ * 세로로 쌓였던 값이 가로로 누웠을 뿐 무엇을 먼저 읽어야 할지는 여전히 안 보인다.
+ * 어디서·무엇으로·어떤 권한은 보조 정보라 중립 칩으로 남긴다.
+ */
+const chipWhen =
+  "rounded-md border border-accent/30 bg-accent-tint px-2 py-1 font-medium text-accent outline-none transition-colors hover:border-accent/50 focus:border-accent/60";
+
+/** 네이티브 time 입력의 시계 글리프. 지우면 피커를 못 열고, 그대로 두면 OS 크롬만 혼자 튄다. 톤만 낮춘다. */
+const nativePicker =
+  "[&::-webkit-calendar-picker-indicator]:opacity-40 [&::-webkit-calendar-picker-indicator]:hover:opacity-80";
+
+/**
+ * 문장 안의 고르기. 네이티브 화살표를 지우고 우리 캐럿을 붙인다 —
+ * OS 기본 화살표는 칸마다 폭을 다르게 잡아, 문장으로 읽히던 줄을 다시 폼처럼 보이게 만든다.
+ */
+function Pick({
+  value,
+  onChange,
+  children,
+  className = "",
+  ...rest
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+  className?: string;
+} & Record<`data-${string}`, string | boolean | undefined>) {
+  return (
+    <span className="relative inline-flex items-center">
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${chip} appearance-none pr-6 ${className}`} {...rest}>
+        {children}
+      </select>
+      <Icon name="chevronDown" size={11} className="pointer-events-none absolute right-2 text-muted-2" />
+    </span>
+  );
+}
 
 /**
  * 사람에게 보일 오류 문구. Electron 은 IPC 오류 앞에 "Invoking remote method …" 배관을 붙이는데,
@@ -268,140 +308,150 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
       )}
 
       {draft && (
-        <div className="mb-4 rounded-lg border border-line bg-panel px-4 py-3" data-schedule-form>
-          <div className="flex flex-col gap-3 text-[12.5px]">
-            <label className="flex flex-col gap-1">
-              <span className="text-muted">이름</span>
-              <input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="아침 점검" className={field} data-f-name />
-            </label>
+        <div className="mb-4 rounded-lg border border-accent/40 bg-panel px-4 py-4" data-schedule-form>
+          {/* 이름은 제목처럼 둔다. 라벨을 달면 다른 칸과 같은 무게가 되어 무엇을 만드는 중인지 흐려진다. */}
+          <input
+            value={draft.name}
+            onChange={(e) => set({ name: e.target.value })}
+            placeholder="예약 이름"
+            className="w-full bg-transparent text-[15px] font-medium outline-none placeholder:text-muted-2"
+            data-f-name
+          />
 
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="flex flex-col gap-1">
-                <span className="text-muted">언제</span>
-                <select value={draft.repeat} onChange={(e) => set({ repeat: e.target.value as Repeat })} className={field} data-f-repeat>
-                  <option value="hourly">매시</option>
-                  <option value="daily">매일</option>
-                  <option value="weekdays">평일</option>
-                  <option value="weekly">매주</option>
-                  <option value="custom">직접 (cron)</option>
-                </select>
-              </label>
-              {draft.repeat === "weekly" && (
-                <label className="flex flex-col gap-1">
-                  <span className="text-muted">요일</span>
-                  <select value={draft.dayOfWeek} onChange={(e) => set({ dayOfWeek: Number(e.target.value) })} className={field}>
-                    {WEEKDAYS.map((w, i) => (
-                      <option key={w} value={i}>
-                        {w}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {draft.repeat === "hourly" ? (
-                <label className="flex flex-col gap-1">
-                  <span className="text-muted">분</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={59}
-                    value={draft.minute}
-                    onChange={(e) => set({ minute: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
-                    className={`${field} w-20`}
-                  />
-                </label>
-              ) : draft.repeat === "custom" ? (
-                <label className="flex min-w-[180px] flex-1 flex-col gap-1">
-                  <span className="text-muted">cron (분 시 일 월 요일)</span>
-                  <input value={draft.cron} onChange={(e) => set({ cron: e.target.value })} className={`${field} mono`} data-f-cron />
-                </label>
-              ) : (
-                <label className="flex flex-col gap-1">
-                  <span className="text-muted">시각</span>
-                  <input type="time" value={draft.time} onChange={(e) => set({ time: e.target.value })} className={`${field} w-32`} data-f-time />
-                </label>
-              )}
-            </div>
-
-            <div className="mono text-[11px] text-muted-2" data-f-preview>
-              {parseCron(cron) ? `${cron} · ${draft.timezone} · 다음 ${when(preview)}` : "cron 형식이 아닙니다 (분 시 일 월 요일)"}
-            </div>
-
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="flex min-w-[160px] flex-1 flex-col gap-1">
-                <span className="text-muted">어디서</span>
-                <select value={draft.workspaceId} onChange={(e) => set({ workspaceId: e.target.value })} className={field} data-f-ws>
-                  <option value="">워크스페이스를 고르세요</option>
-                  {workspaces.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-muted">도구</span>
-                <select value={draft.provider} onChange={(e) => set({ provider: e.target.value as ProviderId })} className={field}>
-                  <option value="claude">Claude Code</option>
-                  <option value="codex">Codex</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-muted">권한</span>
-                <select value={draft.policy} onChange={(e) => set({ policy: e.target.value as PermissionPolicy })} className={field} data-f-policy>
-                  {(Object.keys(POLICY_LABEL) as PermissionPolicy[]).map((p) => (
-                    <option key={p} value={p}>
-                      {POLICY_LABEL[p]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <label className="flex cursor-pointer items-start gap-2">
-              <input type="checkbox" checked={draft.worktree} onChange={(e) => set({ worktree: e.target.checked })} className="mt-0.5" data-f-worktree />
-              <span>
-                <span className="block">격리 세션에서 돌린다</span>
-                <span className="block text-[11.5px] text-muted">작업 폴더를 따로 만들어 그 안에서 돕니다. 원본은 그대로 둡니다.</span>
-              </span>
-            </label>
-
-            {draft.policy === "full" && (
-              <p className="text-[11.5px] text-warn">사람이 안 보는 사이에 승인 없이 돕니다. 격리 세션과 함께 쓰는 편이 안전합니다.</p>
+          {/* 설정을 문장 하나로 읽는다. 라벨을 세로로 쌓으면 값 일곱 개가 똑같은 무게로 늘어서는데,
+              정작 사람이 확인하고 싶은 것은 "언제 어디서 무엇으로 도는가" 라는 한 줄이다. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-2 text-[13px] text-muted">
+            <Pick value={draft.repeat} onChange={(v) => set({ repeat: v as Repeat })} className={chipWhen} data-f-repeat>
+              <option value="hourly">매시</option>
+              <option value="daily">매일</option>
+              <option value="weekdays">평일</option>
+              <option value="weekly">매주</option>
+              <option value="custom">직접</option>
+            </Pick>
+            {draft.repeat === "weekly" && (
+              <Pick value={String(draft.dayOfWeek)} onChange={(v) => set({ dayOfWeek: Number(v) })} className={chipWhen}>
+                {WEEKDAYS.map((w, i) => (
+                  <option key={w} value={i}>
+                    {w}
+                  </option>
+                ))}
+              </Pick>
             )}
+            {draft.repeat === "hourly" ? (
+              <>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={draft.minute}
+                  onChange={(e) => set({ minute: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
+                  className={`${chipWhen} w-14`}
+                />
+                <span>분에</span>
+              </>
+            ) : draft.repeat === "custom" ? (
+              <>
+                <input
+                  value={draft.cron}
+                  onChange={(e) => set({ cron: e.target.value })}
+                  placeholder="분 시 일 월 요일"
+                  className={`${chipWhen} mono w-40`}
+                  data-f-cron
+                />
+                <span>에</span>
+              </>
+            ) : (
+              <>
+                <input type="time" value={draft.time} onChange={(e) => set({ time: e.target.value })} className={`${chipWhen} ${nativePicker}`} data-f-time />
+                <span>에</span>
+              </>
+            )}
+            <Pick value={draft.workspaceId} onChange={(v) => set({ workspaceId: v })} className="max-w-[11rem] truncate" data-f-ws>
+              <option value="">워크스페이스</option>
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </Pick>
+            <span>에서</span>
+            <Pick value={draft.provider} onChange={(v) => set({ provider: v as ProviderId })}>
+              <option value="claude">Claude Code</option>
+              <option value="codex">Codex</option>
+            </Pick>
+            <span>가</span>
+            <Pick value={draft.policy} onChange={(v) => set({ policy: v as PermissionPolicy })} data-f-policy>
+              {(Object.keys(POLICY_LABEL) as PermissionPolicy[]).map((p) => (
+                <option key={p} value={p}>
+                  {POLICY_LABEL[p]}
+                </option>
+              ))}
+            </Pick>
+            <span>권한으로 실행합니다.</span>
+          </div>
 
-            <label className="flex flex-col gap-1">
-              <span className="text-muted">보낼 말</span>
-              <textarea
-                value={draft.prompt}
-                onChange={(e) => set({ prompt: e.target.value })}
-                rows={4}
-                placeholder="어제 커밋을 훑고 빠진 테스트가 있으면 알려 줘."
-                className={`${field} resize-y`}
-                data-f-prompt
-              />
+          {/* 고른 것이 정말 언제 도는지. 저장하고 나서 알게 되면 늦다. */}
+          <div className="mt-2.5 flex items-center gap-1.5 text-[12px]" data-f-preview>
+            {parseCron(cron) ? (
+              <>
+                <Icon name="clock" size={12} className="text-muted-2" />
+                <span className="text-muted">다음 실행 · {when(preview)}</span>
+                <span className="mono text-muted-2">({draft.timezone})</span>
+              </>
+            ) : (
+              <>
+                <Icon name="x" size={12} className="text-err" />
+                <span className="text-err">cron 형식이 아닙니다 — 다섯 칸으로 적습니다 (분 시 일 월 요일)</span>
+              </>
+            )}
+          </div>
+
+          <textarea
+            value={draft.prompt}
+            onChange={(e) => set({ prompt: e.target.value })}
+            rows={4}
+            placeholder="보낼 말 — 어제 커밋을 훑고 빠진 테스트가 있으면 알려 줘."
+            className="mt-3 w-full resize-y rounded-md border border-line bg-inset px-3 py-2 text-[13px] outline-none focus:border-accent/50"
+            data-f-prompt
+          />
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-[12.5px]">
+              <input type="checkbox" checked={draft.worktree} onChange={(e) => set({ worktree: e.target.checked })} data-f-worktree />
+              <span>격리 세션에서 돌린다</span>
+              <span className="text-muted-2">작업 폴더를 따로 만듭니다. 원본은 그대로 둡니다.</span>
             </label>
-
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  // 폼이 사라지면 그 폼이 낸 오류도 같이 사라져야 한다. 남겨 두면 가리킬 대상이 없는 지적이 된다.
+                  setError(null);
+                  setDraft(null);
+                }}
+                className="rounded-md px-3 py-1.5 text-[12.5px] text-muted hover:bg-panel-2 hover:text-fg"
+              >
+                취소
+              </button>
               <button
                 onClick={() => void submit()}
                 disabled={busy !== null}
-                className="rounded-md bg-accent px-3 py-1.5 text-[12.5px] text-on-accent disabled:opacity-50"
+                className="rounded-md bg-accent px-3 py-1.5 text-[12.5px] text-on-accent hover:bg-accent/90 disabled:opacity-50"
                 data-f-save
               >
                 {draft.id ? "저장" : "만들기"}
               </button>
-              <button onClick={() => setDraft(null)} className="rounded-md border border-line px-3 py-1.5 text-[12.5px] hover:bg-panel-2">
-                취소
-              </button>
             </div>
           </div>
+
+          {draft.policy === "full" && (
+            <p className="mt-2 text-[11.5px] text-warn">사람이 안 보는 사이에 승인 없이 돕니다. 격리 세션과 함께 쓰는 편이 안전합니다.</p>
+          )}
         </div>
       )}
 
       {data.schedules.length === 0 ? (
         !draft && (
-          <div className="rounded-lg border border-line bg-panel px-4 py-6 text-muted">
+          <div className="rounded-lg border border-dashed border-line px-4 py-6 text-muted">
             <p>아직 예약이 없습니다.</p>
             <p className="mt-2 text-[12px] text-muted-2">
               오른쪽 위 “새 예약” 으로 만듭니다. 터미널에서도 됩니다:
@@ -425,7 +475,7 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
                     <div className="mono mt-1 text-[11px] text-muted">
                       {scheduleLabel(s.cron)} · {s.timezone} · 다음 {when(s.nextRunAt)}
                     </div>
-                    <div className="mt-1 truncate text-[12px] text-muted-2">{s.prompt}</div>
+                    <div className="mt-1 truncate text-[12px] text-muted-2" title={s.prompt}>{s.prompt}</div>
                     {last && (
                       <div className="mt-2 flex items-center gap-2 text-[11px]" data-last-run={last.status}>
                         <span className={STATUS_TONE[last.status]}>{STATUS_LABEL[last.status]}</span>
@@ -466,9 +516,9 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
                       onClick={() => void act(s.id, () => window.workbench.schedules.remove(s.id))}
                       disabled={busy === s.id}
                       title="예약과 이력을 지웁니다"
-                      className="rounded-md p-1.5 text-muted hover:bg-err/10 hover:text-err disabled:opacity-50"
+                      className="rounded-md p-1.5 text-muted hover:bg-err-bg hover:text-err disabled:opacity-50"
                     >
-                      <Icon name="x" size={13} />
+                      <Icon name="trash" size={13} />
                     </button>
                   </div>
                 </div>

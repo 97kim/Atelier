@@ -100,6 +100,21 @@ const NAME = "화면에서만든예약";
   await page.waitForTimeout(600);
   result("틀린 cron 은 저장되지 않는다", cli("schedule", "list").schedules.find((s) => s.name === NAME)?.cron === "5 8 * * 1-5");
 
+  // 목록이 쌓였을 때의 모습도 남긴다 — 행 하나만 있을 때는 안 보이는 문제가 있다.
+  await ev(() => {
+    const form = document.querySelector("[data-schedule-form]");
+    if (form) [...form.querySelectorAll("button")].find((b) => b.textContent.trim() === "취소")?.click();
+  });
+  await page.waitForTimeout(400);
+  // 폼을 닫았으면 그 폼이 낸 오류도 사라져야 한다. 남으면 가리킬 대상이 없는 지적이 목록 위에 걸린다.
+  result("취소하면 폼이 낸 오류도 사라진다", await ev(() => !document.querySelector("[data-schedule-error]")));
+
+  cli("schedule", "add", "--name", "주간 정리", "--cron", "0 9 * * 1", "--prompt", "지난 주 커밋을 한 문단으로 정리해 줘.", "--ws", ws);
+  cli("schedule", "add", "--name", "매시 점검", "--cron", "15 * * * *", "--prompt", "빌드가 깨졌는지 확인해 줘.", "--ws", ws, "--worktree", "--policy", "full");
+  await page.waitForTimeout(700);
+  result("목록에 예약이 쌓인다", (await ev(() => document.querySelectorAll("[data-schedule]").length)) >= 3);
+  await page.screenshot({ path: E2E + "/shot-schedules.png" });
+
   // 열어 둔 폼은 닫고 나간다 — 다음 시험이 같은 화면을 이어받는다.
   await ev(() => {
     const form = document.querySelector("[data-schedule-form]");
