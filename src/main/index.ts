@@ -275,6 +275,50 @@ function cwdForTarget(target: ScheduleTarget): string | null {
 }
 
 /** 예약 실행을 시작한다. 켜질 때 끝을 못 본 회차부터 정리한다. */
+/** 예약 API. CLI 와 화면이 같은 구현을 쓴다 — 둘이 어긋나면 사용자가 본 것과 실제가 달라진다. */
+function schedulesApi() {
+      const store = scheduleStore;
+      const engine = scheduleEngine;
+      if (!store || !engine) throw new Error("예약이 아직 준비되지 않았습니다.");
+      return {
+        list: () => scheduleSnapshot() as { schedules: (Schedule & { nextRunAt: number | null })[]; runs: Run[] },
+        save: (input: Partial<Schedule> & { id?: string }) => {
+          const now = Date.now();
+          const existing = input.id ? store.schedule(input.id) : null;
+          const enabled = input.enabled ?? existing?.enabled ?? true;
+          const next: Schedule = {
+            id: existing?.id ?? randomUUID(),
+            name: input.name ?? existing?.name ?? "예약",
+            cron: input.cron ?? existing?.cron ?? "0 9 * * *",
+            timezone: input.timezone ?? existing?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+            prompt: input.prompt ?? existing?.prompt ?? "",
+            provider: input.provider ?? existing?.provider ?? "claude",
+            ...(input.model ?? existing?.model ? { model: input.model ?? existing?.model } : {}),
+            policy: input.policy ?? existing?.policy ?? "ask",
+            target: input.target ?? existing?.target ?? { kind: "fresh", workspaceId: "", worktree: false },
+            ...(input.precheck ?? existing?.precheck ? { precheck: (input.precheck ?? existing?.precheck)! } : {}),
+            enabled,
+            missedRunGraceMinutes: input.missedRunGraceMinutes ?? existing?.missedRunGraceMinutes ?? 120,
+            createdAt: existing?.createdAt ?? now,
+            // 껐다 다시 켜면 그 시점부터 센다 — 꺼 둔 동안의 회차를 만회하지 않는다.
+            activeSince: existing && existing.enabled === enabled ? existing.activeSince : now,
+          };
+          store.upsertSchedule(next);
+          sendAll(IPC.schedulesChanged, scheduleSnapshot());
+          return next;
+        },
+        remove: (id: string) => {
+          const had = store.schedule(id) !== null;
+          store.removeSchedule(id);
+          sendAll(IPC.schedulesChanged, scheduleSnapshot());
+          return had;
+        },
+        runNow: (id: string) => engine.runNow(id),
+        runs: (id: string) => store.runs(id),
+      };
+    
+}
+
 function startSchedules() {
   if (scheduleEngine) return;
   scheduleStore = new ScheduleStore(app.getPath("userData"));
@@ -525,47 +569,7 @@ async function startControlServer() {
           return null;
         }
       },
-      schedules: () => {
-        const store = scheduleStore;
-        const engine = scheduleEngine;
-        if (!store || !engine) throw new Error("예약이 아직 준비되지 않았습니다.");
-        return {
-          list: () => scheduleSnapshot() as { schedules: (Schedule & { nextRunAt: number | null })[]; runs: Run[] },
-          save: (input: Partial<Schedule> & { id?: string }) => {
-            const now = Date.now();
-            const existing = input.id ? store.schedule(input.id) : null;
-            const enabled = input.enabled ?? existing?.enabled ?? true;
-            const next: Schedule = {
-              id: existing?.id ?? randomUUID(),
-              name: input.name ?? existing?.name ?? "예약",
-              cron: input.cron ?? existing?.cron ?? "0 9 * * *",
-              timezone: input.timezone ?? existing?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-              prompt: input.prompt ?? existing?.prompt ?? "",
-              provider: input.provider ?? existing?.provider ?? "claude",
-              ...(input.model ?? existing?.model ? { model: input.model ?? existing?.model } : {}),
-              policy: input.policy ?? existing?.policy ?? "ask",
-              target: input.target ?? existing?.target ?? { kind: "fresh", workspaceId: "", worktree: false },
-              ...(input.precheck ?? existing?.precheck ? { precheck: (input.precheck ?? existing?.precheck)! } : {}),
-              enabled,
-              missedRunGraceMinutes: input.missedRunGraceMinutes ?? existing?.missedRunGraceMinutes ?? 120,
-              createdAt: existing?.createdAt ?? now,
-              // 껐다 다시 켜면 그 시점부터 센다 — 꺼 둔 동안의 회차를 만회하지 않는다.
-              activeSince: existing && existing.enabled === enabled ? existing.activeSince : now,
-            };
-            store.upsertSchedule(next);
-            sendAll(IPC.schedulesChanged, scheduleSnapshot());
-            return next;
-          },
-          remove: (id: string) => {
-            const had = store.schedule(id) !== null;
-            store.removeSchedule(id);
-            sendAll(IPC.schedulesChanged, scheduleSnapshot());
-            return had;
-          },
-          runNow: (id: string) => engine.runNow(id),
-          runs: (id: string) => store.runs(id),
-        };
-      },
+      schedules: () => schedulesApi(),
     },
     join(app.getPath("userData"), "control.sock"),
     join(tmpdir(), `atelier-${process.pid}.sock`),
@@ -1986,6 +1990,21 @@ function registerIpc() {
     return url ? { ok: true, url } : { ok: false, error: "저장소 안의 파일만 미리 볼 수 있습니다." };
   });
   ipcMain.handle(IPC.backgroundJobs, () => allBackgroundJobs());
+
+  // 예약. CLI 와 같은 구현을 쓴다 — 화면과 CLI 가 어긋나지 않게.
+  ipcMain.handle(IPC.schedulesList, () => scheduleSnapshot());
+  ipcMain.handle(IPC.schedulesSave, (_e, input: Record<string, unknown>) => {
+    schedulesApi().save(input as never);
+    return scheduleSnapshot();
+  });
+  ipcMain.handle(IPC.schedulesRemove, (_e, id: string) => {
+    schedulesApi().remove(id);
+    return scheduleSnapshot();
+  });
+  ipcMain.handle(IPC.schedulesRunNow, async (_e, id: string) => {
+    await schedulesApi().runNow(id);
+    return scheduleSnapshot();
+  });
   ipcMain.on(IPC.browserRegister, (_e, tabId: unknown, webContentsId: unknown, url: unknown) => {
     if (typeof tabId !== "string") return;
     if (typeof webContentsId === "number" && Number.isInteger(webContentsId))

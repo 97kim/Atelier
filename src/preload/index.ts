@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import type { ScheduleListDto } from "@shared/ipc";
 import type { SnippetDto } from "@shared/snippets";
 import type { BackgroundJobDto } from "@shared/background-jobs";
 import type { PermissionAnswer } from "@shared/chat-events";
@@ -268,6 +269,19 @@ const api: WorkbenchApi = {
   },
   dialog: {
     pickDirectory: () => ipcRenderer.invoke(IPC.pickDirectory),
+  },
+  schedules: {
+    list: () => ipcRenderer.invoke(IPC.schedulesList),
+    save: (input: unknown) => ipcRenderer.invoke(IPC.schedulesSave, input),
+    remove: (id: string) => ipcRenderer.invoke(IPC.schedulesRemove, id),
+    runNow: (id: string) => ipcRenderer.invoke(IPC.schedulesRunNow, id),
+    onChanged: (listener) => {
+      const handler = (_e: IpcRendererEvent, s: ScheduleListDto) => listener(s);
+      ipcRenderer.on(IPC.schedulesChanged, handler);
+      return () => {
+        ipcRenderer.off(IPC.schedulesChanged, handler);
+      };
+    },
   },
   jobs: {
     list: () => ipcRenderer.invoke(IPC.backgroundJobs),

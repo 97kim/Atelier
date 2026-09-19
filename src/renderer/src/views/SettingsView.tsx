@@ -20,13 +20,14 @@ import type { NotifyOnDone } from "@shared/ipc";
 import type { ThemeMode } from "@shared/theme";
 import { applyThemeMode } from "../theme";
 import { Icon } from "../components/Icon";
+import { SchedulesSection } from "../components/SchedulesSection";
 import { ProviderLogo } from "../components/ProviderLogo";
 import { shorten } from "../components/ContextPanel";
 import { getLinkOpenMode, setLinkOpenMode, type LinkOpenMode } from "../components/Markdown";
 import { useSnippets } from "../hooks/useSnippets";
 import { snippetSummary, type SnippetDto } from "@shared/snippets";
 
-export type SettingsSection = "general" | "cli" | "mcp" | "snippets";
+export type SettingsSection = "general" | "cli" | "mcp" | "snippets" | "schedules";
 
 const LABEL: Record<Provider, [string, string]> = {
   claude: ["Claude Code", "Anthropic"],
@@ -128,6 +129,7 @@ export function SettingsView({
               { id: "cli", label: "CLI 탐지", icon: "terminal" },
               { id: "mcp", label: "MCP 서버", icon: "list" },
               { id: "snippets", label: "스니펫", icon: "copy" },
+              { id: "schedules", label: "예약", icon: "clock" },
             ] as const
           ).map((item) => (
             <button
@@ -154,6 +156,8 @@ export function SettingsView({
               <McpSection workspacePath={workspacePath} />
             ) : section === "snippets" ? (
               <SnippetsSection workspaces={workspaces} />
+            ) : section === "schedules" ? (
+              <SchedulesSection />
             ) : (
               <>
             <div className="mb-5 flex items-start justify-between gap-6">

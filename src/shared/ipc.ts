@@ -7,6 +7,7 @@ import type {
   SessionStatus,
 } from "./chat-events";
 import type { BackgroundJobDto } from "./background-jobs";
+import type { Run, Schedule } from "./schedules";
 import type { NetFailure } from "./browser-diagnostics";
 import type { Handoff } from "./handoff";
 import type { OrchRunState } from "./orchestration";
@@ -652,6 +653,12 @@ export interface WorkspaceApi {
   onChanged(listener: (state: WorkspaceStateDto) => void): () => void;
 }
 
+/** 화면에 주는 예약 목록. nextRunAt 은 main 이 계산해 붙인다. */
+export interface ScheduleListDto {
+  schedules: (Schedule & { nextRunAt: number | null })[];
+  runs: Run[];
+}
+
 export interface ChatEventEnvelope {
   tabId: string;
   event: ChatEvent;
@@ -837,6 +844,14 @@ export interface WorkbenchApi {
   };
   dialog: {
     pickDirectory(): Promise<string | null>;
+  };
+  /** 예약 실행. 정해진 시각에 프롬프트를 보내고, 회차마다 결과를 남긴다. */
+  schedules: {
+    list(): Promise<ScheduleListDto>;
+    save(input: Record<string, unknown>): Promise<ScheduleListDto>;
+    remove(id: string): Promise<ScheduleListDto>;
+    runNow(id: string): Promise<ScheduleListDto>;
+    onChanged(cb: (s: ScheduleListDto) => void): () => void;
   };
   /** 턴이 끝난 뒤에도 도는 작업(백그라운드 Codex 등). 탭은 놀고 있어도 일이 남았음을 보여 준다. */
   jobs: {
