@@ -17,7 +17,7 @@ function harness(over: Partial<Schedule> = {}, deps: Partial<Parameters<typeof m
   const s: Schedule = {
     id: "s1", name: "아침", cron: "30 9 * * *", timezone: KST, prompt: "요약해줘", provider: "claude",
     policy: "ask", target: { kind: "fresh", workspaceId: "w1", worktree: true },
-    enabled: true, missedRunGraceMinutes: 120, createdAt: 0, activeSince: at("2026-09-18T00:00:00+09:00"), ...over,
+    enabled: true, missedRunGraceMinutes: 120, createdAt: 0, activeSince: at("2026-09-19T00:00:00+09:00"), ...over,
   };
   store.upsertSchedule(s);
   return { dir, store, schedule: s, ...makeEngine(store, deps) };
@@ -74,15 +74,22 @@ test("앞 회차가 살아 있으면 다음 회차는 겹침으로 건너뛴다"
   fs.rmSync(h.dir, { recursive: true, force: true });
 });
 
-test("오래 꺼져 있었으면 가장 최근 회차만, 그것도 유예 안일 때만", async () => {
-  const h = harness();
-  // 일주일 뒤에 깨어남 → 마지막 09:30 은 이미 몇 시간 지남(유예 2시간)
+test("오래 꺼져 있었으면 한 줄만 남기고 따라잡는다 — 밀린 회차를 하나씩 재생하지 않는다", async () => {
+  const h = harness({ activeSince: at("2026-09-12T00:00:00+09:00") });
+  // 일주일 뒤에 깨어남. 밀린 회차가 여럿이지만 기록은 하나여야 하고, 다음 틱은 바로 현재를 본다.
   h.setNow(at("2026-09-26T15:00:00+09:00"));
   await h.engine.tick();
-  const runs = h.store.runs("s1");
+  let runs = h.store.runs("s1");
   assert.equal(runs.length, 1);
   assert.equal(runs[0].status, "skipped_missed");
   assert.equal(h.dispatched.length, 0);
+
+  // 그 다음 정상 회차는 제때 돈다(옛 회차를 따라가느라 막히지 않는다)
+  h.setNow(at("2026-09-27T09:30:00+09:00"));
+  await h.engine.tick();
+  runs = h.store.runs("s1");
+  assert.equal(runs[0].status, "running", `(${runs[0].status})`);
+  assert.equal(h.dispatched.length, 1);
   fs.rmSync(h.dir, { recursive: true, force: true });
 });
 
@@ -185,5 +192,22 @@ test("틱 흔들림을 유예에 더한다(경계)", () => {
   const due = at("2026-09-19T09:30:00+09:00");
   h.setNow(due + 120 * 60_000 + TICK_MS * 2);
   assert.doesNotThrow(() => h.engine.nextRunAt(h.schedule));
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});
+
+test("시간대가 잘못 저장돼도 그 예약만 멈춘다 — 목록과 다른 예약을 죽이지 않는다", async () => {
+  const h = harness({ timezone: "Asia/Seol" });
+  assert.equal(h.engine.nextRunAt(h.schedule), null, "계산 불가로 두고 던지지 않는다");
+  await assert.doesNotReject(() => h.engine.tick());
+  assert.equal(h.store.runs("s1").length, 0);
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});
+
+test("저장이 실패하면 보내지 않는다 — 기록 없는 실행을 만들지 않는다", async () => {
+  const h = harness();
+  // 저장 경로를 못 쓰게 만든다(임시 파일 자리에 디렉터리).
+  fs.mkdirSync(path.join(h.dir, "schedules.json.tmp"), { recursive: true });
+  await h.engine.tick();
+  assert.equal(h.dispatched.length, 0, "기록도 못 했는데 보내면 안 된다");
   fs.rmSync(h.dir, { recursive: true, force: true });
 });

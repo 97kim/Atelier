@@ -147,12 +147,14 @@ function clockKey(w: WallClock): string {
   return `${w.year}-${w.month}-${w.day} ${w.hour}:${w.minute}`;
 }
 /**
- * 이 순간이 "같은 벽시계의 두 번째 등장" 인가(가을 서머타임). 되감는 폭은 지역마다 달라
- * 흔한 두 가지(1시간·30분)를 본다.
+ * 이 순간이 "같은 벽시계의 두 번째 등장" 인가(가을 서머타임). 되감는 폭은 지역마다 다르다 —
+ * 대부분 1시간, 일부는 30분, Antarctica/Troll 은 2시간이다. 셋을 모두 본다.
  */
+const REPEAT_OFFSETS_MIN = [60, 30, 120];
+
 function isRepeatedWallClock(t: number, w: WallClock, timeZone: string): boolean {
   const key = clockKey(w);
-  return clockKey(wallClock(t - 60 * MINUTE, timeZone)) === key || clockKey(wallClock(t - 30 * MINUTE, timeZone)) === key;
+  return REPEAT_OFFSETS_MIN.some((m) => clockKey(wallClock(t - m * MINUTE, timeZone)) === key);
 }
 
 /** 이 너머는 "일어나지 않는 일정" 으로 본다(2월 30일 같은 것). */

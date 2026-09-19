@@ -40,7 +40,7 @@ export function runPrecheckCommand(input: { command: string; timeoutMs: number; 
     const finish = (exitCode: number | null, error: string | null) => {
       if (done) return;
       done = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       resolve({
         command: input.command,
         exitCode,
@@ -52,6 +52,9 @@ export function runPrecheckCommand(input: { command: string; timeoutMs: number; 
       });
     };
 
+    // spawn 이 던지면 finish 가 timer 를 참조하는데, 그때 timer 는 아직 만들어지지 않았다.
+    // (명령에 NUL 이 섞이면 실제로 그 경로를 탄다.) 먼저 선언해 둔다.
+    let timer: ReturnType<typeof setTimeout> | null = null;
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(input.command, {
@@ -66,7 +69,7 @@ export function runPrecheckCommand(input: { command: string; timeoutMs: number; 
       return;
     }
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       timedOut = true;
       if (child.pid) killTree(child.pid);
     }, timeoutMs);

@@ -219,6 +219,12 @@ function armIdle(s: LiveSession) {
   if (s.idleTimer) clearTimeout(s.idleTimer);
   s.idleTimer = setTimeout(() => {
     if (live.get(s.key) !== s || s.turn) return;
+    // 우리가 시작하지 않은 턴(백그라운드 결과를 처리하는 후속 턴)이 돌고 있으면 내리지 않는다.
+    // s.turn 만 보면 그 턴은 안 보인다 — 첫 result 뒤 10분에 답을 쓰던 중인 세션을 죽인다.
+    if (s.ambientMapper) {
+      armIdle(s);
+      return;
+    }
     // 턴이 끝났어도 백그라운드 작업이 살아 있으면 내리지 않는다. 15분짜리 명령을 띄워 두고
     // 턴만 끝낸 세션을 10분 뒤에 죽이면, 그 일도 그 결과를 처리할 후속 턴도 함께 사라진다.
     if (s.liveTaskCount > 0) {

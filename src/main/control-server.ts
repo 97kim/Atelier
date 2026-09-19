@@ -303,18 +303,15 @@ export class ControlServer {
         if (!["ask", "auto_edit", "full"].includes(policy)) throw new ControlError("--policy 는 ask, auto_edit, full 중 하나.");
         const provider = params.provider !== undefined ? this.requireString(params, "provider") : "claude";
         if (provider !== "claude" && provider !== "codex") throw new ControlError("--provider 는 claude 또는 codex.");
-        const target =
-          params.tab !== undefined
-            ? ({ kind: "tab", tabId: this.resolveTab(this.requireString(params, "tab")).id } as const)
-            : ({
-                kind: "fresh",
-                workspaceId: this.resolveWorkspace(this.requireString(params, "workspace")).id,
-                worktree: params.worktree === true || params.worktree === "true",
-              } as const);
+        const target = {
+          kind: "fresh",
+          workspaceId: this.resolveWorkspace(this.requireString(params, "workspace")).id,
+          worktree: params.worktree === true || params.worktree === "true",
+        } as const;
         const saved = api.save({
           name: this.requireString(params, "name"),
           cron,
-          timezone: params.timezone !== undefined ? this.requireString(params, "timezone") : Intl.DateTimeFormat().resolvedOptions().timeZone,
+          timezone: params.timezone !== undefined ? this.requireTimezone(params) : Intl.DateTimeFormat().resolvedOptions().timeZone,
           prompt: this.requireString(params, "prompt"),
           provider,
           policy: policy as PermissionPolicy,
@@ -707,6 +704,17 @@ export class ControlServer {
   }
 
   /** 워크스페이스 선택자: id → 정확한 경로 → 이름(대소문자 무시). 같은 이름이 여럿이면 후보를 돌려주며 거절. */
+  /** 시간대는 저장하기 전에 확인한다. 오타 하나가 들어가면 그 뒤로 목록 조회와 틱이 통째로 죽는다. */
+  private requireTimezone(params: Params): string {
+    const tz = this.requireString(params, "timezone");
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: tz });
+      return tz;
+    } catch {
+      throw new ControlError(`시간대를 알 수 없습니다: ${tz}`);
+    }
+  }
+
   private requireSchedules() {
     const api = this.deps.schedules?.();
     if (!api) throw new ControlError("이 빌드에는 예약 기능이 없습니다.");

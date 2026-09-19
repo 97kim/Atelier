@@ -9,12 +9,16 @@
 import type { PermissionPolicy } from "./chat-events";
 import type { ProviderId } from "./workspace-model";
 
-/** 실행 대상. v1 은 회차마다 새 격리 세션이 기본이고, 기존 탭 이어쓰기는 명시적으로 고른다. */
-export type ScheduleTarget =
-  /** 워크스페이스 안에 회차마다 새 세션을 만든다. git 저장소면 worktree 로 격리한다. */
-  | { kind: "fresh"; workspaceId: string; worktree: boolean }
-  /** 정해 둔 탭에 그대로 보낸다. 세션 맥락이 이어지지만 사용자 대화와 섞인다. */
-  | { kind: "tab"; tabId: string };
+/**
+ * 실행 대상. v1 은 회차마다 새 세션뿐이다.
+ *
+ * "정해 둔 탭에 보내기" 는 뺐다. 그 탭이 바쁘면 프롬프트가 대기열에 들어가는데, 그러면
+ *   - 사용자 턴의 result 로 예약 회차가 완료 처리되고(감시는 탭 단위다),
+ *   - 예약의 권한이 진행 중인 사용자 작업에 적용되고,
+ *   - 재시작 뒤 대기열에 남아 있던 예약이 나중에 혼자 되살아난다.
+ * 셋 다 사용자의 작업을 건드리는 사고다. 이어쓰기가 필요하면 그때 제대로 설계한다.
+ */
+export type ScheduleTarget = { kind: "fresh"; workspaceId: string; worktree: boolean };
 
 export interface SchedulePrecheck {
   /** 셸 명령 하나. 종료코드 0 이면 실행하고, 0 이 아니면 그 회차를 건너뛴다. */

@@ -270,7 +270,6 @@ let scheduleEngine: ScheduleEngine | null = null;
 
 /** 예약의 작업 경로. 격리 세션을 만들기 전 단계(precheck)는 여기서 돈다. */
 function cwdForTarget(target: ScheduleTarget): string | null {
-  if (target.kind === "tab") return workspaces.resolveConfig(target.tabId)?.cwd ?? null;
   return workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId)?.path || null;
 }
 
@@ -326,7 +325,6 @@ function startSchedules() {
   scheduleEngine = new ScheduleEngine({
     store,
     checkTarget: (target) => {
-      if (target.kind === "tab") return workspaces.tab(target.tabId) ? null : "대상 세션이 사라졌습니다.";
       const ws = workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId);
       if (!ws) return "대상 워크스페이스가 사라졌습니다.";
       return ws.path ? null : "워크스페이스에 기본 경로가 없습니다.";
@@ -354,31 +352,29 @@ function startSchedules() {
 
 /** 예약 한 회차를 실제로 띄운다. 격리 세션이면 worktree 를 만들고, 아니면 정해 둔 탭에 보낸다. */
 async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: string }> {
+  const wsId = schedule.target.workspaceId;
+  const ws = workspaces.state().model.workspaces.find((w) => w.id === wsId);
+  if (!ws?.path) throw new Error("워크스페이스에 기본 경로가 없습니다.");
   let tabId: string;
-  if (schedule.target.kind === "tab") {
-    tabId = schedule.target.tabId;
+  if (schedule.target.worktree) {
+    const env = await cliDiscovery().buildEnv();
+    const r = await worktreeCreate(ws.path, env, {
+      rootDir: join(app.getPath("userData"), "worktrees"),
+      slug: worktreeSlug(schedule.name),
+    });
+    if (!r.ok) throw new Error(r.error);
+    const made = workspaces.createTab(wsId, { cwd: r.worktree.path, worktree: r.worktree, title: `${schedule.name} · 예약` });
+    if (!made) throw new Error("세션을 만들지 못했습니다.");
+    tabId = made;
   } else {
-    const wsId = schedule.target.workspaceId;
-    const ws = workspaces.state().model.workspaces.find((w) => w.id === wsId);
-    if (!ws?.path) throw new Error("워크스페이스에 기본 경로가 없습니다.");
-    if (schedule.target.worktree) {
-      const env = await cliDiscovery().buildEnv();
-      const r = await worktreeCreate(ws.path, env, {
-        rootDir: join(app.getPath("userData"), "worktrees"),
-        slug: worktreeSlug(schedule.name),
-      });
-      if (!r.ok) throw new Error(r.error);
-      const made = workspaces.createTab(wsId, { cwd: r.worktree.path, worktree: r.worktree, title: `${schedule.name} · 예약` });
-      if (!made) throw new Error("세션을 만들지 못했습니다.");
-      tabId = made;
-    } else {
-      const made = workspaces.createTab(wsId);
-      if (!made) throw new Error("세션을 만들지 못했습니다.");
-      tabId = made;
-      workspaces.renameTab(tabId, `${schedule.name} · 예약`);
-    }
+    const made = workspaces.createTab(wsId);
+    if (!made) throw new Error("세션을 만들지 못했습니다.");
+    tabId = made;
+    workspaces.renameTab(tabId, `${schedule.name} · 예약`);
   }
-  // 권한·provider 는 예약에 박아 둔 것을 강제한다. 탭 설정을 따라가면 안 된다.
+  // 어디서 돌았는지 먼저 남긴다. 보내기가 실패해도 만들어 둔 세션을 이력에서 찾아갈 수 있어야 한다.
+  scheduleStore?.updateRun(run.id, { tabId });
+  // 권한·provider 는 예약에 박아 둔 것을 강제한다. 새로 만든 세션이라 남의 작업에 닿지 않는다.
   sessions.configure(tabId, { provider: schedule.provider, policy: schedule.policy, ...(schedule.model ? { model: schedule.model } : {}) });
   const sent = await handleChatSend(tabId, { text: schedule.prompt, images: [] });
   if (!sent.ok) throw new Error(sent.error);
@@ -1169,6 +1165,9 @@ function bootstrap() {
         else if (event.type === "turn_result") scheduleEngine.onSignal(tabId, { kind: "result", isError: event.isError });
         else if (event.type === "permission_request") scheduleEngine.onSignal(tabId, { kind: "awaiting", count: 1 });
         else if (event.type === "permission_resolved") scheduleEngine.onSignal(tabId, { kind: "awaiting", count: 0 });
+        // 치명적 오류는 끝이다. 안 흘려보내면 회차가 영영 "도는 중" 으로 남아 다음 회차를 전부 막는다.
+        else if (event.type === "error" && event.fatal !== false)
+          scheduleEngine.onSignal(tabId, { kind: "stream_ended", reason: event.message, expected: false });
       }
       // 어댑터가 직접 흘린 status(waiting_permission 등)도 사이드바 상태에 반영한다.
       if (event.type === "status") workspaces.onStatus(tabId, event.status);

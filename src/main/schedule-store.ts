@@ -54,12 +54,14 @@ export class ScheduleStore {
       fs.writeFileSync(tmp, JSON.stringify(this.data), "utf8");
       fs.renameSync(tmp, this.file);
     } catch (e) {
-      console.error("[schedules] 저장 실패:", e);
       try {
         fs.rmSync(tmp, { force: true });
       } catch {
         /* 없으면 그만 */
       }
+      // 삼키면 안 된다. "보내기 전에 기록한다" 는 약속이 깨진 채로 실행이 이어지면,
+      // 재시작 뒤 그 회차가 아예 없던 일이 된다(보냈는지조차 알 수 없다).
+      throw new Error(`예약 기록을 저장하지 못했습니다: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

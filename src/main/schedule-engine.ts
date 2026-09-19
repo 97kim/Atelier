@@ -78,7 +78,13 @@ export class ScheduleEngine {
   nextRunAt(s: Schedule, after = this.now()): number | null {
     const cron = parseCron(s.cron);
     if (!cron) return null;
-    return nextOccurrence(cron, Math.max(after, s.activeSince - 1), s.timezone);
+    try {
+      return nextOccurrence(cron, Math.max(after, s.activeSince - 1), s.timezone);
+    } catch {
+      // 시간대 이름이 잘못 저장돼 있으면 Intl 이 던진다. 그 예약 하나만 "계산 불가" 로 두고
+      // 목록 조회와 다른 예약의 틱까지 죽이지 않는다.
+      return null;
+    }
   }
 
   /**
@@ -89,7 +95,12 @@ export class ScheduleEngine {
     const now = this.now();
     for (const schedule of this.deps.store.schedules()) {
       if (this.busy.has(schedule.id)) continue;
-      const due = this.latestUnhandledDue(schedule, now);
+      const { due, staleGap, cursorTo } = this.latestUnhandledDue(schedule, now);
+      if (staleGap && schedule.enabled) {
+        // 오래 꺼져 있었다. 밀린 회차를 하나씩 따라가면(매분 예약이면 수만 번) 현재에 닿는 데 몇 시간이 걸린다.
+        // 한 줄만 남기고 커서를 창 시작점으로 민다 — 현재 회차는 이 틱에서 그대로 처리한다.
+        this.skip(schedule, cursorTo, "skipped_missed", "앱이 오래 꺼져 있어 그동안의 회차를 건너뜁니다.");
+      }
       const decision = decideTick({
         schedule,
         dueAt: due,
@@ -131,22 +142,39 @@ export class ScheduleEngine {
    * 아직 회차를 만들지 않은 예정 시각 중 가장 최근 것. 없으면 null.
    * 밀린 것을 전부 재생하지 않으려고 "가장 최근 하나" 만 본다.
    */
-  private latestUnhandledDue(s: Schedule, now: number): number | null {
+  private latestUnhandledDue(s: Schedule, now: number): { due: number | null; staleGap: boolean; cursorTo: number } {
     const cron = parseCron(s.cron);
-    if (!cron) return null;
+    if (!cron) return { due: null, staleGap: false, cursorTo: now };
     const last = this.deps.store.lastRun(s.id);
-    const from = Math.max(s.activeSince - 1, last ? last.scheduledFor : s.activeSince - 1);
+    // 훑기 시작점을 "유예 안에 들 수 있는 구간" 으로 자른다. 그보다 오래된 회차는 어차피
+    // 유예 초과라 건너뛸 것이고, 매분 예약을 한 달 꺼 두면 그 옛 회차부터 한 틱에 하나씩
+    // 처리하느라 현재 회차에 도달하는 데 몇 시간이 걸린다(코덱스가 30일로 재현했다).
+    const windowMs = Math.max(0, s.missedRunGraceMinutes) * 60_000 + TICK_MS * 2 + 60 * 60_000;
+    const since = Math.max(s.activeSince - 1, last ? last.scheduledFor : s.activeSince - 1);
+    // 창보다 오래된 회차가 남아 있나(= 앱이 오래 꺼져 있었나). 한 번만 계산한다.
+    let staleGap = false;
+    try {
+      const firstMissed = nextOccurrence(cron, since, s.timezone);
+      staleGap = firstMissed !== null && firstMissed < now - windowMs;
+    } catch {
+      return { due: null, staleGap: false, cursorTo: now };
+    }
+    const windowStart = now - windowMs;
+    const from = Math.max(since, windowStart);
     let due: number | null = null;
     let cursor = from;
-    // 지난 시각을 앞으로 훑되, 지금을 넘으면 멈춘다. 오래 꺼져 있었으면 여러 번 도는데,
-    // HORIZON 이 400일이라 한 번 훑는 비용은 유한하다.
-    for (let i = 0; i < 2000; i += 1) {
-      const t = nextOccurrence(cron, cursor, s.timezone);
+    for (let i = 0; i < 1000; i += 1) {
+      let t: number | null;
+      try {
+        t = nextOccurrence(cron, cursor, s.timezone);
+      } catch {
+        return { due: null, staleGap: false, cursorTo: now }; // 시간대가 잘못 저장됐다 — 이 예약만 멈춘다
+      }
       if (t === null || t > now) break;
       if (!this.deps.store.hasRunFor(s.id, t)) due = t;
       cursor = t;
     }
-    return due;
+    return { due, staleGap, cursorTo: windowStart };
   }
 
   private snapshotOf(s: Schedule): Run["snapshot"] {
@@ -224,10 +252,19 @@ export class ScheduleEngine {
     if (!w) return;
     w.state = applyRunSignal(w.state, signal);
     const v = runVerdict(w.state);
-    if (v.state === "running") return;
     if (v.state === "needs_action") {
       const run = this.deps.store.updateRun(w.runId, { status: "needs_action" });
       if (run) this.deps.onRunChanged?.(run);
+      return;
+    }
+    if (v.state === "running") {
+      // 승인을 받고 다시 도는 중이면 표시를 되돌린다 — needs_action 이 남아 있으면
+      // 사람이 계속 기다리는 줄 안다.
+      const cur = this.deps.store.runs(w.scheduleId).find((r) => r.id === w.runId);
+      if (cur?.status === "needs_action") {
+        const run = this.deps.store.updateRun(w.runId, { status: "running" });
+        if (run) this.deps.onRunChanged?.(run);
+      }
       return;
     }
     this.watching.delete(tabId);

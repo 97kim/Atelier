@@ -110,3 +110,13 @@ test("가을 중복 제거는 한 시간에 여러 번 도는 일정에서도 �
   }
   assert.deepEqual(seen, ["2026-11-01 01:00", "2026-11-01 01:30", "2026-11-02 01:00", "2026-11-02 01:30"]);
 });
+
+test("되감는 폭이 2시간인 지역도 중복을 거른다", () => {
+  // Antarctica/Troll 은 가을에 2시간을 되감는다(코덱스가 찾은 반례).
+  const TROLL = "Antarctica/Troll";
+  const first = nextOccurrence(parseCron("30 1 * * *")!, at("2026-10-24T23:00:00Z"), TROLL);
+  assert.ok(first);
+  const second = nextOccurrence(parseCron("30 1 * * *")!, first, TROLL);
+  assert.ok(second);
+  assert.notEqual(inTz(first, TROLL), inTz(second, TROLL), "같은 현지 시각을 두 번 잡았다");
+});
