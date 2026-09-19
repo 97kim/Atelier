@@ -338,6 +338,8 @@ function startSchedules() {
         ? `이번 달 추정 비용이 예산을 넘겼습니다($${sum.totals.costUsd.toFixed(2)} / $${settings.monthlyBudgetUsd.toFixed(2)}).`
         : null;
     },
+    // 선조건은 워크스페이스 기본 경로에서 돈다. 격리 회차의 worktree 는 이 시점에 아직 없다 —
+    // "무엇을 할 일이 있나" 는 원본을 보고 판단하는 것이 맞다.
     runPrecheck: async ({ command, timeoutMs, target }) =>
       runPrecheckCommand({ command, timeoutMs, cwd: cwdForTarget(target), env: await cliDiscovery().buildEnv() }),
     dispatch: async ({ schedule, run }) => dispatchSchedule(schedule, run),
@@ -356,6 +358,9 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
   const ws = workspaces.state().model.workspaces.find((w) => w.id === wsId);
   if (!ws?.path) throw new Error("워크스페이스에 기본 경로가 없습니다.");
   let tabId: string;
+  // 실제로 돌 경로. 격리면 worktree 안, 아니면 워크스페이스 기본 경로다.
+  // 이걸 안 들고 다니면 configure 가 원본 경로로 덮어써 격리가 풀린다(실제로 그랬다).
+  let runCwd = ws.path;
   if (schedule.target.worktree) {
     const env = await cliDiscovery().buildEnv();
     const r = await worktreeCreate(ws.path, env, {
@@ -370,6 +375,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
       throw new Error("세션을 만들지 못했습니다.");
     }
     tabId = made;
+    runCwd = r.worktree.path;
   } else {
     // cwd 를 명시한다. 그냥 만들면 활성 탭의 작업 경로를 물려받아,
     // 선조건은 워크스페이스 기본 경로에서 검사하고 실제 작업은 사용자가 보고 있던
@@ -382,7 +388,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
   scheduleStore?.updateRun(run.id, { tabId });
   // 권한·provider 는 예약에 박아 둔 것을 강제한다. 새로 만든 세션이라 남의 작업에 닿지 않는다.
   // 모델도 예약에 적힌 것으로 못박는다. 비워 두면 활성 탭에서 물려받은 모델로 돈다.
-  sessions.configure(tabId, { provider: schedule.provider, policy: schedule.policy, cwd: ws.path, model: schedule.model ?? "" });
+  sessions.configure(tabId, { provider: schedule.provider, policy: schedule.policy, cwd: runCwd, model: schedule.model ?? "" });
   const sent = await handleChatSend(tabId, { text: schedule.prompt, images: [] });
   if (!sent.ok) throw new Error(sent.error);
   return { tabId };
@@ -1172,9 +1178,9 @@ function bootstrap() {
         else if (event.type === "turn_result") scheduleEngine.onSignal(tabId, { kind: "result", isError: event.isError });
         else if (event.type === "permission_request") scheduleEngine.onSignal(tabId, { kind: "awaiting", count: 1 });
         else if (event.type === "permission_resolved") scheduleEngine.onSignal(tabId, { kind: "awaiting", count: 0 });
-        // 오류는 치명적이든 아니든 회차의 끝이다. 대기열에서 취소된 경우도 fatal:false 로 오는데,
-        // 그걸 무시하면 회차가 영영 "도는 중" 으로 남아 이후 예약이 전부 겹침으로 막힌다.
-        else if (event.type === "error")
+        // 오류는 원칙적으로 회차의 끝이다(대기열 취소도 fatal:false 로 온다 — 무시하면 영영 도는 중이 된다).
+        // 다만 "재시도 예정" 은 예외다. 그걸 끝으로 읽으면 일은 계속 도는데 감시와 겹침 방지만 풀린다.
+        else if (event.type === "error" && event.willRetry !== true)
           scheduleEngine.onSignal(tabId, { kind: "stream_ended", reason: event.message, expected: false });
       }
       // 어댑터가 직접 흘린 status(waiting_permission 등)도 사이드바 상태에 반영한다.

@@ -273,9 +273,16 @@ export class ScheduleEngine {
       }
       return;
     }
+    try {
+      if (v.state === "completed") this.finish(w.runId, v.isError ? "failed" : "completed", v.isError ? "모델이 오류로 끝냈습니다." : null);
+      else this.finish(w.runId, "interrupted", v.reason);
+    } catch (e) {
+      // 저장이 실패하면 감시를 놓지 않는다. 놓으면 회차가 영영 "도는 중" 으로 남고
+      // 디스크가 복구돼도 아무도 다시 끝내 주지 않는다.
+      this.deps.log?.(`[schedules] 회차 종료 기록 실패 — 감시를 유지합니다: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     this.watching.delete(tabId);
-    if (v.state === "completed") this.finish(w.runId, v.isError ? "failed" : "completed", v.isError ? "모델이 오류로 끝냈습니다." : null);
-    else this.finish(w.runId, "interrupted", v.reason);
   }
 
   /** 지금 지켜보는 회차가 있는 탭인가(어댑터 신호를 흘려보낼지 정할 때). */

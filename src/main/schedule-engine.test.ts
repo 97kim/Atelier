@@ -258,3 +258,21 @@ test("유예가 아주 커도 가장 최근 회차를 고른다", async () => {
   assert.ok(lateBy <= 2, `${lateBy}분 전 회차를 골랐다`);
   fs.rmSync(h.dir, { recursive: true, force: true });
 });
+
+test("종료 기록이 실패하면 감시를 놓지 않는다", async () => {
+  const h = harness();
+  await h.engine.tick();
+  assert.equal(h.engine.watchingCount(), 1);
+  // 저장을 막아 둔 채 완료 신호를 준다
+  const blocked = path.join(h.dir, "schedules.json.tmp");
+  fs.mkdirSync(blocked, { recursive: true });
+  h.engine.onSignal("tab1", { kind: "turn_started" });
+  h.engine.onSignal("tab1", { kind: "result", isError: false });
+  assert.equal(h.engine.watchingCount(), 1, "놓으면 아무도 다시 끝내 주지 않는다");
+  // 디스크가 돌아오면 다음 신호에 정상적으로 끝난다
+  fs.rmdirSync(blocked);
+  h.engine.onSignal("tab1", { kind: "result", isError: false });
+  assert.equal(h.store.runs("s1")[0].status, "completed");
+  assert.equal(h.engine.watchingCount(), 0);
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});

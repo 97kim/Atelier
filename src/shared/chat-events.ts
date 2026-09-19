@@ -263,6 +263,8 @@ export interface ErrorEvent extends Base {
   message: string;
   /** false 면 턴은 계속된다 (Codex 의 non-fatal error item 등). 기본 true. */
   fatal?: boolean;
+  /** provider 가 스스로 다시 시도한다. 이 오류로 턴이 끝난 것이 아니다. */
+  willRetry?: boolean;
 }
 
 export type ChatEvent =

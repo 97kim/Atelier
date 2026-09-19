@@ -128,3 +128,10 @@ test("백그라운드가 없던 회차는 스트림이 닫혀도 완료다", () 
   ];
   assert.deepEqual(judgeRun(seq), { state: "completed", isError: false });
 });
+
+test("재시도 예정 오류는 회차를 끝내지 않는다(엔진 연결부 계약)", () => {
+  // 연결부는 willRetry 인 오류를 stream_ended 로 바꾸지 않는다. 판정기 입장에서는
+  // 그 신호가 아예 오지 않는 것과 같아야 한다.
+  const seq: RunSignal[] = [{ kind: "turn_started" }, { kind: "tasks", count: 1, source: "sdk" }];
+  assert.deepEqual(judgeRun(seq), { state: "running" });
+});

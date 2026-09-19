@@ -219,8 +219,10 @@ export function mapAppServerNotification(method: string, params: Json, ts: numbe
       ];
     }
     case "error": {
-      const err = (params.error ?? {}) as { message?: string };
-      return [{ type: "error", ts, message: err.message || "Codex 오류", fatal: false }];
+      // willRetry 는 "곧 다시 시도한다" 는 뜻이라 턴의 끝이 아니다. 그 사실을 지우면
+      // 예약 회차가 여기서 끝난 것으로 기록되고, 정작 작업은 계속 돈다.
+      const err = (params.error ?? {}) as { message?: string; willRetry?: boolean };
+      return [{ type: "error", ts, message: err.message || "Codex 오류", fatal: false, ...(err.willRetry === true ? { willRetry: true } : {}) }];
     }
     default:
       return [];

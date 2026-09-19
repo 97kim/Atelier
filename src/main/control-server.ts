@@ -319,7 +319,7 @@ export class ControlServer {
           ...(params.precheck !== undefined
             ? { precheck: { command: this.requireString(params, "precheck"), timeoutMs: Number(params.precheckTimeout ?? 60000) } }
             : {}),
-          ...(params.grace !== undefined ? { missedRunGraceMinutes: Number(params.grace) } : {}),
+          ...(params.grace !== undefined ? { missedRunGraceMinutes: this.requireGrace(params) } : {}),
         });
         return { schedule: { id: saved.id, name: saved.name, cron: saved.cron, timezone: saved.timezone, enabled: saved.enabled } };
       }
@@ -713,6 +713,14 @@ export class ControlServer {
     } catch {
       throw new ControlError(`시간대를 알 수 없습니다: ${tz}`);
     }
+  }
+
+  /** 유예 상한. 훑는 창이 12시간이라 그보다 큰 값을 받으면 지킬 수 없는 약속이 된다. */
+  private requireGrace(params: Params): number {
+    const n = Number(params.grace);
+    if (!Number.isFinite(n) || n < 0) throw new ControlError("--grace 는 0 이상의 분입니다.");
+    if (n > 720) throw new ControlError("--grace 는 720분(12시간)까지입니다.");
+    return Math.round(n);
   }
 
   private requireSchedules() {

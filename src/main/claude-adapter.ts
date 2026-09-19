@@ -423,6 +423,10 @@ function handleMessage(s: LiveSession, message: SDKMessage) {
     // 예전엔 여기서 버렸다 — 그 사이에 한 일이 통째로 사라져, 끝났는데 아무 말도 없는 것처럼 보였다.
     const onEvent = s.onAmbientEvent;
     if (!onEvent) return;
+    // 이 턴이 도는 동안은 유휴 타이머를 계속 뒤로 민다. 한 번만 미루면 후속 턴이 시작한 직후에도
+    // 잘린다(첫 result 10분 뒤 지연 소진 → 19분 59초에 후속 턴 시작 → 20분에 종료).
+    s.idleDeferred = false;
+    if (live.get(s.key) === s && !s.dead) armIdle(s);
     if (!s.ambientMapper) s.ambientMapper = new ClaudeEventMapper();
     for (const e of s.ambientMapper.map(message, Date.now())) onEvent(e);
     if (message.type === "result") s.ambientMapper = null;
