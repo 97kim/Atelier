@@ -96,6 +96,8 @@ export class ScheduleEngine {
     for (const schedule of this.deps.store.schedules()) {
       if (this.busy.has(schedule.id)) continue;
       const { due, staleGap, cursorTo } = this.latestUnhandledDue(schedule, now);
+      this.busy.add(schedule.id);
+      try {
       if (staleGap && schedule.enabled) {
         // 오래 꺼져 있었다. 밀린 회차를 하나씩 따라가면(매분 예약이면 수만 번) 현재에 닿는 데 몇 시간이 걸린다.
         // 한 줄만 남기고 커서를 창 시작점으로 민다 — 현재 회차는 이 틱에서 그대로 처리한다.
@@ -110,14 +112,13 @@ export class ScheduleEngine {
         targetUnavailable: this.deps.checkTarget(schedule.target),
         budgetBlocked: this.deps.checkBudget(),
       });
-      if (decision.kind === "idle") continue;
-      this.busy.add(schedule.id);
-      try {
+      if (decision.kind !== "idle") {
         if (decision.kind === "skip") {
           this.skip(schedule, decision.scheduledFor, decision.status, decision.reason);
         } else {
           await this.run(schedule, decision.scheduledFor, decision.kind === "precheck", "scheduled");
         }
+      }
       } catch (e) {
         this.deps.log?.(`[schedules] ${schedule.name}: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
@@ -149,7 +150,12 @@ export class ScheduleEngine {
     // 훑기 시작점을 "유예 안에 들 수 있는 구간" 으로 자른다. 그보다 오래된 회차는 어차피
     // 유예 초과라 건너뛸 것이고, 매분 예약을 한 달 꺼 두면 그 옛 회차부터 한 틱에 하나씩
     // 처리하느라 현재 회차에 도달하는 데 몇 시간이 걸린다(코덱스가 30일로 재현했다).
-    const windowMs = Math.max(0, s.missedRunGraceMinutes) * 60_000 + TICK_MS * 2 + 60 * 60_000;
+    // 유예가 아무리 커도 훑는 창은 묶어 둔다. 창이 크면 탐색 상한(1000)에 먼저 걸려
+    // "가장 최근" 대신 한참 과거 회차를 골라 버린다(매분 예약 + 유예 1440분에서 재현됐다).
+    const windowMs = Math.min(
+      Math.max(0, s.missedRunGraceMinutes) * 60_000 + TICK_MS * 2 + 60 * 60_000,
+      12 * 60 * 60_000,
+    );
     const since = Math.max(s.activeSince - 1, last ? last.scheduledFor : s.activeSince - 1);
     // 창보다 오래된 회차가 남아 있나(= 앱이 오래 꺼져 있었나). 한 번만 계산한다.
     let staleGap = false;

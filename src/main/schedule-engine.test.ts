@@ -211,3 +211,50 @@ test("저장이 실패하면 보내지 않는다 — 기록 없는 실행을 만
   assert.equal(h.dispatched.length, 0, "기록도 못 했는데 보내면 안 된다");
   fs.rmSync(h.dir, { recursive: true, force: true });
 });
+
+// 아래는 코덱스 3차가 찾은 반례다.
+
+test("대기열에서 취소돼도 회차가 끝난다 — 영영 도는 중으로 남지 않는다", async () => {
+  const h = harness();
+  await h.engine.tick();
+  assert.equal(h.store.runs("s1")[0].status, "running");
+  // 동시 실행 한도에 걸려 취소된 경우(치명적이지 않은 오류로 온다)
+  h.engine.onSignal("tab1", { kind: "stream_ended", reason: "대기열에서 취소되었습니다.", expected: false });
+  const run = h.store.runs("s1")[0];
+  assert.equal(run.status, "interrupted");
+  // 그래서 다음 회차가 겹침으로 막히지 않는다
+  h.setNow(at("2026-09-20T09:30:00+09:00"));
+  await h.engine.tick();
+  assert.equal(h.store.runs("s1")[0].status, "running");
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});
+
+test("저장이 실패하면 메모리도 되돌린다 — 디스크가 복구되면 다시 돈다", async () => {
+  const h = harness();
+  const blocked = path.join(h.dir, "schedules.json.tmp");
+  fs.mkdirSync(blocked, { recursive: true });
+  await h.engine.tick();
+  assert.equal(h.dispatched.length, 0);
+  assert.equal(h.store.runs("s1").length, 0, "기록도 못 한 회차가 메모리에 남으면 안 된다");
+
+  // 디스크가 돌아오면 같은 회차가 정상적으로 돈다
+  fs.rmdirSync(blocked);
+  await h.engine.tick();
+  assert.equal(h.store.runs("s1")[0].status, "running");
+  assert.equal(h.dispatched.length, 1);
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});
+
+test("유예가 아주 커도 가장 최근 회차를 고른다", async () => {
+  // 매분 예약 + 유예 하루. 창을 안 묶으면 탐색 상한에 걸려 한참 과거를 고른다.
+  const h = harness({ cron: "* * * * *", missedRunGraceMinutes: 1440, activeSince: at("2026-08-20T00:00:00+09:00") });
+  const now = at("2026-09-19T12:00:00+09:00");
+  h.setNow(now);
+  await h.engine.tick();
+  const runs = h.store.runs("s1");
+  const picked = runs.find((r) => r.status === "running");
+  assert.ok(picked, `실행된 회차가 없다: ${JSON.stringify(runs.map((r) => r.status))}`);
+  const lateBy = (now - picked.scheduledFor) / 60_000;
+  assert.ok(lateBy <= 2, `${lateBy}분 전 회차를 골랐다`);
+  fs.rmSync(h.dir, { recursive: true, force: true });
+});

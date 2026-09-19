@@ -111,19 +111,33 @@ export class ScheduleStore {
   }
 
   createRun(run: Run): Run {
-    this.data.runs.push(run);
+    const before = this.data.runs;
+    this.data.runs = [...before, run];
     this.prune(run.scheduleId);
-    this.write();
+    try {
+      this.write();
+    } catch (e) {
+      // 저장에 실패했으면 메모리도 되돌린다. 안 그러면 기록에 없는 회차가 메모리에만 남아
+      // 이후 회차를 전부 겹침으로 막는다(디스크가 복구돼도 풀리지 않는다).
+      this.data.runs = before;
+      throw e;
+    }
     return run;
   }
 
   updateRun(id: string, patch: Partial<Run>): Run | null {
     const i = this.data.runs.findIndex((r) => r.id === id);
     if (i === -1) return null;
-    const next = { ...this.data.runs[i], ...patch };
-    this.data.runs[i] = next;
+    const before = this.data.runs;
+    const next = { ...before[i], ...patch };
+    this.data.runs = before.map((r, j) => (j === i ? next : r));
     this.prune(next.scheduleId);
-    this.write();
+    try {
+      this.write();
+    } catch (e) {
+      this.data.runs = before;
+      throw e;
+    }
     return next;
   }
 

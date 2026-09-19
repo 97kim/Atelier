@@ -364,18 +364,25 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
     });
     if (!r.ok) throw new Error(r.error);
     const made = workspaces.createTab(wsId, { cwd: r.worktree.path, worktree: r.worktree, title: `${schedule.name} · 예약` });
-    if (!made) throw new Error("세션을 만들지 못했습니다.");
+    if (!made) {
+      // 탭을 못 만들면 방금 만든 worktree 는 아무도 모르는 디렉터리로 남는다. 되돌린다.
+      await worktreeRemove(env, r.worktree, { force: true }).catch(() => {});
+      throw new Error("세션을 만들지 못했습니다.");
+    }
     tabId = made;
   } else {
-    const made = workspaces.createTab(wsId);
+    // cwd 를 명시한다. 그냥 만들면 활성 탭의 작업 경로를 물려받아,
+    // 선조건은 워크스페이스 기본 경로에서 검사하고 실제 작업은 사용자가 보고 있던
+    // 다른 worktree 에서 하는 일이 생긴다.
+    const made = workspaces.createTab(wsId, { cwd: ws.path, title: `${schedule.name} · 예약` });
     if (!made) throw new Error("세션을 만들지 못했습니다.");
     tabId = made;
-    workspaces.renameTab(tabId, `${schedule.name} · 예약`);
   }
   // 어디서 돌았는지 먼저 남긴다. 보내기가 실패해도 만들어 둔 세션을 이력에서 찾아갈 수 있어야 한다.
   scheduleStore?.updateRun(run.id, { tabId });
   // 권한·provider 는 예약에 박아 둔 것을 강제한다. 새로 만든 세션이라 남의 작업에 닿지 않는다.
-  sessions.configure(tabId, { provider: schedule.provider, policy: schedule.policy, ...(schedule.model ? { model: schedule.model } : {}) });
+  // 모델도 예약에 적힌 것으로 못박는다. 비워 두면 활성 탭에서 물려받은 모델로 돈다.
+  sessions.configure(tabId, { provider: schedule.provider, policy: schedule.policy, cwd: ws.path, model: schedule.model ?? "" });
   const sent = await handleChatSend(tabId, { text: schedule.prompt, images: [] });
   if (!sent.ok) throw new Error(sent.error);
   return { tabId };
@@ -1165,8 +1172,9 @@ function bootstrap() {
         else if (event.type === "turn_result") scheduleEngine.onSignal(tabId, { kind: "result", isError: event.isError });
         else if (event.type === "permission_request") scheduleEngine.onSignal(tabId, { kind: "awaiting", count: 1 });
         else if (event.type === "permission_resolved") scheduleEngine.onSignal(tabId, { kind: "awaiting", count: 0 });
-        // 치명적 오류는 끝이다. 안 흘려보내면 회차가 영영 "도는 중" 으로 남아 다음 회차를 전부 막는다.
-        else if (event.type === "error" && event.fatal !== false)
+        // 오류는 치명적이든 아니든 회차의 끝이다. 대기열에서 취소된 경우도 fatal:false 로 오는데,
+        // 그걸 무시하면 회차가 영영 "도는 중" 으로 남아 이후 예약이 전부 겹침으로 막힌다.
+        else if (event.type === "error")
           scheduleEngine.onSignal(tabId, { kind: "stream_ended", reason: event.message, expected: false });
       }
       // 어댑터가 직접 흘린 status(waiting_permission 등)도 사이드바 상태에 반영한다.

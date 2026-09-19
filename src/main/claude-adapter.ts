@@ -174,6 +174,8 @@ interface LiveSession {
   liveTaskCount: number;
   /** 우리가 닫는 중이다(탭 닫기·유휴 종료 등). 스트림이 끝난 이유를 구분하려고 둔다. */
   closing: string | null;
+  /** 후속 턴 때문에 유휴 종료를 한 번 미뤘다. 두 번은 미루지 않는다. */
+  idleDeferred: boolean;
   log?(line: string): void;
   /** 턴과 무관하게 오는 신호를 보낼 곳. 턴이 새로 시작하면 그 턴의 것으로 갱신한다. */
   onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource): void;
@@ -221,7 +223,10 @@ function armIdle(s: LiveSession) {
     if (live.get(s.key) !== s || s.turn) return;
     // 우리가 시작하지 않은 턴(백그라운드 결과를 처리하는 후속 턴)이 돌고 있으면 내리지 않는다.
     // s.turn 만 보면 그 턴은 안 보인다 — 첫 result 뒤 10분에 답을 쓰던 중인 세션을 죽인다.
-    if (s.ambientMapper) {
+    // 다만 mapper 가 있다는 것만으로 무한히 미루지는 않는다 — 턴 밖 잡음(commands_changed 등)도
+    // mapper 를 만들고, result 가 와야만 지워진다. 한 번만 더 기다린다.
+    if (s.ambientMapper && !s.idleDeferred) {
+      s.idleDeferred = true;
       armIdle(s);
       return;
     }
@@ -269,6 +274,7 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
     ambientSeq: 0,
     liveTaskCount: 0,
     closing: null,
+    idleDeferred: false,
     log: req.log,
     onBackgroundTasks: req.onBackgroundTasks,
     onTaskFinished: req.onTaskFinished,
@@ -527,6 +533,7 @@ export async function runClaudeTurn(runtime: ClaudeRuntime, req: ClaudeTurnReque
   s.onAmbientEvent = req.onAmbientEvent;
   s.requestAmbientPermission = req.requestAmbientPermission;
   s.onStreamEnded = req.onStreamEnded;
+  s.idleDeferred = false;
   const done = new Promise<void>((resolve, reject) => {
     s.turn = { req, mapper: new ClaudeEventMapper(), resolve, reject, permissionSeq: 0 };
   });

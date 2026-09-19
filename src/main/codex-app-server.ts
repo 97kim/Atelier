@@ -201,7 +201,9 @@ export function mapAppServerNotification(method: string, params: Json, ts: numbe
       const turn = (params.turn ?? {}) as { status?: string; error?: { message?: string } | null };
       const usage = ctx.lastUsage ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
       const modelUsage: Record<string, ModelUsageEntry> = ctx.model ? { [ctx.model]: { ...usage, costUsd: 0 } } : {};
-      const failed = turn.status === "failed";
+      // 중단(interrupted)을 성공으로 읽으면 안 된다. 예약 회차에서는 "사용자가 세운 것" 이
+      // 그대로 completed 로 기록된다.
+      const failed = turn.status === "failed" || turn.status === "interrupted";
       return [
         {
           type: "turn_result",
@@ -212,7 +214,7 @@ export function mapAppServerNotification(method: string, params: Json, ts: numbe
           numTurns: 1,
           modelUsage,
           isError: failed,
-          errorText: failed ? (turn.error?.message ?? "Codex turn 실패") : undefined,
+          errorText: failed ? (turn.error?.message ?? (turn.status === "interrupted" ? "중단되었습니다." : "Codex turn 실패")) : undefined,
         },
       ];
     }

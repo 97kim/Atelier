@@ -156,7 +156,7 @@ export class WorkspaceService {
     this.commit(model);
   }
 
-  createTab(workspaceId?: string, extra?: { cwd: string; worktree: WorktreeMeta; title?: string }): string | null {
+  createTab(workspaceId?: string, extra?: { cwd: string; worktree?: WorktreeMeta; title?: string }): string | null {
     const ws = workspaceId
       ? this.model.workspaces.find((w) => w.id === workspaceId)
       : activeWorkspace(this.model);
@@ -170,9 +170,18 @@ export class WorkspaceService {
       policy: active?.policy,
       cwd: extra?.cwd ?? (active && active.workspaceId === ws.id ? (tabCwd(this.model, active) ?? undefined) : undefined),
     });
-    // 격리 세션: worktree 정보와 브랜치 이름 제목을 함께 저장한다.
+    // 격리 세션이면 worktree 정보와 브랜치 이름 제목을 함께 저장한다.
+    // worktree 없이 경로만 준 경우(예약처럼 활성 탭을 따라가면 안 되는 경우)도 있다.
     const withWt = extra
-      ? updateTab(model, tab.id, { worktree: extra.worktree, title: extra.title ?? extra.worktree.branch, titleCustom: true }, now)
+      ? updateTab(
+          model,
+          tab.id,
+          {
+            ...(extra.worktree ? { worktree: extra.worktree } : {}),
+            ...(extra.title || extra.worktree ? { title: extra.title ?? extra.worktree!.branch, titleCustom: true } : {}),
+          },
+          now,
+        )
       : model;
     this.commit(withWt);
     return tab.id;
