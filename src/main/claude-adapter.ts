@@ -54,6 +54,11 @@ export interface ClaudeTurnRequest {
   /** 백그라운드 작업 하나가 끝났다(completed·failed·stopped). */
   onTaskFinished?(note: TaskFinishedNote): void;
   /**
+   * 이 세션의 스트림이 끝났다. expected = 우리가 의도적으로 닫았다(탭 닫기·유휴 종료·설정 변경).
+   * 예약 회차의 "끝을 못 봤다" 를 판정하려면 이게 있어야 한다 — 없으면 영영 진행 중으로 남는다.
+   */
+  onStreamEnded?(reason: string, expected: boolean): void;
+  /**
    * 우리가 시작하지 않은 턴의 이벤트. 백그라운드 작업이 끝나면 CLI 가 스스로 이어서 일하는데,
    * 그 턴을 버리면 그 사이의 일이 통째로 사라진다(릴리즈가 끝났는데 화면엔 아무 말도 없는 것처럼).
    */
@@ -165,10 +170,15 @@ interface LiveSession {
   requestAmbientPermission?(req: PermissionRequestEvent): Promise<PermissionAnswer>;
   ambientMapper: ClaudeEventMapper | null;
   ambientSeq: number;
+  /** SDK 가 알려 준 살아 있는 백그라운드 작업 수. 유휴 종료 판단에 쓴다. */
+  liveTaskCount: number;
+  /** 우리가 닫는 중이다(탭 닫기·유휴 종료 등). 스트림이 끝난 이유를 구분하려고 둔다. */
+  closing: string | null;
   log?(line: string): void;
   /** 턴과 무관하게 오는 신호를 보낼 곳. 턴이 새로 시작하면 그 턴의 것으로 갱신한다. */
   onBackgroundTasks?(sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource): void;
   onTaskFinished?(note: TaskFinishedNote): void;
+  onStreamEnded?(reason: string, expected: boolean): void;
 }
 
 const live = new Map<string, LiveSession>();
@@ -181,9 +191,10 @@ export function liveClaudeSessions(): string[] {
 }
 
 /** 프로세스를 내린다(탭 해제·대화 비우기·provider 전환·cwd 변경·앱 종료). 진행 중인 턴이 있으면 중단으로 끝난다. */
-export function closeClaudeSession(key: string): void {
+export function closeClaudeSession(key: string, reason = "세션을 닫았습니다."): void {
   const s = live.get(key);
   if (!s) return;
+  s.closing = reason;
   live.delete(key);
   s.dead = true;
   if (s.idleTimer) clearTimeout(s.idleTimer);
@@ -207,10 +218,16 @@ export function closeAllClaudeSessions(): void {
 function armIdle(s: LiveSession) {
   if (s.idleTimer) clearTimeout(s.idleTimer);
   s.idleTimer = setTimeout(() => {
-    if (live.get(s.key) === s && !s.turn) {
-      s.log?.(`[claude ${s.key}] idle ${sessionIdleMs}ms — 프로세스 종료`);
-      closeClaudeSession(s.key);
+    if (live.get(s.key) !== s || s.turn) return;
+    // 턴이 끝났어도 백그라운드 작업이 살아 있으면 내리지 않는다. 15분짜리 명령을 띄워 두고
+    // 턴만 끝낸 세션을 10분 뒤에 죽이면, 그 일도 그 결과를 처리할 후속 턴도 함께 사라진다.
+    if (s.liveTaskCount > 0) {
+      s.log?.(`[claude ${s.key}] idle 이지만 백그라운드 ${s.liveTaskCount}개가 살아 있어 유지합니다.`);
+      armIdle(s);
+      return;
     }
+    s.log?.(`[claude ${s.key}] idle ${sessionIdleMs}ms — 프로세스 종료`);
+    closeClaudeSession(s.key);
   }, sessionIdleMs);
   s.idleTimer.unref?.();
 }
@@ -244,6 +261,8 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
     requestAmbientPermission: req.requestAmbientPermission,
     ambientMapper: null,
     ambientSeq: 0,
+    liveTaskCount: 0,
+    closing: null,
     log: req.log,
     onBackgroundTasks: req.onBackgroundTasks,
     onTaskFinished: req.onTaskFinished,
@@ -314,9 +333,11 @@ async function pump(s: LiveSession) {
     for await (const message of s.q) handleMessage(s, message);
     // 예외 없이 끝났다 = 프로세스가 스스로 스트림을 닫았다.
     if (process.env.WORKBENCH_DEBUG_SDK) console.log(`[sdkend ${s.key.slice(0, 6)}] 정상종료(EOF) turn=${s.turn ? "있음" : "없음"}`);
+    s.onStreamEnded?.(s.closing ?? "프로세스가 스트림을 닫았습니다.", s.closing !== null);
   } catch (e) {
     if (process.env.WORKBENCH_DEBUG_SDK)
       console.log(`[sdkend ${s.key.slice(0, 6)}] 예외 turn=${s.turn ? "있음" : "없음"} ${e instanceof Error ? e.message : String(e)}`);
+    s.onStreamEnded?.(s.closing ?? (e instanceof Error ? e.message : String(e)), s.closing !== null);
     s.turn?.reject(e);
     s.turn = null;
   } finally {
@@ -362,7 +383,11 @@ function handleMessage(s: LiveSession, message: SDKMessage) {
       });
     } else if (message.subtype === "background_tasks_changed") {
       // 살아 있는 백그라운드 작업 전체. 턴이 없어도 온다 — 턴에 묶으면 "턴은 끝났는데 일은 도는" 구간을 놓친다.
-      s.onBackgroundTasks?.(message.session_id ?? s.sessionId ?? "", parseLiveTasks(message.tasks), "sdk");
+      {
+        const tasks = parseLiveTasks(message.tasks);
+        s.liveTaskCount = tasks.length;
+        s.onBackgroundTasks?.(message.session_id ?? s.sessionId ?? "", tasks, "sdk");
+      }
     } else if (message.subtype === "task_notification") {
       const note = parseTaskFinished(message);
       if (note) s.onTaskFinished?.(note);
@@ -495,6 +520,7 @@ export async function runClaudeTurn(runtime: ClaudeRuntime, req: ClaudeTurnReque
   s.onTaskFinished = req.onTaskFinished;
   s.onAmbientEvent = req.onAmbientEvent;
   s.requestAmbientPermission = req.requestAmbientPermission;
+  s.onStreamEnded = req.onStreamEnded;
   const done = new Promise<void>((resolve, reject) => {
     s.turn = { req, mapper: new ClaudeEventMapper(), resolve, reject, permissionSeq: 0 };
   });

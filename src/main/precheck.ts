@@ -1,0 +1,87 @@
+// 예약의 선조건 명령. "지금 할 일이 있나" 를 모델을 부르기 전에 결정적으로 확인한다.
+//
+// 이건 작은 조건 검사가 아니라 무인 명령 실행기다 — 모델 권한과 무관하게 돈다.
+// 그래서 계약을 분명히 둔다: 고정된 셸, 제한 시간, 출력 상한, 시간 초과면 프로세스 트리째 종료,
+// 그리고 "조건 불충족" 과 "명령이 고장 남" 을 구분해 기록한다(해석은 readPrecheck 가 한다).
+
+import { spawn } from "node:child_process";
+import type { PrecheckResult } from "@shared/schedules";
+
+/** 기록에 남길 출력 길이. 통째로 두면 이력 파일이 커진다. */
+const TAIL_MAX = 2000;
+export const PRECHECK_TIMEOUT_MAX_MS = 10 * 60 * 1000;
+
+function tail(s: string): string {
+  return s.length <= TAIL_MAX ? s : `…${s.slice(-TAIL_MAX)}`;
+}
+
+/** 자식이 만든 프로세스까지 정리한다. 타임아웃인데 손자가 살아남으면 의미가 없다. */
+function killTree(pid: number): void {
+  try {
+    // 음수 pid = 프로세스 그룹. detached 로 띄웠으므로 그룹이 있다.
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      /* 이미 죽음 */
+    }
+  }
+}
+
+export function runPrecheckCommand(input: { command: string; timeoutMs: number; cwd: string | null; env: NodeJS.ProcessEnv }): Promise<PrecheckResult> {
+  const startedAt = Date.now();
+  const timeoutMs = Math.min(Math.max(1000, input.timeoutMs), PRECHECK_TIMEOUT_MAX_MS);
+  return new Promise<PrecheckResult>((resolve) => {
+    let out = "";
+    let err = "";
+    let timedOut = false;
+    let done = false;
+    const finish = (exitCode: number | null, error: string | null) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve({
+        command: input.command,
+        exitCode,
+        timedOut,
+        durationMs: Date.now() - startedAt,
+        stdout: tail(out),
+        stderr: tail(err),
+        error,
+      });
+    };
+
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(input.command, {
+        shell: "/bin/sh",
+        cwd: input.cwd ?? undefined,
+        env: input.env,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (e) {
+      finish(null, e instanceof Error ? e.message : String(e));
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (child.pid) killTree(child.pid);
+    }, timeoutMs);
+    timer.unref?.();
+
+    child.stdout?.on("data", (b: Buffer) => {
+      out = tail(out + b.toString("utf8"));
+    });
+    child.stderr?.on("data", (b: Buffer) => {
+      err = tail(err + b.toString("utf8"));
+    });
+    child.on("error", (e) => finish(null, e.message));
+    child.on("close", (code, signal) => {
+      // 시간 초과로 우리가 죽인 것은 "종료 코드" 로 읽으면 안 된다.
+      finish(timedOut ? null : code, timedOut ? null : signal ? `신호 ${signal} 로 끝났습니다.` : null);
+    });
+  });
+}

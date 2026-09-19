@@ -72,6 +72,10 @@ import {
   worktreeStatus,
 } from "./worktree";
 import { draftCommitMessage } from "./git-draft";
+import { ScheduleStore } from "./schedule-store";
+import { ScheduleEngine } from "./schedule-engine";
+import { runPrecheckCommand } from "./precheck";
+import type { Run, Schedule, ScheduleTarget } from "@shared/schedules";
 import { createFileLogger, type FileLogger } from "./logger";
 import { Store } from "./persistence";
 import { RendererState } from "./renderer-state";
@@ -261,6 +265,106 @@ function onBackgroundJobFinished(job: BackgroundJobDto) {
  * 플러그인 작업(백그라운드 Codex 등)은 프로세스가 앱에서 떨어져 나가 작업 목록 파일이 유일한 단서고,
  * Claude Code 가 백그라운드로 돌린 명령은 대화 이벤트로 시작을 알고 출력 파일 꼬리로 끝을 안다.
  */
+let scheduleStore: ScheduleStore | null = null;
+let scheduleEngine: ScheduleEngine | null = null;
+
+/** 예약의 작업 경로. 격리 세션을 만들기 전 단계(precheck)는 여기서 돈다. */
+function cwdForTarget(target: ScheduleTarget): string | null {
+  if (target.kind === "tab") return workspaces.resolveConfig(target.tabId)?.cwd ?? null;
+  return workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId)?.path || null;
+}
+
+/** 예약 실행을 시작한다. 켜질 때 끝을 못 본 회차부터 정리한다. */
+function startSchedules() {
+  if (scheduleEngine) return;
+  scheduleStore = new ScheduleStore(app.getPath("userData"));
+  const store = scheduleStore;
+  scheduleEngine = new ScheduleEngine({
+    store,
+    checkTarget: (target) => {
+      if (target.kind === "tab") return workspaces.tab(target.tabId) ? null : "대상 세션이 사라졌습니다.";
+      const ws = workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId);
+      if (!ws) return "대상 워크스페이스가 사라졌습니다.";
+      return ws.path ? null : "워크스페이스에 기본 경로가 없습니다.";
+    },
+    checkBudget: () => {
+      const settings = usageSettings();
+      if (!settings.monthlyBudgetUsd || settings.monthlyBudgetUsd <= 0) return null;
+      const sum = querySummary({ ...periodRange("month", Date.now()), provider: "all" });
+      // 예약은 사람이 안 보는 사이에 돈다 — 예산을 넘겼으면 조용히 멈추는 편이 낫다.
+      return sum.totals.costUsd >= settings.monthlyBudgetUsd
+        ? `이번 달 추정 비용이 예산을 넘겼습니다($${sum.totals.costUsd.toFixed(2)} / $${settings.monthlyBudgetUsd.toFixed(2)}).`
+        : null;
+    },
+    runPrecheck: async ({ command, timeoutMs, target }) =>
+      runPrecheckCommand({ command, timeoutMs, cwd: cwdForTarget(target), env: await cliDiscovery().buildEnv() }),
+    dispatch: async ({ schedule, run }) => dispatchSchedule(schedule, run),
+    onRunChanged: (run) => {
+      sendAll(IPC.schedulesChanged, scheduleSnapshot());
+      notifyScheduleRun(run);
+    },
+    log: (line) => console.log(line),
+  });
+  scheduleEngine.start();
+}
+
+/** 예약 한 회차를 실제로 띄운다. 격리 세션이면 worktree 를 만들고, 아니면 정해 둔 탭에 보낸다. */
+async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: string }> {
+  let tabId: string;
+  if (schedule.target.kind === "tab") {
+    tabId = schedule.target.tabId;
+  } else {
+    const wsId = schedule.target.workspaceId;
+    const ws = workspaces.state().model.workspaces.find((w) => w.id === wsId);
+    if (!ws?.path) throw new Error("워크스페이스에 기본 경로가 없습니다.");
+    if (schedule.target.worktree) {
+      const env = await cliDiscovery().buildEnv();
+      const r = await worktreeCreate(ws.path, env, {
+        rootDir: join(app.getPath("userData"), "worktrees"),
+        slug: worktreeSlug(schedule.name),
+      });
+      if (!r.ok) throw new Error(r.error);
+      const made = workspaces.createTab(wsId, { cwd: r.worktree.path, worktree: r.worktree, title: `${schedule.name} · 예약` });
+      if (!made) throw new Error("세션을 만들지 못했습니다.");
+      tabId = made;
+    } else {
+      const made = workspaces.createTab(wsId);
+      if (!made) throw new Error("세션을 만들지 못했습니다.");
+      tabId = made;
+      workspaces.renameTab(tabId, `${schedule.name} · 예약`);
+    }
+  }
+  // 권한·provider 는 예약에 박아 둔 것을 강제한다. 탭 설정을 따라가면 안 된다.
+  sessions.configure(tabId, { provider: schedule.provider, policy: schedule.policy, ...(schedule.model ? { model: schedule.model } : {}) });
+  const sent = await handleChatSend(tabId, { text: schedule.prompt, images: [] });
+  if (!sent.ok) throw new Error(sent.error);
+  return { tabId };
+}
+
+/** 화면에 줄 예약 목록(다음 실행 시각과 최근 회차 포함). */
+function scheduleSnapshot() {
+  const store = scheduleStore;
+  const engine = scheduleEngine;
+  if (!store || !engine) return { schedules: [], runs: [] };
+  return {
+    schedules: store.schedules().map((s) => ({ ...s, nextRunAt: engine.nextRunAt(s) })),
+    runs: store.schedules().flatMap((s) => store.runs(s.id).slice(0, 10)),
+  };
+}
+
+/** 끝난 회차를 알린다. 사람이 안 보는 사이에 도는 일이라 결과는 알려 줘야 한다. */
+function notifyScheduleRun(run: Run) {
+  if (run.status === "completed" || run.status === "pending" || run.status === "running") return;
+  const store = scheduleStore;
+  const name = store?.schedule(run.scheduleId)?.name ?? "예약";
+  if (run.status === "needs_action") {
+    notify(`예약이 승인을 기다립니다 · ${name}`, run.snapshot.prompt.slice(0, 80), run.tabId ?? undefined);
+    return;
+  }
+  if (run.status.startsWith("skipped_")) return; // 건너뜀은 조용히 — 이력에 남는다
+  notify(`예약 실패 · ${name}`, run.reason ?? run.status, run.tabId ?? undefined);
+}
+
 function startBackgroundJobWatcher() {
   if (jobWatcher) return;
   jobWatcher = new BackgroundJobWatcher({ onChanged: () => sendBackgroundJobs(), onFinished: onBackgroundJobFinished });
@@ -420,6 +524,47 @@ async function startControlServer() {
         } catch {
           return null;
         }
+      },
+      schedules: () => {
+        const store = scheduleStore;
+        const engine = scheduleEngine;
+        if (!store || !engine) throw new Error("예약이 아직 준비되지 않았습니다.");
+        return {
+          list: () => scheduleSnapshot() as { schedules: (Schedule & { nextRunAt: number | null })[]; runs: Run[] },
+          save: (input: Partial<Schedule> & { id?: string }) => {
+            const now = Date.now();
+            const existing = input.id ? store.schedule(input.id) : null;
+            const enabled = input.enabled ?? existing?.enabled ?? true;
+            const next: Schedule = {
+              id: existing?.id ?? randomUUID(),
+              name: input.name ?? existing?.name ?? "예약",
+              cron: input.cron ?? existing?.cron ?? "0 9 * * *",
+              timezone: input.timezone ?? existing?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+              prompt: input.prompt ?? existing?.prompt ?? "",
+              provider: input.provider ?? existing?.provider ?? "claude",
+              ...(input.model ?? existing?.model ? { model: input.model ?? existing?.model } : {}),
+              policy: input.policy ?? existing?.policy ?? "ask",
+              target: input.target ?? existing?.target ?? { kind: "fresh", workspaceId: "", worktree: false },
+              ...(input.precheck ?? existing?.precheck ? { precheck: (input.precheck ?? existing?.precheck)! } : {}),
+              enabled,
+              missedRunGraceMinutes: input.missedRunGraceMinutes ?? existing?.missedRunGraceMinutes ?? 120,
+              createdAt: existing?.createdAt ?? now,
+              // 껐다 다시 켜면 그 시점부터 센다 — 꺼 둔 동안의 회차를 만회하지 않는다.
+              activeSince: existing && existing.enabled === enabled ? existing.activeSince : now,
+            };
+            store.upsertSchedule(next);
+            sendAll(IPC.schedulesChanged, scheduleSnapshot());
+            return next;
+          },
+          remove: (id: string) => {
+            const had = store.schedule(id) !== null;
+            store.removeSchedule(id);
+            sendAll(IPC.schedulesChanged, scheduleSnapshot());
+            return had;
+          },
+          runNow: (id: string) => engine.runNow(id),
+          runs: (id: string) => store.runs(id),
+        };
       },
     },
     join(app.getPath("userData"), "control.sock"),
@@ -1014,6 +1159,13 @@ function bootstrap() {
     emit(tabId, event) {
       sendAll(IPC.chatEvent, { tabId, event } satisfies ChatEventEnvelope);
       attention.event(tabId, event);
+      if (scheduleEngine?.watches(tabId)) {
+        // 회차의 끝은 이 신호들로만 판정한다(실측으로 고정한 규칙).
+        if (event.type === "session") scheduleEngine.onSignal(tabId, { kind: "turn_started" });
+        else if (event.type === "turn_result") scheduleEngine.onSignal(tabId, { kind: "result", isError: event.isError });
+        else if (event.type === "permission_request") scheduleEngine.onSignal(tabId, { kind: "awaiting", count: 1 });
+        else if (event.type === "permission_resolved") scheduleEngine.onSignal(tabId, { kind: "awaiting", count: 0 });
+      }
       // 어댑터가 직접 흘린 status(waiting_permission 등)도 사이드바 상태에 반영한다.
       if (event.type === "status") workspaces.onStatus(tabId, event.status);
       const title = tabTitleOf(tabId);
@@ -1062,9 +1214,13 @@ function bootstrap() {
     },
     onBackgroundTasks(tabId, sessionId, tasks, source) {
       if (process.env.WORKBENCH_DEBUG_SDK) console.log(`[bgtasks ${tabId.slice(0, 6)}] ${tasks.length}개 출처=${source}`);
+      scheduleEngine?.onSignal(tabId, { kind: "tasks", count: tasks.length, source });
       // 늘 "살아 있는 전체" 라 갈아 끼운다. 턴이 끝난 뒤에도 오므로, 노는 것처럼 보이던 구간이 채워진다.
       bgTasks.replace(tabId, sessionId, sessions.snapshot(tabId).cwd ?? "", tasks);
       sendBackgroundJobs();
+    },
+    onStreamEnded(tabId, reason, expected) {
+      scheduleEngine?.onSignal(tabId, { kind: "stream_ended", reason, expected });
     },
     onTaskFinished(tabId, note) {
       // 사용자가 세운 것(stopped)은 알리지 않는다 — 자기가 한 일이다.
@@ -2247,6 +2403,7 @@ app.whenReady().then(async () => {
     if (n > 0) console.log(`[browser] 세션 쿠키 ${n}개 복원`);
   }
   startBackgroundJobWatcher();
+  startSchedules();
   void startControlServer();
   mainWindow = createWindow();
   // 자동 업데이트는 붙이지 않는다 — 새 버전은 GitHub Releases 의 DMG 를 다시 받아 덮어쓴다(scripts/release.sh).

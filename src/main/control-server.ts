@@ -7,6 +7,8 @@
 import { createServer, type Server, type Socket } from "node:net";
 import { chmodSync, existsSync, unlinkSync } from "node:fs";
 import type { ChatEvent, PermissionPolicy, SessionStatus } from "@shared/chat-events";
+import { parseCron } from "@shared/cron";
+import type { Run, Schedule } from "@shared/schedules";
 import type { ChatSendResult, FanoutStartDto, FanoutStartResult, Provider, WorkspaceStateDto } from "@shared/ipc";
 import { OrchError, type Orchestrator } from "./orchestration";
 import { replaySession, type Block } from "@shared/session-state";
@@ -53,6 +55,14 @@ export interface ControlDeps {
   /** 그 탭의 브라우저에서 스크립트를 돌린다(에이전트 조작). 브라우저가 없으면 던진다. */
   runInBrowser(tabId: string, script: string): Promise<Record<string, unknown>>;
   guide(name: string): string | null;
+  /** 예약 실행. 없으면 schedule.* 는 unsupported. */
+  schedules?: () => {
+    list(): { schedules: (Schedule & { nextRunAt: number | null })[]; runs: Run[] };
+    save(input: Partial<Schedule> & { id?: string }): Schedule;
+    remove(id: string): boolean;
+    runNow(id: string): Promise<Run | null>;
+    runs(id: string): Run[];
+  };
 }
 
 type Params = Record<string, unknown>;
@@ -266,6 +276,95 @@ export class ControlServer {
         this.deps.approveRoot(path);
         const r = this.deps.addWorkspace(path);
         return { workspaceId: r.workspaceId, tabId: r.tabId };
+      }
+      case "schedule.list": {
+        const api = this.requireSchedules();
+        const { schedules, runs } = api.list();
+        return {
+          schedules: schedules.map((s) => ({
+            id: s.id,
+            name: s.name,
+            cron: s.cron,
+            timezone: s.timezone,
+            enabled: s.enabled,
+            provider: s.provider,
+            policy: s.policy,
+            target: s.target,
+            nextRunAt: s.nextRunAt,
+            lastRun: runs.find((r) => r.scheduleId === s.id) ?? null,
+          })),
+        };
+      }
+      case "schedule.add": {
+        const api = this.requireSchedules();
+        const cron = this.requireString(params, "cron");
+        if (!parseCron(cron)) throw new ControlError("cron 형식이 아닙니다(분 시 일 월 요일).");
+        const policy = params.policy !== undefined ? this.requireString(params, "policy") : "ask";
+        if (!["ask", "auto_edit", "full"].includes(policy)) throw new ControlError("--policy 는 ask, auto_edit, full 중 하나.");
+        const provider = params.provider !== undefined ? this.requireString(params, "provider") : "claude";
+        if (provider !== "claude" && provider !== "codex") throw new ControlError("--provider 는 claude 또는 codex.");
+        const target =
+          params.tab !== undefined
+            ? ({ kind: "tab", tabId: this.resolveTab(this.requireString(params, "tab")).id } as const)
+            : ({
+                kind: "fresh",
+                workspaceId: this.resolveWorkspace(this.requireString(params, "workspace")).id,
+                worktree: params.worktree === true || params.worktree === "true",
+              } as const);
+        const saved = api.save({
+          name: this.requireString(params, "name"),
+          cron,
+          timezone: params.timezone !== undefined ? this.requireString(params, "timezone") : Intl.DateTimeFormat().resolvedOptions().timeZone,
+          prompt: this.requireString(params, "prompt"),
+          provider,
+          policy: policy as PermissionPolicy,
+          target,
+          ...(params.precheck !== undefined
+            ? { precheck: { command: this.requireString(params, "precheck"), timeoutMs: Number(params.precheckTimeout ?? 60000) } }
+            : {}),
+          ...(params.grace !== undefined ? { missedRunGraceMinutes: Number(params.grace) } : {}),
+        });
+        return { schedule: { id: saved.id, name: saved.name, cron: saved.cron, timezone: saved.timezone, enabled: saved.enabled } };
+      }
+      case "schedule.set": {
+        const api = this.requireSchedules();
+        const id = this.requireString(params, "id");
+        const patch: Partial<Schedule> & { id: string } = { id };
+        if (params.enabled !== undefined) patch.enabled = params.enabled === true || params.enabled === "true";
+        if (params.cron !== undefined) {
+          const cron = this.requireString(params, "cron");
+          if (!parseCron(cron)) throw new ControlError("cron 형식이 아닙니다.");
+          patch.cron = cron;
+        }
+        if (params.prompt !== undefined) patch.prompt = this.requireString(params, "prompt");
+        if (params.name !== undefined) patch.name = this.requireString(params, "name");
+        const saved = api.save(patch);
+        return { schedule: { id: saved.id, name: saved.name, cron: saved.cron, enabled: saved.enabled } };
+      }
+      case "schedule.rm": {
+        const api = this.requireSchedules();
+        return { removed: api.remove(this.requireString(params, "id")) };
+      }
+      case "schedule.run": {
+        const api = this.requireSchedules();
+        const run = await api.runNow(this.requireString(params, "id"));
+        if (!run) throw new ControlError("그 예약이 없습니다.");
+        return { run: { id: run.id, status: run.status, tabId: run.tabId, reason: run.reason } };
+      }
+      case "schedule.runs": {
+        const api = this.requireSchedules();
+        return {
+          runs: api.runs(this.requireString(params, "id")).map((r) => ({
+            id: r.id,
+            scheduledFor: r.scheduledFor,
+            status: r.status,
+            trigger: r.trigger,
+            startedAt: r.startedAt,
+            endedAt: r.endedAt,
+            tabId: r.tabId,
+            reason: r.reason,
+          })),
+        };
       }
       case "tab.list": {
         const st = this.deps.state();
@@ -608,6 +707,12 @@ export class ControlServer {
   }
 
   /** 워크스페이스 선택자: id → 정확한 경로 → 이름(대소문자 무시). 같은 이름이 여럿이면 후보를 돌려주며 거절. */
+  private requireSchedules() {
+    const api = this.deps.schedules?.();
+    if (!api) throw new ControlError("이 빌드에는 예약 기능이 없습니다.");
+    return api;
+  }
+
   private resolveWorkspace(sel: string) {
     const st = this.deps.state();
     const byId = st.model.workspaces.find((x) => x.id === sel);

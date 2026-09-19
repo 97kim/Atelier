@@ -31,6 +31,12 @@ export type RunSignal =
 
 export interface RunState {
   sawResult: boolean;
+  /**
+   * 백그라운드 작업이 방금 끝났다 = 곧 그 결과를 처리하는 후속 턴이 온다.
+   * 이게 없으면 tasks=0 이 도착한 순간(후속 턴 전에) 회차를 완료로 확정해 버린다 —
+   * 실측 순서가 tasks=0 → task_notification → 새 턴 이라서 그 틈이 실재한다.
+   */
+  followUpExpected: boolean;
   resultIsError: boolean;
   /**
    * SDK 가 알려 준 살아 있는 작업 수. null = 한 번도 안 왔다 = 작업이 없다.
@@ -51,16 +57,22 @@ export type RunVerdict =
   | { state: "interrupted"; reason: string };
 
 export function newRunState(): RunState {
-  return { sawResult: false, resultIsError: false, liveTasks: null, awaiting: 0, ended: null };
+  return { sawResult: false, followUpExpected: false, resultIsError: false, liveTasks: null, awaiting: 0, ended: null };
 }
 
 export function applyRunSignal(s: RunState, sig: RunSignal): RunState {
   switch (sig.kind) {
     case "result":
-      return { ...s, sawResult: true, resultIsError: sig.isError };
-    case "tasks":
+      // 후속 턴의 result 가 왔다 = 기다리던 그 턴이 끝났다.
+      return { ...s, sawResult: true, resultIsError: sig.isError, followUpExpected: false };
+    case "tasks": {
       // cleanup 이 만든 목록은 판정 근거가 아니다 — 프로세스가 죽었다는 뜻일 뿐이다.
-      return sig.source === "cleanup" ? s : { ...s, liveTasks: sig.count };
+      if (sig.source === "cleanup") return s;
+      const had = s.liveTasks ?? 0;
+      // 작업이 줄었다 = 끝난 작업이 있다 = 그 결과를 처리하는 턴이 뒤따른다.
+      const followUpExpected = s.followUpExpected || sig.count < had;
+      return { ...s, liveTasks: sig.count, followUpExpected };
+    }
     case "turn_started":
       // 후속 턴이 시작됐다. 앞 턴의 result 는 더 이상 "끝" 의 후보가 아니다.
       return { ...s, sawResult: false, resultIsError: false };
@@ -71,17 +83,22 @@ export function applyRunSignal(s: RunState, sig: RunSignal): RunState {
   }
 }
 
+/** 끝났다고 말할 수 있는 조건. 하나라도 어긋나면 아직이다. */
+function finished(s: RunState): boolean {
+  return s.sawResult && !s.followUpExpected && (s.liveTasks ?? 0) === 0 && s.awaiting === 0;
+}
+
 export function runVerdict(s: RunState): RunVerdict {
-  // 스트림이 끝났으면 그때까지의 상태와 무관하게 "모른다" 다. 다만 끝까지 갔다면 완료로 본다.
-  if (s.ended) {
-    if (s.sawResult && (s.liveTasks ?? 0) === 0 && s.awaiting === 0) return { state: "completed", isError: s.resultIsError };
-    return { state: "interrupted", reason: s.ended.reason };
-  }
+  // 스트림이 끝났으면 기본은 "모른다" 다. 끝까지 간 것이 확인될 때만 완료로 본다 —
+  // 후속 턴을 기다리던 중에 죽은 것을 성공으로 만들면 안 된다.
+  if (s.ended) return finished(s) ? { state: "completed", isError: s.resultIsError } : { state: "interrupted", reason: s.ended.reason };
   if (s.awaiting > 0) return { state: "needs_action" };
-  if (!s.sawResult) return { state: "running" };
-  // result 는 받았지만 백그라운드가 남았다 — CLI 가 곧 이어서 또 턴을 돈다.
-  if ((s.liveTasks ?? 0) > 0) return { state: "running" };
-  return { state: "completed", isError: s.resultIsError };
+  return finished(s) ? { state: "completed", isError: s.resultIsError } : { state: "running" };
+}
+
+/** 후속 턴을 기다리는 중인가. 엔진이 "언제까지 기다릴지" 를 정할 때 쓴다. */
+export function awaitingFollowUp(s: RunState): boolean {
+  return !s.ended && s.sawResult && s.followUpExpected;
 }
 
 /** 신호를 순서대로 먹여 판정한다(시험·재생용). */

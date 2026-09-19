@@ -146,6 +146,15 @@ const MINUTE = 60_000;
 function clockKey(w: WallClock): string {
   return `${w.year}-${w.month}-${w.day} ${w.hour}:${w.minute}`;
 }
+/**
+ * 이 순간이 "같은 벽시계의 두 번째 등장" 인가(가을 서머타임). 되감는 폭은 지역마다 달라
+ * 흔한 두 가지(1시간·30분)를 본다.
+ */
+function isRepeatedWallClock(t: number, w: WallClock, timeZone: string): boolean {
+  const key = clockKey(w);
+  return clockKey(wallClock(t - 60 * MINUTE, timeZone)) === key || clockKey(wallClock(t - 30 * MINUTE, timeZone)) === key;
+}
+
 /** 이 너머는 "일어나지 않는 일정" 으로 본다(2월 30일 같은 것). */
 const HORIZON_DAYS = 400;
 
@@ -157,13 +166,12 @@ export function nextOccurrence(cron: Cron, after: number, timeZone: string): num
   // 분 경계로 올린다.
   let t = Math.floor(after / MINUTE) * MINUTE + MINUTE;
   const limit = t + HORIZON_DAYS * 24 * 60 * MINUTE;
-  // 서머타임으로 같은 벽시계가 두 번 오는 날(가을), 이미 지나온 그 시각을 다시 잡지 않는다.
-  // 기준은 after 의 벽시계다 — 호출 한 번 안에서 기억해 봐야 다음 호출에서 또 잡힌다.
-  const afterKey = clockKey(wallClock(after, timeZone));
   while (t <= limit) {
     const w = wallClock(t, timeZone);
     if (matches(cron, w)) {
-      if (clockKey(w) !== afterKey) return t;
+      // 가을 서머타임으로 같은 벽시계가 두 번 오는 날: 두 번째 것은 건너뛴다.
+      // "한 시간(또는 30분) 전이 같은 벽시계" 면 그게 두 번째 등장이다 — 시각이 여럿이어도 성립한다.
+      if (!isRepeatedWallClock(t, w, timeZone)) return t;
       t += MINUTE;
       continue;
     }
@@ -177,7 +185,11 @@ export function nextOccurrence(cron: Cron, after: number, timeZone: string): num
           : cron.dowRestricted
             ? cron.dayOfWeek.has(w.weekday)
             : true);
-    t += dayMatches ? MINUTE : (24 * 60 - (w.hour * 60 + w.minute)) * MINUTE;
+    // 그날이 아예 안 맞으면 남은 분을 건너뛴다. 다만 한 번에 한 시간까지만 —
+    // 벽시계 자정까지의 분을 통째로 더하면 서머타임 시작일(23시간)에 하루를 넘겨
+    // 다음 날 자정 예약을 통째로 놓친다(뉴욕 `0 0 * * mon` 에서 일주일을 건너뛰었다).
+    const remain = 24 * 60 - (w.hour * 60 + w.minute);
+    t += (dayMatches ? 1 : Math.min(remain, 60)) * MINUTE;
   }
   return null;
 }

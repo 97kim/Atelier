@@ -101,7 +101,7 @@ function parseArgs(argv) {
 }
 
 /** 값이 있어야 하는 플래그. `--tab` 처럼 값 없이 쓰면 서버가 active 로 오해하기 전에 여기서 거절한다. */
-const VALUE_FLAGS = ["tab", "text", "prompt", "ws", "cwd", "provider", "policy", "model", "title", "path", "url", "line", "last", "timeoutMs", "cmd", "run", "key", "spec", "task", "agent", "dispatch", "capability", "question", "options", "resume", "id", "body", "subject", "type", "to", "outcome", "filesModified", "types", "ack", "objective", "coordinator", "reason", "requestId", "deps", "terminal", "resolution"];
+const VALUE_FLAGS = ["tab", "text", "prompt", "ws", "cwd", "provider", "policy", "model", "title", "path", "url", "line", "last", "timeoutMs", "cmd", "run", "key", "spec", "task", "agent", "dispatch", "capability", "question", "options", "resume", "id", "body", "subject", "type", "to", "outcome", "filesModified", "types", "ack", "objective", "coordinator", "reason", "requestId", "deps", "terminal", "resolution", "name", "cron", "timezone", "precheck", "precheckTimeout", "grace", "workspace", "enabled"];
 function checkValueFlags(flags) {
   for (const k of VALUE_FLAGS) if (flags[k] === true || (Array.isArray(flags[k]) && flags[k].includes(true))) fail(`--${k.replace(/([A-Z])/g, (m) => "-" + m.toLowerCase())} 에는 값이 필요합니다.`, "bad_request");
 }
@@ -253,6 +253,18 @@ async function main() {
     const cmds = flags.cmd === undefined ? undefined : (Array.isArray(flags.cmd) ? flags.cmd : [flags.cmd]).map(String);
     params = { tab: flags.tab, commands: cmds, wait: flags.wait === true, timeoutMs };
   } else if (group === "tab" && cmd === "verify-abort") { method = "tab.verify.abort"; params = { tab: flags.tab }; }
+  else if (group === "schedule" && cmd) {
+    const f = flags;
+    method = "schedule." + cmd;
+    params = {
+      id: f.id, name: f.name, cron: f.cron, timezone: f.timezone,
+      prompt: f.prompt !== undefined ? readStdinIfDash(String(f.prompt)) : undefined,
+      provider: f.provider, policy: f.policy, model: f.model,
+      tab: f.tab, workspace: f.workspace ?? f.ws, worktree: f.worktree === true,
+      precheck: f.precheck, precheckTimeout: f.precheckTimeout, grace: f.grace,
+      enabled: f.enabled,
+    };
+  }
   else if (group === "orch" && cmd) {
     method = "orch." + cmd;
     const f = flags;

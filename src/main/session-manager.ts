@@ -198,6 +198,8 @@ export interface SessionManagerDeps {
   onBackgroundTasks?(tabId: string, sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource): void;
   /** 백그라운드 작업 하나가 끝났다. */
   onTaskFinished?(tabId: string, note: TaskFinishedNote): void;
+  /** provider 스트림이 끝났다(정상 종료·크래시·우리가 닫음). */
+  onStreamEnded?(tabId: string, reason: string, expected: boolean): void;
   /** 터미널 모드: 이 탭의 pty 에 CLI 를 띄우고(spawn), 강제 종료(kill)한다. 종료는 terminalExited 로 알려 준다. */
   terminalCli?: {
     /** hookLog 가 있으면(Claude) CLI 에 훅을 주입해 그 파일로 이벤트를 남기게 한다. */
@@ -467,6 +469,7 @@ export class SessionManager {
       log: (line: string) => this.deps.log?.(tabId, line),
       onBackgroundTasks: (sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource) => this.deps.onBackgroundTasks?.(tabId, sessionId, tasks, source),
       onTaskFinished: (note: TaskFinishedNote) => this.deps.onTaskFinished?.(tabId, note),
+      onStreamEnded: (reason: string, expected: boolean) => this.deps.onStreamEnded?.(tabId, reason, expected),
       onAmbientEvent: (event: ChatEvent) => this.ambientEvent(tabId, event),
       requestAmbientPermission: (req: PermissionRequestEvent) => this.waitPermission(this.ensure(tabId), req, new AbortController().signal),
     };
@@ -1219,6 +1222,7 @@ export class SessionManager {
             onCommands: (patch) => this.deps.onSlashCommands?.(s.cwd!, patch),
             onBackgroundTasks: (sessionId, tasks, source) => this.deps.onBackgroundTasks?.(s.tabId, sessionId, tasks, source),
             onTaskFinished: (note) => this.deps.onTaskFinished?.(s.tabId, note),
+            onStreamEnded: (reason, expected) => this.deps.onStreamEnded?.(s.tabId, reason, expected),
             onAmbientEvent: (event) => this.ambientEvent(s.tabId, event),
             // 이 턴은 우리가 시작한 게 아니라 끊을 abort 가 없다 — 사용자가 답할 때까지 기다린다.
             requestAmbientPermission: (req) => this.waitPermission(s, req, new AbortController().signal),
