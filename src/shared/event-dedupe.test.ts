@@ -119,6 +119,25 @@ describe("event-dedupe", () => {
     assert.deepEqual(dropReplayedPrefix(newDedupeIndex(), incoming), incoming);
   });
 
+  it("못 잘랐다는 사실을 셈으로 남긴다 — 멈춘 뒤에도 아는 것이 더 있었을 때", () => {
+    // 이 값이 실제로 오르는지가 "되풀이가 아직 생기나" 의 답이다. 열쇠를 늘리는 설계는 그 뒤에 한다.
+    const ix = buildDedupeIndex([toolUse("toolu_A", 10)]);
+    const incoming = [text("msg_새:0", 20), toolUse("toolu_A", 21), toolResult("toolu_A", 22)];
+    const stats = { keyed: 0, known: 0, cut: 0, firstMissAt: -1, knownAfterMiss: 0 };
+    dropReplayedPrefix(ix, incoming, stats);
+    assert.equal(stats.cut, 0, "처음 보는 답변 앞에서 멈추니 아무것도 안 자른다");
+    assert.equal(stats.firstMissAt, 0);
+    assert.equal(stats.knownAfterMiss, 1, "뒤에 있던 아는 도구 하나가 한 벌 더 쌓인다");
+  });
+
+  it("깨끗이 잘렸으면 셈도 조용하다", () => {
+    const ix = buildDedupeIndex(aTurn(1, 1_000));
+    const stats = { keyed: 0, known: 0, cut: 0, firstMissAt: -1, knownAfterMiss: 0 };
+    dropReplayedPrefix(ix, aTurn(1, 2_000), stats);
+    assert.equal(stats.firstMissAt, -1);
+    assert.equal(stats.knownAfterMiss, 0);
+  });
+
   it("색인은 남은 것으로 갱신된다 — 같은 것이 또 와도 다시 걸린다", () => {
     const ix = newDedupeIndex();
     assert.equal(dropReplayedPrefix(ix, aTurn(1, 1_000)).length, 5);

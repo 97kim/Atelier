@@ -9,7 +9,7 @@ import type {
   PermissionRequestEvent,
   SessionStatus,
 } from "@shared/chat-events";
-import { buildDedupeIndex, dropReplayedPrefix, indexEvent, type DedupeIndex } from "@shared/event-dedupe";
+import { buildDedupeIndex, dropReplayedPrefix, indexEvent, type DedupeIndex, type ReplayCutStats } from "@shared/event-dedupe";
 import { buildHandoff, estimateTokens, type Handoff } from "@shared/handoff";
 import type { Provider, ProviderRateLimitDto } from "@shared/ipc";
 import type { SlashCommandDto } from "@shared/slash-commands";
@@ -671,7 +671,17 @@ export class SessionManager {
     s.mirror = null;
     const history = file ? this.readTranscript(file, s.provider) : { events: [], bytes: 0 };
     // 재개처럼 "같은 대화인데 id 만 새로 붙은" 경우가 있다. 이미 가진 것을 빼고 새로 생긴 뒷부분만 받는다.
-    const fresh = dropReplayedPrefix(this.dedupeIndex(s), history.events);
+    const cutStats: ReplayCutStats = { keyed: 0, known: 0, cut: 0, firstMissAt: -1, knownAfterMiss: 0 };
+    const fresh = dropReplayedPrefix(this.dedupeIndex(s), history.events, cutStats);
+    // 자르기가 첫 미스에서 멈췄는데 그 뒤로도 이미 가진 것이 더 있었다 = 되풀이인데 못 잘랐다.
+    // 그만큼이 화면에 한 벌 더 쌓인다. 실측(스레드 20개)에서는 자르기 도입 뒤의 사례가 아직 없어,
+    // 짐작으로 열쇠를 늘리기 전에 실제로 생기는지부터 남겨 둔다.
+    if (cutStats.knownAfterMiss > 0)
+      this.deps.log?.(
+        s.tabId,
+        `[dedupe] 되풀이를 다 자르지 못했습니다 — 열쇠 ${cutStats.keyed}건 중 아는 것 ${cutStats.known}건, ` +
+          `잘라 낸 것 ${cutStats.cut}건, ${cutStats.firstMissAt}번째에서 멈춘 뒤 아는 것이 ${cutStats.knownAfterMiss}건 더 있었습니다`,
+      );
     const turns = fresh.filter((h) => h.type === "user_message").length;
     s.sessionId = sessionId;
     this.deps.onMeta?.(s.tabId, { sessionId });

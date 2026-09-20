@@ -21,6 +21,27 @@ export interface DedupeIndex {
   keys: Set<string>;
 }
 
+/**
+ * 자르기가 어떻게 끝났는지. 재발 관측용이다 — 실측(스레드 20개, 38MB)에서 남아 있는 되풀이는
+ * 전부 자르기가 들어가기 전 것이었고, 그 뒤로는 재개 기록 자체가 없어 재발 여부를 알 수 없었다.
+ * 짐작으로 열쇠를 늘리기 전에, 실제로 못 자르는 일이 생기는지부터 본다.
+ */
+export interface ReplayCutStats {
+  /** 열쇠가 있는 이벤트 수. 0 이면 애초에 판정할 근거가 없었다는 뜻이다. */
+  keyed: number;
+  /** 그중 이미 가지고 있던 것. */
+  known: number;
+  /** 실제로 잘라 낸 개수. */
+  cut: number;
+  /** 처음으로 "못 가진 것" 이 나온 자리(없으면 -1). 여기서 자르기가 멈춘다. */
+  firstMissAt: number;
+  /**
+   * 멈춘 뒤에도 "이미 가진 것" 이 더 나온 개수. 0 보다 크면 되풀이인데 못 잘랐다는 뜻이고,
+   * 그만큼이 화면에 한 벌 더 쌓인다. 이 값이 실제로 오르는지가 재발 여부의 답이다.
+   */
+  knownAfterMiss: number;
+}
+
 export function newDedupeIndex(): DedupeIndex {
   return { keys: new Set() };
 }
@@ -89,15 +110,41 @@ export function buildDedupeIndex(events: readonly ChatEvent[]): DedupeIndex {
  *
  * `ix` 는 남은 것으로 갱신된다.
  */
-export function dropReplayedPrefix(ix: DedupeIndex, events: readonly ChatEvent[]): ChatEvent[] {
+export function dropReplayedPrefix(
+  ix: DedupeIndex,
+  events: readonly ChatEvent[],
+  stats?: ReplayCutStats,
+): ChatEvent[] {
   let cut = 0;
+  let keyed = 0;
+  let known = 0;
+  let firstMissAt = -1;
+  let knownAfterMiss = 0;
+  let stopped = false;
   for (let i = 0; i < events.length; i += 1) {
     const key = eventKey(events[i]);
     if (!key) continue;
+    keyed += 1;
+    const have = ix.keys.has(key);
+    if (have) {
+      known += 1;
+      if (stopped) knownAfterMiss += 1;
+    } else if (firstMissAt < 0) firstMissAt = i;
     // 못 가진 것이 하나라도 나오면 거기서 멈춘다. 그 뒤에 아는 것이 또 있다고 해서 더 자르면,
     // 사이에 낀 이 새 이벤트까지 함께 잘린다(병렬 도구에서 실제로 그렇게 된다).
-    if (!ix.keys.has(key)) break;
-    cut = i + 1;
+    // 세는 일은 계속한다 — 멈춘 뒤에도 아는 것이 얼마나 더 있었는지가 재발을 가리는 단서다.
+    if (!have) {
+      stopped = true;
+      continue;
+    }
+    if (!stopped) cut = i + 1;
+  }
+  if (stats) {
+    stats.keyed = keyed;
+    stats.known = known;
+    stats.cut = cut;
+    stats.firstMissAt = firstMissAt;
+    stats.knownAfterMiss = knownAfterMiss;
   }
   const rest = events.slice(cut);
   for (const e of rest) indexEvent(ix, e);
