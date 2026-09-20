@@ -353,12 +353,16 @@ export function ContextPanel({
             <Icon name="file" size={13} />
             내보내기
           </button>
+          {/* 휴지통은 과장이었다. 이 버튼은 대화를 지우지 않는다 — 화면에서 치우고 새 세션으로 갈 뿐이고,
+              비운 대화는 보관본으로 남는다(탭당 10회분). Claude 쪽 기록도 원래부터 그대로 남아 있었다. */}
           <button
             onClick={onClear}
             className="flex flex-1 items-center justify-center gap-2 rounded-md border border-line py-2 text-muted hover:bg-panel-2 hover:text-fg"
+            title="지금 대화를 접고 새 세션으로 시작합니다. 비운 대화는 최근 10회분까지 보관됩니다."
+            data-clear-button
           >
-            <Icon name="trash" size={13} />
-            대화 비우기
+            <Icon name="refresh" size={13} />
+            새 대화
           </button>
         </div>
         {exportResult && (
