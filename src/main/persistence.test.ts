@@ -126,3 +126,41 @@ test("대화를 비우면 인계서도 함께 지운다", () => {
   store.resetThread("t1");
   assert.equal(new Store(dir).loadHandoffPrefix("t1"), null);
 });
+
+test("대화를 비워도 기록은 보관한다 — CLI 의 /clear 처럼 되돌아갈 것을 남긴다", () => {
+  const { store } = tmpStore();
+  const dirOf = () => path.dirname(store.threadPath("tab1"));
+  const archives = () =>
+    fs.readdirSync(dirOf()).filter((n) => n.startsWith("tab1.cleared-") && n.endsWith(".jsonl"));
+
+  store.appendEvent("tab1", { type: "user_message", ts: 1, id: "u1", text: "질문" } as ChatEvent);
+  store.appendEvent("tab1", { type: "session", ts: 2, sessionId: "sess-1", provider: "claude" } as ChatEvent);
+  store.flush?.();
+  store.resetThread("tab1");
+
+  assert.deepEqual(store.readEvents("tab1"), [], "살아 있는 스레드는 비워진다");
+  assert.equal(archives().length, 1, "보관본이 하나 생긴다");
+  // 세션 id 는 보관본 안에 있다 — 따로 적어 두지 않아도 되돌아갈 실마리가 남는다.
+  const kept = fs.readFileSync(path.join(dirOf(), archives()[0]), "utf8");
+  assert.ok(kept.includes("sess-1"), "보관본에 세션 id 가 들어 있다");
+  assert.ok(kept.includes("질문"), "보관본에 대화가 들어 있다");
+});
+
+test("보관본은 탭마다 최근 것만 남는다", () => {
+  const { store } = tmpStore();
+  const dirOf = () => path.dirname(store.threadPath("tab1"));
+  const archives = () => fs.readdirSync(dirOf()).filter((n) => n.startsWith("tab1.cleared-"));
+
+  for (let i = 0; i < 13; i += 1) {
+    store.appendEvent("tab1", { type: "user_message", ts: i, id: `u${i}`, text: `말${i}` } as ChatEvent);
+    store.flush?.();
+    // 파일명이 시각이라 같은 밀리초에 몰리면 덮어쓴다 — 테스트에서만 자리를 벌린다.
+    const live = store.threadPath("tab1");
+    if (fs.existsSync(live)) fs.renameSync(live, store.clearedPath("tab1", 1_700_000_000_000 + i));
+  }
+  assert.equal(archives().length, 13, "직접 만든 보관본 13개");
+  store.appendEvent("tab1", { type: "user_message", ts: 99, id: "u99", text: "마지막" } as ChatEvent);
+  store.flush?.();
+  store.resetThread("tab1");
+  assert.equal(archives().length, 10, "정리하고 나면 10개만 남는다");
+});

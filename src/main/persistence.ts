@@ -8,6 +8,9 @@ import type { ProviderRateLimitDto } from "@shared/ipc";
 import { emptyModel, type WorkbenchModel } from "@shared/workspace-model";
 import { CHAT_IMAGE_MAX_BYTES, CHAT_IMAGE_MAX_COUNT, isChatImageMime, toHistoryImages, type StoredChatImage } from "./chat-attachments";
 
+/** 탭마다 남겨 두는 "비운 대화" 보관본 수. 되돌아갈 만큼은 남기되 무한히 쌓이지는 않게. */
+const MAX_CLEARED_ARCHIVES = 10;
+
 /** 프롬프트 큐 항목의 디스크 형태. 이미지는 base64 를 빼고 경로만 둔다(첨부 파일은 이미 userData 에 있다). */
 export interface PersistedPrompt {
   id: string;
@@ -231,14 +234,44 @@ export class Store {
     return out;
   }
 
-  /** 대화 비우기: 기존 파일을 지우고 새로 시작한다. 대기 중인 지시와 이 스레드의 첨부 파일도 같이 버린다. */
+  /** 비운 대화의 보관본. 파일명으로만 찾으므로 살아 있는 스레드(`<tabId>.jsonl`)와 섞이지 않는다. */
+  clearedPath(tabId: string, ts: number): string {
+    return path.join(this.threadsDir, `${safeName(tabId)}.cleared-${ts}.jsonl`);
+  }
+
+  /** 탭마다 최근 것만 남긴다. 안 두면 비울 때마다 쌓여 userData 가 계속 커진다. */
+  private pruneCleared(tabId: string, keep = MAX_CLEARED_ARCHIVES): void {
+    const prefix = `${safeName(tabId)}.cleared-`;
+    let names: string[];
+    try {
+      names = fs.readdirSync(this.threadsDir).filter((n) => n.startsWith(prefix) && n.endsWith(".jsonl"));
+    } catch {
+      return;
+    }
+    // 이름에 박힌 시각으로 정렬한다 — mtime 은 복사·백업으로 바뀐다.
+    names.sort();
+    for (const n of names.slice(0, Math.max(0, names.length - keep)))
+      try {
+        fs.rmSync(path.join(this.threadsDir, n), { force: true });
+      } catch {}
+  }
+
+  /**
+   * 대화 비우기: 기록은 지우지 않고 옆에 보관한다. CLI 의 /clear 도 이전 세션을 디스크에 남긴다 —
+   * 지워 버리면 이름만 같고 하는 일이 다른 명령이 된다. 세션 id 는 보관본 안의 session 이벤트에 들어 있어
+   * 따로 적어 두지 않아도 되돌아갈 길이 남는다.
+   *
+   * 대기 중인 지시·인계서·첨부는 진행 중이던 상태라 함께 버린다(첨부 이미지의 dataUrl 은 보관본에 있다).
+   */
   resetThread(tabId: string): void {
     this.buffers.delete(tabId);
     try {
-      fs.rmSync(this.threadPath(tabId), { force: true });
+      const live = this.threadPath(tabId);
+      if (fs.existsSync(live)) fs.renameSync(live, this.clearedPath(tabId, Date.now()));
+      this.pruneCleared(tabId);
       fs.rmSync(this.queuePath(tabId), { force: true });
       fs.rmSync(this.handoffPath(tabId), { force: true });
-      // 첨부는 attachments/<tabId>/ 에 쌓인다(Codex local_image 입력·큐 복원용). 기록의 dataUrl 은 스레드 파일에 따로 있으므로 함께 지워도 된다.
+      // 첨부는 attachments/<tabId>/ 에 쌓인다(Codex local_image 입력·큐 복원용).
       if (safeName(tabId) === tabId) fs.rmSync(path.join(this.attachmentsDir(), tabId), { recursive: true, force: true });
     } catch {}
   }
