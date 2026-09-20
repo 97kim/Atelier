@@ -597,6 +597,12 @@ export interface SessionSnapshotDto extends SessionConfigDto {
   limitWait: LimitWaitDto | null;
   /** 동시 실행 상한에 걸려 기다리는 중(status=queued)이면 그 상태. */
   queueInfo: QueueInfoDto | null;
+  /**
+   * 지금 도는 턴이 "백그라운드 작업이 끝나 CLI 가 스스로 이어간 것" 인가.
+   * 사용자는 아무 말도 안 했는데 화면이 도는 경우라, 그대로 "응답 중" 이라고 적으면 무엇에 답하는지 알 수 없다.
+   * 백그라운드 완료 알림을 받은 뒤일 때만 true — 이유를 모르면 짐작하지 않는다.
+   */
+  ambientFromBg: boolean;
   /** 터미널 모드에서 CLI 가 권한 승인을 기다리는 중이면 그 툴. (Claude 만 감지) */
   terminalAttention: {
     kind: "permission";

@@ -9,6 +9,7 @@ import type {
   PermissionRequestEvent,
   SessionStatus,
 } from "@shared/chat-events";
+import { buildDedupeIndex, dropReplayedPrefix, indexEvent, type DedupeIndex } from "@shared/event-dedupe";
 import { buildHandoff, estimateTokens, type Handoff } from "@shared/handoff";
 import type { Provider, ProviderRateLimitDto } from "@shared/ipc";
 import type { SlashCommandDto } from "@shared/slash-commands";
@@ -82,6 +83,8 @@ export interface SessionSnapshot {
   limitWait: LimitWaitDto | null;
   /** status=queued 일 때 왜 기다리는지: 대기 순번, 진행 중 턴 수(승인 대기 포함)와 상한. */
   queueInfo: QueueInfoDto | null;
+  /** 지금 도는 턴이 백그라운드 작업이 끝나 CLI 가 스스로 이어간 것이면 true. */
+  ambientFromBg: boolean;
 }
 
 interface QueuedTurn {
@@ -115,11 +118,17 @@ interface Session {
   abort: AbortController | null;
   /** 우리가 시작하지 않은 턴을 사용자가 끊었다. 뒤늦게 오는 이벤트가 상태를 다시 "도는 중" 으로 올리지 않게 한다. */
   ambientStopped: boolean;
+  /** 백그라운드 작업이 끝났다는 알림을 받았다. 곧 CLI 가 그 결과를 들고 스스로 턴을 이어간다. */
+  bgTaskFinished: boolean;
+  /** 지금 도는 이어받은 턴이 그 백그라운드 결과 때문인가. 확실할 때만 true. */
+  ambientFromBg: boolean;
   pending: Map<string, (answer: PermissionAnswer) => void>;
   /** 대기 중인 권한 요청 본문(requestId → 이벤트). 교차 리뷰처럼 사람이 안 보는 탭을 main 이 대신 판정할 때 본다. */
   pendingReqs: Map<string, PermissionRequestEvent>;
   /** null 이면 아직 디스크에서 읽지 않았다 (lazy). */
   events: ChatEvent[] | null;
+  /** 이미 기록한 이벤트의 색인. events 를 읽을 때 같이 만든다. */
+  dedupe: DedupeIndex | null;
   /** provider 전환 시 다음 프롬프트 앞에 붙일 요약. 한 번 쓰고 비운다. */
   handoffPrefix: string | null;
   startedAt: number | null;
@@ -307,9 +316,12 @@ export class SessionManager {
         sessionId: defaults?.sessionId ?? resolved?.sessionId ?? null,
         abort: null,
         ambientStopped: false,
+        bgTaskFinished: false,
+        ambientFromBg: false,
         pending: new Map(),
         pendingReqs: new Map(),
         events: null,
+        dedupe: null,
         // 전환·압축 때 만든 인계서. 다음 메시지에 실려 나가기 전에 앱이 꺼졌으면 디스크에서 되살린다.
         handoffPrefix: this.deps.store?.loadHandoffPrefix?.(tabId) ?? null,
         startedAt: null,
@@ -354,6 +366,7 @@ export class SessionManager {
         ? { until: s.limitWait.until, attempts: s.limitWait.attempts, message: s.limitWait.message }
         : null,
       queueInfo: s.status === "queued" ? this.queueInfo(tabId) : null,
+      ambientFromBg: s.ambientFromBg,
     };
   }
 
@@ -471,7 +484,10 @@ export class SessionManager {
       model: s.model,
       log: (line: string) => this.deps.log?.(tabId, line),
       onBackgroundTasks: (sessionId: string, tasks: LiveBackgroundTask[], source: BackgroundTasksSource) => this.deps.onBackgroundTasks?.(tabId, sessionId, tasks, source),
-      onTaskFinished: (note: TaskFinishedNote) => this.deps.onTaskFinished?.(tabId, note),
+      onTaskFinished: (note: TaskFinishedNote) => {
+        this.ensure(tabId).bgTaskFinished = true;
+        this.deps.onTaskFinished?.(tabId, note);
+      },
       onStreamEnded: (reason: string, expected: boolean) => this.deps.onStreamEnded?.(tabId, reason, expected),
       onAmbientEvent: (event: ChatEvent) => this.ambientEvent(tabId, event),
       requestAmbientPermission: (req: PermissionRequestEvent) => this.waitPermission(this.ensure(tabId), req, new AbortController().signal),
@@ -604,6 +620,10 @@ export class SessionManager {
 
   private startHookWatcher(s: Session) {
     if (!s.hookLog) return;
+    // 돌던 워처만 놓는다. stopHookWatcher 는 훅 로그 파일까지 지우므로 여기서 부르면
+    // 방금 만들어 둔 로그가 사라져 권한 대기·세션 전환 신호가 영영 오지 않는다.
+    s.hookWatcher?.stop();
+    s.hookWatcher = null;
     const tabId = s.tabId;
     s.hookWatcher = new TranscriptWatcher<HookEvent>({
       resolveFile: () => s.hookLog,
@@ -650,7 +670,9 @@ export class SessionManager {
     s.mirror?.stop();
     s.mirror = null;
     const history = file ? this.readTranscript(file, s.provider) : { events: [], bytes: 0 };
-    const turns = history.events.filter((h) => h.type === "user_message").length;
+    // 재개처럼 "같은 대화인데 id 만 새로 붙은" 경우가 있다. 이미 가진 것을 빼고 새로 생긴 뒷부분만 받는다.
+    const fresh = dropReplayedPrefix(this.dedupeIndex(s), history.events);
+    const turns = fresh.filter((h) => h.type === "user_message").length;
     s.sessionId = sessionId;
     this.deps.onMeta?.(s.tabId, { sessionId });
     this.record(s, {
@@ -659,7 +681,7 @@ export class SessionManager {
       fatal: false,
       message: `${where} 다른 세션(${sessionId.slice(0, 8)})으로 갈아탔습니다. ${turns > 0 ? `그 세션의 이전 대화 ${turns}턴을 아래에 불러왔고, ` : ""}이어지는 대화도 여기 표시됩니다.`,
     });
-    for (const h of history.events) this.record(s, h);
+    for (const h of fresh) this.record(s, h);
     this.record(s, { type: "session", ts, sessionId, provider: s.provider });
     this.startMirror(s, false, file, file ? history.bytes : null);
     this.deps.onSnapshot?.(s.tabId, this.snapshot(s.tabId));
@@ -885,6 +907,9 @@ export class SessionManager {
   private startMirror(s: Session, isNew: boolean, fileHint: string | null = null, startOffset: number | null = null) {
     const roots = this.deps.transcriptRoots;
     if (!roots) return;
+    // 이미 돌던 워처가 있으면 놓고 간다. 남겨 두면 같은 파일을 둘이 tail 하며 같은 줄을 두 번 옮긴다.
+    s.mirror?.stop();
+    s.mirror = null;
     const startedAt = Date.now();
     const tabId = s.tabId;
     const onEvents = (events: ChatEvent[]) => {
@@ -1161,6 +1186,9 @@ export class SessionManager {
     const abort = new AbortController();
     s.abort = abort;
     s.ambientStopped = false;
+    // 사용자가 새로 말을 걸었다. 이건 이어받은 턴이 아니다 — 지난 백그라운드 표시를 물려주지 않는다.
+    s.ambientFromBg = false;
+    s.bgTaskFinished = false;
     s.startedAt ??= Date.now();
     s.turnStartedAt = Date.now();
     // 턴 시작 시각을 렌더러가 바로 알게(진행 줄의 경과 시간 기준)
@@ -1225,7 +1253,10 @@ export class SessionManager {
             log: (line) => this.deps.log?.(s.tabId, line),
             onCommands: (patch) => this.deps.onSlashCommands?.(s.cwd!, patch),
             onBackgroundTasks: (sessionId, tasks, source) => this.deps.onBackgroundTasks?.(s.tabId, sessionId, tasks, source),
-            onTaskFinished: (note) => this.deps.onTaskFinished?.(s.tabId, note),
+            onTaskFinished: (note) => {
+              s.bgTaskFinished = true;
+              this.deps.onTaskFinished?.(s.tabId, note);
+            },
             onStreamEnded: (reason, expected) => this.deps.onStreamEnded?.(s.tabId, reason, expected),
             onAmbientEvent: (event) => this.ambientEvent(s.tabId, event),
             // 이 턴은 우리가 시작한 게 아니라 끊을 abort 가 없다 — 사용자가 답할 때까지 기다린다.
@@ -1417,6 +1448,8 @@ export class SessionManager {
       // 우리가 시작한 턴에서도 중단은 idle 로 끝낸다 — 같게 맞춘다.
       const stopped = s.ambientStopped;
       s.ambientStopped = false;
+      s.ambientFromBg = false;
+      s.bgTaskFinished = false;
       this.setStatus(s, e.isError && !stopped ? "error" : "idle");
       this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
       return;
@@ -1429,6 +1462,9 @@ export class SessionManager {
     // 사용자가 끊은 턴이 남긴 이벤트다. 기록은 하되 "도는 중" 으로 되돌리지는 않는다.
     if (!s.ambientStopped && (s.status === "idle" || s.status === "error")) {
       s.turnStartedAt = Date.now();
+      // 이 턴이 왜 시작됐는지는 여기서만 안다. 백그라운드가 끝났다는 알림을 받은 뒤라면 그 결과를
+      // 처리하는 중이다. 알림이 없었으면 이유를 모르므로 평소 표시를 그대로 둔다 — 짐작해서 적지 않는다.
+      s.ambientFromBg = s.bgTaskFinished;
       this.setStatus(s, "running");
       this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
     }
@@ -1469,6 +1505,7 @@ export class SessionManager {
     if (this.isBusy(tabId)) this.abort(tabId);
     closeProviderSessions(tabId);
     s.events = [];
+    s.dedupe = buildDedupeIndex([]);
     s.sessionId = null;
     this.setHandoffPrefix(s, null);
     s.startedAt = null;
@@ -1518,7 +1555,19 @@ export class SessionManager {
     }
   }
 
-  /** 기록을 처음 읽을 때: 지난 실행에서 "진행 중" 으로 남은 카드(verify·fanout·review)는 이 프로세스에 없으므로 닫아 준다. */
+  /**
+   * 기록을 처음 읽을 때: 지난 실행에서 "진행 중" 으로 남은 카드(verify·fanout·review)는 이 프로세스에 없으므로 닫아 준다.
+   *
+   * 이미 쌓인 중복도 여기서 걸러 낸다. 예전에 세션을 갈아탔다고 보고 기록을 통째로 다시 불러온 탭이 있어서,
+   * 파일에는 같은 말이 두세 벌씩 남아 있다. 파일을 고쳐 쓰지는 않는다 — 대화 기록을 덮어쓰는 위험을
+   * 감수할 만큼 아끼는 용량이 아니고, 걸러서 읽으면 화면은 바로 제대로 나온다.
+   */
+  /** 이 탭이 이미 가진 것들의 색인. 기록을 통째로 불러올 때 대조한다. */
+  private dedupeIndex(s: Session): DedupeIndex {
+    this.loadEvents(s);
+    return (s.dedupe ??= buildDedupeIndex(s.events ?? []));
+  }
+
   private loadEvents(s: Session): ChatEvent[] {
     if (s.events) return s.events;
     const events = this.deps.store?.readEvents(s.tabId) ?? [];
@@ -1527,6 +1576,7 @@ export class SessionManager {
       this.deps.store?.appendEvent(s.tabId, e);
     }
     s.events = events;
+    s.dedupe = buildDedupeIndex(events);
     return events;
   }
 
@@ -1537,6 +1587,9 @@ export class SessionManager {
       return;
     }
     this.loadEvents(s).push(e);
+    // 여기서 거르지는 않는다(길목에서 버리면 정당한 재전송까지 막힌다). 색인만 따라가게 해서,
+    // 나중에 기록을 통째로 불러올 때 "이미 가진 것" 에 실시간으로 받은 것도 포함되게 한다.
+    indexEvent(this.dedupeIndex(s), e);
     this.deps.store?.appendEvent(s.tabId, e);
     this.deps.emit(s.tabId, e);
   }

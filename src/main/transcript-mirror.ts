@@ -34,7 +34,7 @@ function tsOf(d: Record<string, unknown>, fallback: number): number {
 
 /** 로컬 커맨드 출력·시스템 리마인더처럼 사용자가 친 말이 아닌 user 항목은 거른다. */
 const META_USER_TEXT =
-  /^\s*<(command-name|command-message|local-command-stdout|local-command-stderr|system-reminder|user-prompt-submit-hook)/;
+  /^\s*<(command-name|command-message|local-command-stdout|local-command-stderr|system-reminder|user-prompt-submit-hook|task-notification)/;
 
 // ===== Claude Code =====
 

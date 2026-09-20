@@ -436,6 +436,33 @@ test("우리가 시작하지 않은 턴도 중단된다", () => {
   rmSync(root, { recursive: true, force: true });
 });
 
+test("이어받은 턴은 백그라운드 결과일 때만 그렇게 표시한다", () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-sess-"));
+  const { manager } = makeManager(root);
+  const inner = manager as unknown as { ambientEvent(tabId: string, e: ChatEvent): void; ensure(tabId: string): { bgTaskFinished: boolean } };
+  const text = (t: string): ChatEvent => ({ type: "assistant_text", ts: Date.now(), blockId: t, text: t });
+  const done = (): ChatEvent => ({ type: "turn_result", ts: Date.now(), usage: ZERO_USAGE, costUsd: 0, durationMs: 1, numTurns: 1, modelUsage: {}, isError: false });
+  manager.snapshot("tab1");
+
+  // 왜 이어받았는지 모르는 턴. 짐작해서 "백그라운드 결과" 라고 적지 않는다.
+  inner.ambientEvent("tab1", text("이유를 모르는 턴"));
+  assert.equal(manager.snapshot("tab1").status, "running");
+  assert.equal(manager.snapshot("tab1").ambientFromBg, false);
+  inner.ambientEvent("tab1", done());
+
+  // 백그라운드가 끝났다는 알림을 받은 뒤의 턴이면 그 결과를 처리하는 중이다.
+  inner.ensure("tab1").bgTaskFinished = true;
+  inner.ambientEvent("tab1", text("결과를 들고 이어간다"));
+  assert.equal(manager.snapshot("tab1").ambientFromBg, true);
+
+  // 턴이 끝나면 표시도 내린다 — 다음 턴까지 물려주지 않는다.
+  inner.ambientEvent("tab1", done());
+  assert.equal(manager.snapshot("tab1").ambientFromBg, false);
+  inner.ambientEvent("tab1", text("그 다음 턴"));
+  assert.equal(manager.snapshot("tab1").ambientFromBg, false);
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("사용자가 끊은 턴은 오류로 끝난 것처럼 와도 오류가 아니다", () => {
   const root = mkdtempSync(join(tmpdir(), "wb-sess-"));
   const { manager } = makeManager(root);
