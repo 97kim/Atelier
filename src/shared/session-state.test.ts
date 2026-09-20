@@ -360,3 +360,46 @@ test("subagent_activity: 로그를 쌓고 via 를 기억한다", () => {
   assert.equal(b.subagent?.via, "codex");
   assert.deepEqual(b.subagent?.log, ["Bash node companion.mjs task", "Codex · Bash yarn test", "Codex · 고쳤습니다"]);
 });
+
+test("병렬 승인 요청: 답이 온 것만 짚어 풀고, 남은 것은 계속 물어본다", () => {
+  // "전부 자동" 으로 바꾸면 밀려 있던 요청들이 한꺼번에 풀린다. 예전에는 마지막 요청 하나만 기준으로
+  // 삼아 나머지 카드가 "권한 대기" 로 굳었다 — 카드는 결과보다 권한을 먼저 보므로 도구가 끝나도 그대로였다.
+  const req = (n: number) =>
+    ev("permission_request", { requestId: `r${n}`, toolUseId: `t${n}`, tool: "WebFetch", input: {}, canAlwaysAllow: false });
+  const s = replaySession([
+    ev("tool_use", { toolUseId: "t1", name: "WebFetch", input: {} }),
+    ev("tool_use", { toolUseId: "t2", name: "WebFetch", input: {} }),
+    ev("tool_use", { toolUseId: "t3", name: "WebFetch", input: {} }),
+    req(1),
+    req(2),
+    req(3),
+    // 창에는 먼저 온 것이 떠 있어야 한다 — 나중 것이 앞의 것을 밀어내면 앞의 것은 답할 길이 없다.
+  ]);
+  assert.equal(s.pendingPermission?.requestId, "r1");
+  assert.equal(s.permissionWaits.length, 3);
+
+  // 정책을 바꾸면 밀린 순서대로 풀린다. 각 승인 뒤에 어댑터가 running 을 내보낸다.
+  const after = [
+    ev("permission_resolved", { requestId: "r1", behavior: "allow" as const }),
+    ev("status", { status: "running" as const }),
+    ev("permission_resolved", { requestId: "r2", behavior: "allow" as const }),
+    ev("status", { status: "running" as const }),
+  ].reduce(reduceSession, s);
+
+  assert.equal(after.pendingPermission?.requestId, "r3", "아직 답 없는 것이 창에 남는다");
+  assert.deepEqual(after.permissionWaits.map((w) => w.requestId), ["r3"]);
+  const perm = (id: string) => after.blocks.find((b) => b.kind === "tool" && b.id === id) as { permission?: string };
+  assert.equal(perm("t1").permission, "allowed");
+  assert.equal(perm("t2").permission, "allowed");
+  assert.equal(perm("t3").permission, "pending", "답이 안 온 것은 그대로 기다린다");
+
+  const done = reduceSession(after, ev("permission_resolved", { requestId: "r3", behavior: "allow" as const }));
+  assert.equal(done.pendingPermission, null);
+  assert.equal(done.permissionWaits.length, 0);
+  assert.equal(perm2(done, "t3"), "allowed");
+});
+
+function perm2(s: ReturnType<typeof initialSessionState>, id: string): string | undefined {
+  const b = s.blocks.find((x) => x.kind === "tool" && x.id === id) as { permission?: string } | undefined;
+  return b?.permission;
+}

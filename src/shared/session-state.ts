@@ -159,7 +159,13 @@ export interface SessionState {
   model: string | null;
   cwd: string | null;
   blocks: Block[];
+  /** 지금 승인 창에 띄울 요청. 여럿이 겹치면 먼저 온 것부터 하나씩 보여 준다. */
   pendingPermission: PermissionRequestEvent | null;
+  /**
+   * 아직 답을 못 받은 요청들(온 순서). 병렬 도구는 승인 요청도 한꺼번에 오는데, 하나만 들고 있으면
+   * 나머지는 답이 와도 짚을 데가 없어 카드가 "권한 대기" 로 굳고 승인 창도 사라진다.
+   */
+  permissionWaits: PermissionRequestEvent[];
   totals: SessionTotals;
   /** 마지막 턴 결과 — 컨텍스트 사용량 표시용. */
   lastTurn: TurnResultEvent | null;
@@ -183,6 +189,7 @@ export function initialSessionState(): SessionState {
     cwd: null,
     blocks: [],
     pendingPermission: null,
+    permissionWaits: [],
     totals: { usage: ZERO_USAGE, costUsd: 0, turns: 0 },
     lastTurn: null,
     reasoning: "",
@@ -239,8 +246,10 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
 
     case "status": {
       const blocks = event.status === "running" ? state.blocks : finalizeStreaming(state.blocks);
+      // 승인 하나가 풀릴 때마다 어댑터가 running 을 내보낸다. 그때 창을 지우면 아직 답을 기다리는
+      // 다른 요청이 물어볼 자리를 잃는다 — 남은 것이 있으면 그대로 둔다.
       const pendingPermission =
-        event.status === "waiting_permission" ? state.pendingPermission : null;
+        event.status === "waiting_permission" || state.permissionWaits.length > 0 ? state.pendingPermission : null;
       return { ...state, status: event.status, blocks, pendingPermission, reasoning: event.status === "running" ? state.reasoning : "", reasoningStale: event.status === "running" ? state.reasoningStale : false };
     }
 
@@ -337,7 +346,8 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
       return {
         ...state,
         status: "waiting_permission",
-        pendingPermission: event,
+        pendingPermission: state.pendingPermission ?? event,
+        permissionWaits: [...state.permissionWaits, event],
         blocks: upsert<ToolBlock>(state.blocks, event.toolUseId, "tool", (b) => ({
           kind: "tool",
           id: event.toolUseId,
@@ -351,20 +361,30 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
       };
 
     case "permission_resolved": {
-      const pending = state.pendingPermission;
-      const matches = pending?.requestId === event.requestId;
-      const blocks = pending
+      // 답은 그 요청의 것만 짚는다. 예전에는 "마지막으로 온 요청" 을 기준으로 삼아, 병렬 요청에서는
+      // 엉뚱한 카드가 지워지고 나머지는 결과가 와도 "권한 대기" 로 굳었다(카드는 결과보다 권한을 먼저 본다).
+      const done = state.permissionWaits.find((w) => w.requestId === event.requestId) ?? null;
+      const waits = state.permissionWaits.filter((w) => w.requestId !== event.requestId);
+      const blocks = done
         ? state.blocks.map((b) =>
-            b.kind === "tool" && b.id === pending.toolUseId && b.permission === "pending"
+            b.kind === "tool" && b.id === done.toolUseId && b.permission === "pending"
               ? { ...b, permission: event.behavior === "allow" ? "allowed" : "denied" }
               : b,
           )
         : state.blocks;
+      const wasShown = state.pendingPermission?.requestId === event.requestId;
       return {
         ...state,
         blocks: blocks as Block[],
-        pendingPermission: matches ? null : state.pendingPermission,
-        status: matches && state.status === "waiting_permission" ? "running" : state.status,
+        permissionWaits: waits,
+        // 창에 띄워 두던 것이 풀렸으면 다음 차례를 올린다.
+        pendingPermission: wasShown ? (waits[0] ?? null) : state.pendingPermission,
+        status:
+          waits.length > 0
+            ? state.status
+            : wasShown && state.status === "waiting_permission"
+              ? "running"
+              : state.status,
       };
     }
 
@@ -488,6 +508,7 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
         ...state,
         status: event.fatal === false ? state.status : "error",
         pendingPermission: event.fatal === false ? state.pendingPermission : null,
+        permissionWaits: event.fatal === false ? state.permissionWaits : [],
         blocks: [
           ...finalizeStreaming(state.blocks),
           { kind: "error", id: `err-${event.ts}-${state.eventCount}`, message: event.message },
