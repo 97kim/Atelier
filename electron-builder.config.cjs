@@ -14,6 +14,11 @@ module.exports = {
     // Codex SDK 는 codexPathOverride(사용자 설치 CLI)로만 구동하므로 딸려오는
     // 플랫폼 바이너리(@openai/codex-darwin-arm64 등, ~300MB)는 제외한다.
     "!node_modules/@openai/codex-*-*/**",
+    // node-pty 는 프리빌드 4종(darwin-arm64·darwin-x64·win32-arm64·win32-x64)을 함께 담는다.
+    // 우리가 내는 것은 arm64 DMG 하나뿐인데 x64 프리빌드가 번들에 들어가면 macOS 가 번들 안의
+    // x86_64 Mach-O 를 보고 "Intel 기반 앱 지원 종료" 경고를 띄운다. 쓰지도 않는 것들을 뺀다.
+    "!node_modules/node-pty/prebuilds/darwin-x64/**",
+    "!node_modules/node-pty/prebuilds/win32-*/**",
   ],
   // `atelier` CLI 와 에이전트용 가이드. Contents/Resources/cli/ 에 그대로 놓인다(앱의 Electron 을 node 로 써서 실행).
   extraResources: [{ from: "cli", to: "cli", filter: ["**/*"] }],
