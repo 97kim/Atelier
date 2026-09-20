@@ -7,6 +7,7 @@ import { Icon } from "./Icon";
 export function VerifyPopover({
   tabId,
   anchor,
+  toggle,
   saved,
   onSave,
   onRun,
@@ -15,6 +16,8 @@ export function VerifyPopover({
   tabId: string;
   /** 붙일 버튼 — 헤더가 overflow-hidden 이라 body 포털로 그리고 이 요소 아래에 fixed 로 놓는다. */
   anchor: HTMLElement | null;
+  /** 이 팝오버를 여닫는 버튼. 그 위의 mousedown 은 바깥으로 치지 않는다(아래 참고). */
+  toggle: HTMLElement | null;
   /** 워크스페이스에 저장된 명령. 비어 있으면 cwd 에서 추천을 받아 채운다. */
   saved: string[];
   onSave: (commands: string[]) => void;
@@ -51,7 +54,13 @@ export function VerifyPopover({
   useEffect(() => {
     ta.current?.focus();
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (!ref.current || ref.current.contains(e.target as Node)) return;
+      // 여는 버튼 위의 mousedown 까지 바깥으로 치면 여기서 닫고, 이어서 오는 click 이 다시 연다 —
+      // 버튼이 토글로 동작하지 않고 계속 열린 채로 보인다. 그 자리는 넘기고 버튼의 토글에 맡긴다.
+      // anchor 가 아니라 토글 버튼만 짚는다. anchor 는 "검증" 실행 버튼까지 감싸고 있어서,
+      // 통째로 넘기면 검증을 눌러도 팝오버가 남는다.
+      if (toggle?.contains(e.target as Node)) return;
+      onClose();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -62,7 +71,7 @@ export function VerifyPopover({
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [onClose, toggle]);
   const commands = parseVerifyCommands(text);
   const dirty = commands.join("\n") !== saved.join("\n");
   const run = () => {

@@ -53,6 +53,25 @@ const { chromium } = require("playwright-core");
   await page.click("[data-header-more]"); // esc 검사를 위해 다시 연다
   await page.waitForTimeout(400);
 
+  await page.keyboard.press("Escape"); // 더보기 메뉴가 검증 버튼을 가리지 않게 먼저 닫는다
+  await page.waitForTimeout(300);
+
+  // 검증 편집 팝오버도 같은 토글이다. 여기는 anchor 가 "검증" 실행 버튼까지 감싸므로
+  // 토글 버튼만 짚어 고쳤다 — 검증을 누르면 팝오버가 닫히는 것까지 같이 본다.
+  await page.click("[data-verify-edit]");
+  await page.waitForTimeout(400);
+  console.log("RESULT (검증 편집이 열림):", await ev(() => !!document.querySelector("[data-verify-popover]")) ? "PASS" : "FAIL");
+  await page.click("[data-verify-edit]");
+  await page.waitForTimeout(400);
+  console.log("RESULT (검증 편집을 다시 누르면 닫힘):", await ev(() => !document.querySelector("[data-verify-popover]")) ? "PASS" : "FAIL");
+  // 토글 버튼만 예외로 뒀으니 바깥 클릭으로 닫히는 동작은 그대로여야 한다.
+  // ("검증" 버튼은 저장된 명령이 없으면 편집기를 여는 것이 제 동작이라 바깥 클릭 예시로 쓸 수 없다.)
+  await page.click("[data-verify-edit]");
+  await page.waitForTimeout(400);
+  await page.click("[data-header-more]"); // 바깥을 누른다 — 팝오버는 닫히고 더보기 메뉴가 열린다
+  await page.waitForTimeout(500);
+  console.log("RESULT (바깥을 누르면 검증 편집이 닫힘):", await ev(() => !document.querySelector("[data-verify-popover]")) ? "PASS" : "FAIL");
+
   // esc 로 닫힌다
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);

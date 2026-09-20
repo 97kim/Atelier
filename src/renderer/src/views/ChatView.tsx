@@ -202,6 +202,7 @@ export function ChatView({
   };
   const closeVerify = useCallback(() => setVerifyOpen(false), []);
   const verifyAnchor = useRef<HTMLDivElement>(null);
+  const verifyToggle = useRef<HTMLButtonElement>(null);
   const moreAnchor = useRef<HTMLDivElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   // 팬아웃: 지시 하나를 격리 세션 N개에 — 시작 창과 비교 오버레이
@@ -566,6 +567,7 @@ export function ChatView({
               {verifyRunning ? "검증 중" : "검증"}
             </button>
             <button
+              ref={verifyToggle}
               onClick={() => setVerifyOpen((o) => !o)}
               disabled={!cwd}
               className={`no-drag flex items-center rounded-r-md border border-l-0 border-line px-1.5 py-1.5 hover:bg-panel-2 disabled:opacity-40 ${verifyOpen ? "bg-accent-tint text-accent" : "bg-panel text-muted"}`}
@@ -574,7 +576,7 @@ export function ChatView({
             >
               <Icon name="edit" size={10} />
             </button>
-            {verifyOpen && <VerifyPopover tabId={tabId} anchor={verifyAnchor.current} saved={savedVerify} onSave={saveVerify} onRun={(cmds) => void runVerify(cmds)} onClose={closeVerify} />}
+            {verifyOpen && <VerifyPopover tabId={tabId} anchor={verifyAnchor.current} toggle={verifyToggle.current} saved={savedVerify} onSave={saveVerify} onRun={(cmds) => void runVerify(cmds)} onClose={closeVerify} />}
           </div>
           <button
             onClick={toggleTerminal}
