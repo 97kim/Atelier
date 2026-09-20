@@ -26,12 +26,15 @@ export function MessageList({
   onOpenOrchestration,
   turnStartedAt = null,
   sessionId = null,
+  ambientFromBg = false,
 }: {
   tabId: string;
   blocks: Block[];
   status: SessionStatus;
   /** 이 탭의 provider 세션 id — 백그라운드 작업이 어느 대화 것인지 잇는 열쇠. */
   sessionId?: string | null;
+  /** 지금 도는 턴이 백그라운드 작업이 끝나 CLI 가 스스로 이어간 것이면 true. */
+  ambientFromBg?: boolean;
   /** 지금 턴의 생각(reasoning) 텍스트 꼬리. "생각 중" 아래에 흘려 보여 준다. */
   reasoning?: string;
   provider: Provider;
@@ -184,7 +187,7 @@ export function MessageList({
             afterTool={last?.kind === "tool" ? last.name : null}
           />
         )}
-        {status !== "idle" && status !== "error" && (turnStartedAt ?? lastUserTs) !== null && <RunningFooter since={status === "queued" ? lastUserTs! : (turnStartedAt ?? lastUserTs!)} blocks={blocks} status={status} />}
+        {status !== "idle" && status !== "error" && (turnStartedAt ?? lastUserTs) !== null && <RunningFooter since={status === "queued" ? lastUserTs! : (turnStartedAt ?? lastUserTs!)} blocks={blocks} status={status} ambientFromBg={ambientFromBg} />}
         <div ref={endRef} />
       </div>
     </div>
@@ -268,7 +271,7 @@ function Thinking({
  * 그 프로세스는 앱에서 떨어져 나가 하위 에이전트 표시에도 안 잡힌다.
  */
 
-function RunningFooter({ since, blocks, status }: { since: number; blocks: Block[]; status: SessionStatus }) {
+function RunningFooter({ since, blocks, status, ambientFromBg }: { since: number; blocks: Block[]; status: SessionStatus; ambientFromBg: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -287,7 +290,10 @@ function RunningFooter({ since, blocks, status }: { since: number; blocks: Block
   }
   // 권한 대기 중 AskUserQuestion 이 걸려 있으면 승인이 아니라 답을 기다리는 것
   const askingQuestion = blocks.some((b) => b.kind === "tool" && b.permission === "pending" && b.name === "AskUserQuestion");
-  const label = status === "queued" ? "대기열 (요청 후)" : status === "waiting_permission" ? (askingQuestion ? "답변 대기" : "권한 대기") : running > 0 ? `도구 실행 중` : "응답 중";
+  // 사용자가 아무 말도 안 했는데 도는 턴이 있다. 백그라운드 작업이 끝나 CLI 가 그 결과를 들고
+  // 스스로 이어간 것인데, 그걸 "응답 중" 이라고 적으면 무엇에 답하는 중인지 알 수 없다.
+  const running0 = ambientFromBg ? "백그라운드 결과 처리 중" : "응답 중";
+  const label = status === "queued" ? "대기열 (요청 후)" : status === "waiting_permission" ? (askingQuestion ? "답변 대기" : "권한 대기") : running > 0 ? `도구 실행 중` : running0;
   return (
     <div className="content-indent flex items-center gap-2 text-[11px] text-muted-2" data-turn-elapsed={secs}>
       <span className="spin inline-block h-2.5 w-2.5 rounded-full border-[1.5px] border-accent border-t-transparent" />

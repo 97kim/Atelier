@@ -710,6 +710,7 @@ export function ChatView({
                 onCompareFanout={setCompareFanoutId}
                 onOpenOrchestration={(runId) => setOrchPanel({ runId })}
                 turnStartedAt={config?.turnStartedAt ?? null}
+                ambientFromBg={config?.ambientFromBg ?? false}
                 sessionId={config?.sessionId ?? null}
               />
             </div>
