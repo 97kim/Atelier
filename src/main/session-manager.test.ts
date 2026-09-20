@@ -532,3 +532,28 @@ test("터미널 resume(Codex): 같은 세션을 그대로 이어받아도 미러
   manager.release("tab1");
   rmSync(root, { recursive: true, force: true });
 });
+
+// 같은 세션을 그대로 이어받는 길은 provider 를 가리지 않는다 — Codex 만 고치고 끝낼 수 없어 Claude 로도 한 번 본다.
+test("터미널 resume(Claude): 같은 세션을 그대로 이어받아도 미러가 돈다", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-claude-same-"));
+  const { manager } = makeManager(root);
+  const dir = join(root, "claude", "-Users-x-proj");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "claude-one.jsonl");
+  const line = (uuid: string, text: string) =>
+    JSON.stringify({ type: "user", uuid, timestamp: "2026-09-20T00:00:00Z", message: { role: "user", content: text } }) + "\n";
+  writeFileSync(file, line("u1", "앱에서 한 말"));
+  manager.ensure("tab1", { provider: "claude", cwd: root, sessionId: "claude-one" });
+  manager.externalCliStarted("tab1", "claude", root, 1234, "claude-one");
+
+  const texts = () => manager.events("tab1").flatMap((e) => (e.type === "user_message" ? [e.text] : []));
+  assert.deepEqual(texts(), []);
+  assert.ok(!manager.events("tab1").some((e) => e.type === "error"), "갈아탔다는 안내를 붙이지 않는다");
+
+  appendFileSync(file, line("u2", "터미널에서 한 말"));
+  await wait(1200);
+  assert.deepEqual(texts(), ["터미널에서 한 말"], "이어지는 줄은 미러가 채팅에 옮긴다");
+
+  manager.release("tab1");
+  rmSync(root, { recursive: true, force: true });
+});

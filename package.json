@@ -15,7 +15,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "TSX_TSCONFIG_PATH=tsconfig.node.json node --import tsx --test 'src/**/*.test.ts'",
+    "test": "TSX_TSCONFIG_PATH=tsconfig.node.json node --import tsx --test --test-force-exit 'src/**/*.test.ts'",
     "package": "yarn build && electron-builder --config electron-builder.config.cjs --publish never",
     "release": "scripts/release.sh",
     "postinstall": "node node_modules/electron/install.js && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper"
