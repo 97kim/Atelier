@@ -290,6 +290,8 @@ export class ControlServer {
             provider: s.provider,
             policy: s.policy,
             target: s.target,
+            // 이 예약이 회차를 쌓는 탭. 어디를 열어 보면 되는지는 사용자도 알아야 한다.
+            pinnedTabId: s.pinnedTabId ?? null,
             nextRunAt: s.nextRunAt,
             lastRun: runs.find((r) => r.scheduleId === s.id) ?? null,
           })),

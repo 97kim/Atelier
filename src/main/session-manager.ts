@@ -1514,6 +1514,23 @@ export class SessionManager {
   }
 
   /** 대화를 비운다. 실행 중이면 중단. provider 세션도 새로 시작한다. */
+  /**
+   * 탭 기록은 그대로 두고 provider 세션만 새로 시작한다. 예약이 제 탭에 회차를 쌓을 때 쓴다 —
+   * 같은 세션을 계속 이어 가면 회차마다 맥락이 누적돼 비용이 매일 오르고 결국 한도에 부딪힌다.
+   * 지난 회차는 탭을 스크롤하면 그대로 있으므로 비교에는 지장이 없다.
+   *
+   * clear() 와 다르다. clear 는 기록까지 지운다 — 그러면 지난 회차를 볼 수 없다.
+   * provider 를 바꿀 때 하는 것과 같은 일이다(세션만 새로, 기록은 유지).
+   */
+  resetSession(tabId: string): void {
+    const s = this.sessions.get(tabId);
+    if (!s || s.sessionId === null) return;
+    closeProviderSessions(tabId);
+    s.sessionId = null;
+    this.deps.onMeta?.(tabId, { sessionId: null });
+    this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
+  }
+
   clear(tabId: string): SessionSnapshot {
     const s = this.ensure(tabId);
     this.externalCliExited(tabId);

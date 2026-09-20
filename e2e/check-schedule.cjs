@@ -44,6 +44,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   result("수동 실행도 된다", ["running", "pending"].includes(manual.status), `(${manual.status})`);
   const dup = cli("schedule", "run", "--id", id).run;
   result("앞 회차가 살아 있으면 겹침으로 건너뛴다", dup.status === "skipped_overlap", `(${dup.status})`);
+  // 회차마다 새 탭을 만들면 매일 도는 예약이 워크스페이스에 탭을 쌓는다. 제 탭 하나에 쌓아야 한다.
+  result("두 번째 회차도 같은 탭에서 돈다", Boolean(manual.tabId) && manual.tabId === run?.tabId, `(${run?.tabId} vs ${manual.tabId})`);
+  const pinned = cli("schedule", "list").schedules.find((s) => s.id === id)?.pinnedTabId ?? null;
+  result("예약이 그 탭을 잡아 둔다", pinned === run?.tabId, `(${pinned})`);
 
   // 끄면 돌지 않는다
   cli("schedule", "set", "--id", id, "--enabled", "false");

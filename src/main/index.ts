@@ -392,12 +392,22 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
     tabId = made;
     runCwd = r.worktree.path;
   } else {
-    // cwd 를 명시한다. 그냥 만들면 활성 탭의 작업 경로를 물려받아,
-    // 선조건은 워크스페이스 기본 경로에서 검사하고 실제 작업은 사용자가 보고 있던
-    // 다른 worktree 에서 하는 일이 생긴다.
-    const made = workspaces.createTab(wsId, { cwd: ws.path, title: `${schedule.name} · 예약` });
-    if (!made) throw new Error("세션을 만들지 못했습니다.");
-    tabId = made;
+    // 예약이 잡아 둔 제 탭에 회차를 쌓는다. 사용자가 닫았으면 다시 만든다.
+    const pinned = schedule.pinnedTabId && workspaces.tab(schedule.pinnedTabId) ? schedule.pinnedTabId : null;
+    if (pinned) {
+      tabId = pinned;
+      // 맥락은 이어 가지 않는다 — 회차마다 쌓이면 비용이 매일 오르고 결국 한도에 부딪힌다.
+      // 지난 회차는 탭 기록에 그대로 남으므로 스크롤해서 비교할 수 있다.
+      sessions.resetSession(tabId);
+    } else {
+      // cwd 를 명시한다. 그냥 만들면 활성 탭의 작업 경로를 물려받아,
+      // 선조건은 워크스페이스 기본 경로에서 검사하고 실제 작업은 사용자가 보고 있던
+      // 다른 worktree 에서 하는 일이 생긴다.
+      const made = workspaces.createTab(wsId, { cwd: ws.path, title: `${schedule.name} · 예약` });
+      if (!made) throw new Error("세션을 만들지 못했습니다.");
+      tabId = made;
+      scheduleStore?.upsertSchedule({ ...schedule, pinnedTabId: made });
+    }
   }
   // 어디서 돌았는지 먼저 남긴다. 보내기가 실패해도 만들어 둔 세션을 이력에서 찾아갈 수 있어야 한다.
   scheduleStore?.updateRun(run.id, { tabId });
