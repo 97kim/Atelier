@@ -108,9 +108,34 @@ const chip =
 const chipWhen =
   "rounded-md border border-accent/30 bg-accent-tint px-2 py-1 font-medium text-accent outline-none transition-colors hover:border-accent/50 focus:border-accent/60";
 
-/** 네이티브 time 입력의 시계 글리프. 지우면 피커를 못 열고, 그대로 두면 OS 크롬만 혼자 튄다. 톤만 낮춘다. */
-const nativePicker =
-  "[&::-webkit-calendar-picker-indicator]:opacity-40 [&::-webkit-calendar-picker-indicator]:hover:opacity-80";
+/**
+ * 시·분 고르기. 네이티브 time 입력을 쓰면 OS 가 제 드롭다운을 그린다 — 오전/오후 3열에 밝은 파란 막대라
+ * 앱 어디에도 없는 색이고, 문장은 24시간으로 적는데 피커만 12시간이라 읽는 형식까지 달랐다.
+ * 다른 값과 같은 고르기로 맞춘다. 분은 60개 다 둔다 — 줄이면 07:07 같은 시각을 못 고르게 된다.
+ */
+function TimePick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [h = "09", m = "00"] = value.split(":");
+  const two = (n: number) => String(n).padStart(2, "0");
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Pick value={h} onChange={(v) => onChange(`${v}:${m}`)} base={chipWhen} aria-label="시" data-f-hour>
+        {Array.from({ length: 24 }, (_, i) => (
+          <option key={i} value={two(i)}>
+            {two(i)}
+          </option>
+        ))}
+      </Pick>
+      <span className="text-muted-2">:</span>
+      <Pick value={m} onChange={(v) => onChange(`${h}:${v}`)} base={chipWhen} aria-label="분" data-f-minute>
+        {Array.from({ length: 60 }, (_, i) => (
+          <option key={i} value={two(i)}>
+            {two(i)}
+          </option>
+        ))}
+      </Pick>
+    </span>
+  );
+}
 
 /**
  * 문장 안의 고르기. 네이티브 화살표를 지우고 우리 캐럿을 붙인다 —
@@ -121,16 +146,20 @@ function Pick({
   onChange,
   children,
   className = "",
+  base = chip,
   ...rest
 }: {
   value: string;
   onChange: (v: string) => void;
   children: React.ReactNode;
   className?: string;
+  /** 문장에서 이 값이 갖는 무게. "언제" 는 한 톤 올린 칩을 쓴다. */
+  base?: string;
+  "aria-label"?: string;
 } & Record<`data-${string}`, string | boolean | undefined>) {
   return (
     <span className="relative inline-flex items-center">
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${chip} appearance-none pr-6 ${className}`} {...rest}>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${base} appearance-none pr-6 ${className}`} {...rest}>
         {children}
       </select>
       <Icon name="chevronDown" size={11} className="pointer-events-none absolute right-2 text-muted-2" />
@@ -362,7 +391,7 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
               </>
             ) : (
               <>
-                <input type="time" value={draft.time} onChange={(e) => set({ time: e.target.value })} className={`${chipWhen} ${nativePicker}`} data-f-time />
+                <TimePick value={draft.time} onChange={(v) => set({ time: v })} />
                 <span>에</span>
               </>
             )}

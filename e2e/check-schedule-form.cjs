@@ -54,7 +54,8 @@ const NAME = "화면에서만든예약";
 
   await page.fill("[data-f-name]", NAME);
   await page.selectOption("[data-f-repeat]", "daily");
-  await page.fill("[data-f-time]", "07:30");
+  await page.selectOption("[data-f-hour]", "07");
+  await page.selectOption("[data-f-minute]", "30");
   await page.selectOption("[data-f-ws]", ws);
   await page.fill("[data-f-prompt]", "'예약됨' 한 마디만 답해라.");
   await page.waitForTimeout(300);
@@ -77,12 +78,16 @@ const NAME = "화면에서만든예약";
   const back = await ev(() => ({
     name: document.querySelector("[data-f-name]")?.value ?? null,
     repeat: document.querySelector("[data-f-repeat]")?.value ?? null,
-    time: document.querySelector("[data-f-time]")?.value ?? null,
+    time: `${document.querySelector("[data-f-hour]")?.value ?? ""}:${document.querySelector("[data-f-minute]")?.value ?? ""}`,
+    // 네이티브 time 입력을 걷어냈다 — OS 드롭다운(오전/오후 3열)이 이 화면에서만 혼자 튀었다.
+    noNativeTime: !document.querySelector('input[type="time"]'),
   }));
   console.log("되읽은 값:", JSON.stringify(back));
   result("고치기가 저장된 값을 되읽는다", back.name === NAME && back.repeat === "daily" && back.time === "07:30", JSON.stringify(back));
+  result("시각도 앱의 고르기로 쓴다(네이티브 피커 없음)", back.noNativeTime);
   await page.selectOption("[data-f-repeat]", "weekdays");
-  await page.fill("[data-f-time]", "08:05");
+  await page.selectOption("[data-f-hour]", "08");
+  await page.selectOption("[data-f-minute]", "05");
   await page.click("[data-f-save]");
   await page.waitForTimeout(900);
   const edited = cli("schedule", "list").schedules.find((s) => s.name === NAME);
