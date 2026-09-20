@@ -45,6 +45,14 @@ const { chromium } = require("playwright-core");
   console.log("RESULT (설명 문구가 보임):", menu && menu[0].text.length > 10 ? "PASS" : "FAIL");
   await page.screenshot({ path: E2E + "/shot-header-menu.png" });
 
+  // 같은 버튼을 다시 누르면 닫힌다(토글). 바깥 mousedown 으로 닫고 이어지는 click 이 다시 열어
+  // 계속 열린 것처럼 보이던 자리다.
+  await page.click("[data-header-more]");
+  await page.waitForTimeout(400);
+  console.log("RESULT (버튼을 다시 누르면 닫힘):", await ev(() => !document.querySelector("[data-header-menu]")) ? "PASS" : "FAIL");
+  await page.click("[data-header-more]"); // esc 검사를 위해 다시 연다
+  await page.waitForTimeout(400);
+
   // esc 로 닫힌다
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);

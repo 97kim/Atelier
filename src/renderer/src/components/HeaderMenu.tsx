@@ -38,7 +38,11 @@ export function HeaderMenu({
   }, [anchor]);
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (!ref.current || ref.current.contains(e.target as Node)) return;
+      // 여는 버튼 위의 mousedown 까지 바깥으로 치면 여기서 닫고, 이어서 오는 click 이 다시 연다 —
+      // 버튼이 토글로 동작하지 않고 계속 열린 채로 보인다. 그 자리는 넘기고 버튼의 토글에 맡긴다.
+      if (anchor?.contains(e.target as Node)) return;
+      onClose();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -49,7 +53,7 @@ export function HeaderMenu({
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [onClose, anchor]);
 
   return createPortal(
     <div
