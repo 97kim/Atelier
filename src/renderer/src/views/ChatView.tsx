@@ -883,6 +883,7 @@ export function ChatView({
               onSaveSnippet={(input) => window.workbench.snippets.save(input)}
               onSend={onSend}
               onAbort={() => void window.workbench.chat.abort(tabId)}
+              onClear={() => void onClear()}
             />
           </div>
 

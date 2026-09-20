@@ -56,6 +56,7 @@ export function Composer({
   onSaveSnippet,
   onSend,
   onAbort,
+  onClear,
   disabledText,
 }: {
   disabled: boolean;
@@ -81,6 +82,8 @@ export function Composer({
   }) => Promise<{ ok: true } | { ok: false; error: string }>;
   onSend: (text: string, images: ChatImageDto[]) => Promise<void>;
   onAbort: () => void;
+  /** `/clear` 를 받았을 때. CLI 를 쓰던 손버릇이 이 앱에서도 통하게 한다. */
+  onClear?: () => void;
 }) {
   // 쓰다 만 글은 탭별로 보존한다(탭 전환·재시작 뒤 복원). 전송하면 비운다.
   const [text, setText] = useState(() => (draftKey ? loadComposerDraft(draftKey) : ""));
@@ -212,6 +215,16 @@ export function Composer({
     const trimmed = text.trim();
     if ((!trimmed && images.length === 0) || disabled) return;
     setError(null);
+    // CLI 의 /clear 를 앱의 대화 비우기로 잇는다. 그냥 흘려보내면 CLI 는 제 맥락만 비우고,
+    // 화면은 앱이 따로 쌓아 둔 기록으로 그려지므로 아무것도 달라지지 않는다.
+    // 커맨드 목록에 clear 가 있다고 비켜서지 않는다 — SDK 가 주는 159개 안에 들어 있어서,
+    // 그걸 보고 물러나면 이 가로채기가 영영 동작하지 않는다(처음 만들 때 그렇게 걸렸다).
+    if (trimmed === "/clear" && images.length === 0 && onClear) {
+      if (draftKey) clearComposerDraft(draftKey);
+      setText("");
+      onClear();
+      return;
+    }
     try {
       await onSend(
         trimmed,
@@ -224,7 +237,7 @@ export function Composer({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [text, images, disabled, onSend, draftKey]);
+  }, [text, images, disabled, onSend, draftKey, onClear]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // 한국어 IME 조합 중 Enter 는 조합 확정이지 전송이 아니다.
@@ -251,6 +264,13 @@ export function Composer({
     if (popoverOpen && e.key === "Escape") {
       e.preventDefault();
       setDismissed(true);
+      return;
+    }
+    // 중단 버튼이 "중단 (esc)" 라고 적어 두고 정작 esc 는 아무 데서도 처리하지 않았다.
+    // 승인 창은 입력창이 포커스일 때 키를 무시하므로(PermissionPrompt) 여기서 겹치지 않는다.
+    if (e.key === "Escape" && running) {
+      e.preventDefault();
+      onAbort();
       return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
