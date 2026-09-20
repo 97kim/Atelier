@@ -5,6 +5,7 @@
 #   scripts/release.sh            현재 package.json 버전으로
 #   scripts/release.sh 0.2.0      버전을 올리고(커밋까지) 릴리스
 #   DRY_RUN=1 scripts/release.sh  실제로 올리지 않고 할 일만 보여 준다
+#   RELEASE_NOTES=notes.md ...    변경 항목을 커밋 제목 대신 그 파일 내용으로 싣는다
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -58,26 +59,38 @@ run yarn package
 # ===== 릴리스 노트 =====
 # 지난 태그 이후의 커밋 제목. 첫 릴리스면 전체.
 PREV_TAG="$(git tag --list 'v*' --sort=-v:refname | head -1)"
-if [[ -n "$PREV_TAG" ]]; then
-  LOG="$(git log --format='- %s' "${PREV_TAG}..HEAD")"
+# 커밋 제목은 고치는 사람이 읽는 말이라("되풀이를 다 자르지 못한 경우를 셈으로 남긴다") 받는 사람에게는
+# 안 읽힌다. RELEASE_NOTES 로 파일을 주면 그 내용을 대신 싣는다. 없으면 커밋 제목으로 대신한다.
+# 버전 올리는 커밋(v0.8.7 같은 것)은 뺀다 — 변경 항목이 아니라 릴리스 자체의 부산물이다.
+if [[ -n "${RELEASE_NOTES:-}" ]]; then
+  [[ -f "$RELEASE_NOTES" ]] || die "RELEASE_NOTES 파일이 없다: $RELEASE_NOTES"
+  LOG="$(cat "$RELEASE_NOTES")"
+elif [[ -n "$PREV_TAG" ]]; then
+  LOG="$(git log --format='- %s' "${PREV_TAG}..HEAD" | grep -v '^- v[0-9]' || true)"
 else
-  LOG="$(git log --format='- %s' -20)"
+  LOG="$(git log --format='- %s' -20 | grep -v '^- v[0-9]' || true)"
 fi
 NOTES="$(cat <<EOF
+## 이번에 달라진 것
+
 ${LOG}
 
----
+## 설치
 
-**설치**: 아래 DMG 를 받아 열고 \`Atelier.app\` 을 Applications 로 드래그한다.
+DMG를 내려받아 열고 \`Atelier.app\`을 Applications 폴더로 옮기세요.
 
-서명·공증을 하지 않아 Gatekeeper 가 막는다. 터미널에서 격리 속성을 떼는 것이 가장 확실하다:
+서명과 공증을 하지 않은 앱이라 처음 열 때 macOS가 막습니다. 터미널에서 격리 표시를 떼는 방법이 가장 확실합니다.
+
 \`\`\`
 xattr -d com.apple.quarantine /Applications/Atelier.app
 \`\`\`
-또는 한 번 열어 본 뒤 **시스템 설정 → 개인정보 보호 및 보안** 에서 "그래도 열기".
-(우클릭 → 열기 는 macOS 15 Sequoia 부터 통하지 않는다.)
 
-**필요한 것**: Apple Silicon Mac, 그리고 이미 로그인해 둔 \`claude\` 또는 \`codex\` CLI.
+한 번 열어 본 뒤 **시스템 설정 → 개인정보 보호 및 보안**에서 "그래도 열기"를 눌러도 됩니다.
+예전에 쓰던 우클릭 → 열기는 macOS 15 Sequoia부터 통하지 않습니다.
+
+## 필요한 것
+
+Apple Silicon Mac, 그리고 로그인을 마친 \`claude\` 또는 \`codex\` CLI.
 EOF
 )"
 
