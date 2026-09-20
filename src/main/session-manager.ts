@@ -721,11 +721,14 @@ export class SessionManager {
     this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
     // 명령에 세션 id 가 있으면(`codex resume <id>`) 바로 그 세션을 붙인다 —
     // 첫 턴을 보내기 전에는 기록 파일이 그대로라 "최근에 바뀐 파일" 로는 찾을 수 없다.
-    if (resumeId && resumeId !== s.sessionId) {
+    if (resumeId) {
       const file =
         provider === "codex" ? findCodexRollout(roots0.codex, { sessionId: resumeId }) : findClaudeTranscript(roots0.claude, resumeId);
-      if (file) this.switchToTranscript(s, resumeId, file, Date.now(), "터미널에서");
-      else this.deps.log?.(tabId, `[external] resume 세션 ${resumeId} 의 기록 파일을 찾지 못했습니다`);
+      if (!file) this.deps.log?.(tabId, `[external] resume 세션 ${resumeId} 의 기록 파일을 찾지 못했습니다`);
+      else if (resumeId !== s.sessionId) this.switchToTranscript(s, resumeId, file, Date.now(), "터미널에서");
+      // 이 탭이 이미 붙어 있던 세션을 터미널에서 그대로 이어받았다: 대화는 화면에 있으니 다시 불러오지 않고 뒤만 잇는다.
+      // 아래 tick 은 같은 세션이면 넘기므로, 여기서 켜지 않으면 미러가 영영 시작되지 않는다.
+      else this.startMirror(s, false, file, null);
     }
     const tick = () => {
       const cur = this.sessions.get(tabId);
@@ -938,12 +941,15 @@ export class SessionManager {
       const cwd = s.cwd;
       s.mirror = new TranscriptWatcher({
         resolveFile: () =>
-          s.sessionId
-            ? findCodexRollout(roots.codex, { sessionId: s.sessionId })
-            : findCodexRollout(roots.codex, { cwd, after: startedAt }),
+          fileHint && fs.existsSync(fileHint)
+            ? fileHint
+            : s.sessionId
+              ? findCodexRollout(roots.codex, { sessionId: s.sessionId })
+              : findCodexRollout(roots.codex, { cwd, after: startedAt }),
         map: mapCodexRolloutLine,
         onEvents,
         skipExisting: !isNew,
+        ...(startOffset !== null ? { startOffset } : {}),
         onFile: (file) => {
           // 새 Codex 세션이면 rollout 의 session_meta 에서 id 를 가져와 나중에 SDK 가 이어받게 한다.
           if (s.sessionId) return;

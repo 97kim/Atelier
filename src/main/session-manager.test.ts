@@ -475,3 +475,60 @@ test("사용자가 끊은 턴은 오류로 끝난 것처럼 와도 오류가 아
   assert.equal(manager.snapshot("tab1").status, "idle");
   rmSync(root, { recursive: true, force: true });
 });
+
+/** Codex rollout 한 줄(개행 없이) — 테스트에서 "쓰다 만 줄" 을 만들려고 개행은 호출자가 붙인다. */
+function codexUserLine(id: string, text: string): string {
+  return JSON.stringify({
+    type: "event_msg",
+    payload: { type: "item_completed", item: { id, type: "UserMessage", content: text } },
+  });
+}
+
+function codexRollout(root: string, sessionId: string): string {
+  const day = join(root, "codex", "2026", "09", "20");
+  mkdirSync(day, { recursive: true });
+  const file = join(day, `rollout-2026-09-20T01-00-00-${sessionId}.jsonl`);
+  writeFileSync(file, JSON.stringify({ type: "session_meta", payload: { id: sessionId, cwd: root } }) + "\n");
+  return file;
+}
+
+test("터미널 resume(Codex): 다른 세션을 붙이면 미러가 읽다 만 자리부터 잇는다", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-codex-off-"));
+  const { manager } = makeManager(root);
+  const file = codexRollout(root, "codex-one");
+  // 마지막 줄에 개행이 없다 = CLI 가 쓰는 도중. 불러오기는 개행까지만 읽고, 나머지는 미러가 마저 읽어야 한다.
+  appendFileSync(file, codexUserLine("i1", "먼저 한 말") + "\n" + codexUserLine("i2", "쓰다 만 줄"));
+  manager.ensure("tab1", { provider: "codex", cwd: root, sessionId: "codex-old" });
+  manager.externalCliStarted("tab1", "codex", root, 1234, "codex-one");
+
+  const texts = () => manager.events("tab1").flatMap((e) => (e.type === "user_message" ? [e.text] : []));
+  assert.deepEqual(texts(), ["먼저 한 말"], "개행까지의 줄만 불러온다");
+
+  appendFileSync(file, "\n" + codexUserLine("i3", "그 뒤에 온 말") + "\n");
+  await wait(1200);
+  assert.deepEqual(texts(), ["먼저 한 말", "쓰다 만 줄", "그 뒤에 온 말"], "쓰다 만 줄을 건너뛰지 않는다");
+
+  manager.release("tab1");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("터미널 resume(Codex): 같은 세션을 그대로 이어받아도 미러가 돈다", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-codex-same-"));
+  const { manager } = makeManager(root);
+  const file = codexRollout(root, "codex-one");
+  appendFileSync(file, codexUserLine("i1", "앱에서 한 말") + "\n");
+  manager.ensure("tab1", { provider: "codex", cwd: root, sessionId: "codex-one" });
+  manager.externalCliStarted("tab1", "codex", root, 1234, "codex-one");
+
+  const texts = () => manager.events("tab1").flatMap((e) => (e.type === "user_message" ? [e.text] : []));
+  // 같은 세션이니 화면에 이미 있는 대화를 다시 불러오지 않는다 — 갈아탐 안내도 없다.
+  assert.deepEqual(texts(), []);
+  assert.ok(!manager.events("tab1").some((e) => e.type === "error"), "갈아탔다는 안내를 붙이지 않는다");
+
+  appendFileSync(file, codexUserLine("i2", "터미널에서 한 말") + "\n");
+  await wait(1200);
+  assert.deepEqual(texts(), ["터미널에서 한 말"], "이어지는 줄은 미러가 채팅에 옮긴다");
+
+  manager.release("tab1");
+  rmSync(root, { recursive: true, force: true });
+});
