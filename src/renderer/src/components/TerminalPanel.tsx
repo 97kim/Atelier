@@ -45,6 +45,14 @@ export function TerminalPanel({
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [tabs, setTabs] = useState<TermTab[]>([]);
   const [active, setActive] = useState<string | null>(null);
+  /**
+   * 화면을 둘로 나눠 쓴다. dir="row" 는 좌우, "col" 은 상하. 두 쪽까지만 — 중첩은 하지 않는다.
+   * 터미널을 다른 부모로 옮기면 xterm 이 새로 만들어져 내용이 날아가므로, 부모는 그대로 두고
+   * 인라인 스타일로 자리만 바꾼다.
+   */
+  const [split, setSplit] = useState<{ dir: "row" | "col"; id: string } | null>(null);
+  const [ratio, setRatio] = useState(50);
+  const areaRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false);
   const prefix = `${tabId}:`;
 
@@ -88,18 +96,39 @@ export function TerminalPanel({
     };
   }, [tabId, prefix]);
 
-  const addTab = () => {
+  const nextTermId = () => {
     const nums = tabs.map((t) => Number(/:t(\d+)$/.exec(t.id)?.[1] ?? 0));
-    const id = `${prefix}t${Math.max(0, ...nums) + 1}`;
+    return `${prefix}t${Math.max(0, ...nums) + 1}`;
+  };
+
+  const addTab = () => {
+    const id = nextTermId();
     setTabs((prev) => [...prev, { id, kind: "shell", title: "셸" }]);
     setActive(id);
   };
 
+  /** ⌘D 좌우, ⌘⇧D 상하. 이미 나뉘어 있으면 방향만 바꾼다 — 셸을 더 띄우지 않는다. */
+  const splitTerm = (dir: "row" | "col") => {
+    if (split) {
+      setSplit({ ...split, dir });
+      return;
+    }
+    const id = nextTermId();
+    setTabs((prev) => [...prev, { id, kind: "shell", title: "셸" }]);
+    setSplit({ dir, id });
+    setRatio(50);
+  };
+
   const closeTab = (id: string) => {
     void window.workbench.terminal.close(id);
+    // 나뉘어 있던 쪽을 닫으면 한 화면으로 돌아간다.
+    if (split?.id === id) setSplit(null);
     setTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
-      if (active === id) setActive(next[next.length - 1]?.id ?? null);
+      if (active === id) {
+        const fallback = next.filter((t) => t.id !== split?.id);
+        setActive((fallback[fallback.length - 1] ?? next[next.length - 1])?.id ?? null);
+      }
       return next;
     });
   };
@@ -108,6 +137,7 @@ export function TerminalPanel({
     for (const t of tabs) void window.workbench.terminal.close(t.id);
     setTabs([]);
     setActive(null);
+    setSplit(null);
     setLoaded(false);
     onClose();
     // 다음에 열면 셸 하나로 다시 시작
@@ -236,7 +266,7 @@ export function TerminalPanel({
           </button>
         </div>
       </div>
-      <div className="absolute inset-x-0 bottom-0 top-8">
+      <div className="absolute inset-x-0 bottom-0 top-8" ref={areaRef}>
         {loaded &&
           tabs.map((t) => (
             <TerminalView
@@ -244,14 +274,64 @@ export function TerminalPanel({
               termId={t.id}
               kind={t.kind}
               cwd={cwd}
-              visible={open && t.id === active}
+              visible={open && (t.id === active || t.id === split?.id)}
+              style={paneStyle(split, ratio, t.id === split?.id)}
               onRegister={(term) => (term ? terms.current.set(t.id, term) : terms.current.delete(t.id))}
               onAttach={onAttach ? () => { const term = terms.current.get(t.id); if (term) onAttach(terminalAttachment(term, t.title)); } : undefined}
+              onSplit={splitTerm}
             />
           ))}
+        {split && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const area = areaRef.current;
+              if (!area) return;
+              const move = (ev: MouseEvent) => {
+                const r = area.getBoundingClientRect();
+                const pct =
+                  split.dir === "row"
+                    ? ((ev.clientX - r.left) / r.width) * 100
+                    : ((ev.clientY - r.top) / r.height) * 100;
+                // 한쪽이 사라지면 되돌릴 방법이 없다 — 양쪽에 최소폭을 남긴다.
+                setRatio(Math.min(85, Math.max(15, pct)));
+              };
+              const up = () => {
+                window.removeEventListener("mousemove", move);
+                window.removeEventListener("mouseup", up);
+              };
+              window.addEventListener("mousemove", move);
+              window.addEventListener("mouseup", up);
+            }}
+            className={`absolute z-10 bg-line/40 hover:bg-accent/40 ${
+              split.dir === "row" ? "top-0 bottom-0 w-1 cursor-col-resize" : "left-0 right-0 h-1 cursor-row-resize"
+            }`}
+            style={split.dir === "row" ? { left: `calc(${ratio}% - 2px)` } : { top: `calc(${ratio}% - 2px)` }}
+            data-terminal-split-resizer={split.dir}
+          />
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * 나뉜 화면에서 이 터미널이 앉을 자리. 부모를 바꾸지 않고 위치만 준다 —
+ * 옮기면 xterm 이 다시 만들어져 그동안의 출력이 사라진다.
+ */
+function paneStyle(
+  split: { dir: "row" | "col"; id: string } | null,
+  ratio: number,
+  second: boolean,
+): React.CSSProperties {
+  if (!split) return { inset: 0 };
+  if (split.dir === "row")
+    return second
+      ? { top: 0, bottom: 0, left: `${ratio}%`, right: 0 }
+      : { top: 0, bottom: 0, left: 0, right: `${100 - ratio}%` };
+  return second
+    ? { left: 0, right: 0, top: `${ratio}%`, bottom: 0 }
+    : { left: 0, right: 0, top: 0, bottom: `${100 - ratio}%` };
 }
 
 /** 터미널 탭 하나 = xterm 하나. 보일 때 크기를 맞추고 pty 에 붙는다(없으면 셸을 띄운다). */
@@ -260,6 +340,8 @@ function TerminalView({
   kind,
   cwd,
   visible,
+  style,
+  onSplit,
   onRegister,
   onAttach,
 }: {
@@ -267,11 +349,14 @@ function TerminalView({
   kind: "shell" | "command";
   cwd: string;
   visible: boolean;
+  /** 나뉜 화면에서 앉을 자리. 부모를 바꾸지 않으려고 위치를 스타일로 준다. */
+  style?: React.CSSProperties;
+  onSplit?: (dir: "row" | "col") => void;
   onRegister?: (term: Terminal | null) => void;
   onAttach?: () => void;
 }) {
-  const cbs = useRef({ onRegister, onAttach });
-  cbs.current = { onRegister, onAttach };
+  const cbs = useRef({ onRegister, onAttach, onSplit });
+  cbs.current = { onRegister, onAttach, onSplit };
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -331,9 +416,15 @@ function TerminalView({
     fitRef.current = fit;
     cbs.current.onRegister?.(term);
     // ⌘⇧A: 터미널 안에서 바로 첨부(셸로는 안 보낸다)
+    // ⌘D 좌우 · ⌘⇧D 상하 분할. 보통의 터미널 앱과 같은 자리다. ⌘D 는 셸에 아무 뜻이 없어(EOF 는 ⌃D)
+    // 가로채도 잃는 것이 없다.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type === "keydown" && e.metaKey && e.shiftKey && e.code === "KeyA") {
         cbs.current.onAttach?.();
+        return false;
+      }
+      if (e.type === "keydown" && e.metaKey && e.code === "KeyD") {
+        cbs.current.onSplit?.(e.shiftKey ? "col" : "row");
         return false;
       }
       return true;
@@ -398,7 +489,8 @@ function TerminalView({
 
   return (
     <div
-      className="absolute inset-0"
+      className="absolute"
+      style={style ?? { inset: 0 }}
       hidden={!visible}
       data-terminal-view={termId}
     >
