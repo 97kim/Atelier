@@ -107,6 +107,22 @@ export function TerminalPanel({
     setActive(id);
   };
 
+  /**
+   * ⌘⌥방향키로 옆 칸에 포커스를 준다. 방향은 나뉜 축으로만 읽는다 —
+   * 좌우로 나뉜 화면에서 위아래를 누르면 갈 곳이 없으므로 아무 일도 하지 않는다.
+   */
+  const focusPane = (dir: "left" | "right" | "up" | "down") => {
+    if (!split) return false;
+    const second = split.dir === "row" ? dir === "right" : dir === "down";
+    const first = split.dir === "row" ? dir === "left" : dir === "up";
+    if (!second && !first) return false;
+    const id = second ? split.id : active;
+    const term = id ? terms.current.get(id) : null;
+    if (!term) return false;
+    term.focus();
+    return true;
+  };
+
   /** ⌘D 좌우, ⌘⇧D 상하. 이미 나뉘어 있으면 방향만 바꾼다 — 셸을 더 띄우지 않는다. */
   const splitTerm = (dir: "row" | "col") => {
     if (split) {
@@ -279,6 +295,7 @@ export function TerminalPanel({
               onRegister={(term) => (term ? terms.current.set(t.id, term) : terms.current.delete(t.id))}
               onAttach={onAttach ? () => { const term = terms.current.get(t.id); if (term) onAttach(terminalAttachment(term, t.title)); } : undefined}
               onSplit={splitTerm}
+              onFocusPane={focusPane}
             />
           ))}
         {split && (
@@ -315,6 +332,14 @@ export function TerminalPanel({
   );
 }
 
+/** ⌘⌥방향키의 방향. code 로 읽어 키보드 배열을 타지 않는다. */
+const ARROW_DIR: Record<string, "left" | "right" | "up" | "down"> = {
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  ArrowUp: "up",
+  ArrowDown: "down",
+};
+
 /**
  * 나뉜 화면에서 이 터미널이 앉을 자리. 부모를 바꾸지 않고 위치만 준다 —
  * 옮기면 xterm 이 다시 만들어져 그동안의 출력이 사라진다.
@@ -342,6 +367,7 @@ function TerminalView({
   visible,
   style,
   onSplit,
+  onFocusPane,
   onRegister,
   onAttach,
 }: {
@@ -352,11 +378,13 @@ function TerminalView({
   /** 나뉜 화면에서 앉을 자리. 부모를 바꾸지 않으려고 위치를 스타일로 준다. */
   style?: React.CSSProperties;
   onSplit?: (dir: "row" | "col") => void;
+  /** 옆 칸으로 포커스를 옮긴다. 옮겼으면 true — 못 옮겼으면 키를 셸에 그대로 넘긴다. */
+  onFocusPane?: (dir: "left" | "right" | "up" | "down") => boolean;
   onRegister?: (term: Terminal | null) => void;
   onAttach?: () => void;
 }) {
-  const cbs = useRef({ onRegister, onAttach, onSplit });
-  cbs.current = { onRegister, onAttach, onSplit };
+  const cbs = useRef({ onRegister, onAttach, onSplit, onFocusPane });
+  cbs.current = { onRegister, onAttach, onSplit, onFocusPane };
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -426,6 +454,10 @@ function TerminalView({
       if (e.type === "keydown" && e.metaKey && e.code === "KeyD") {
         cbs.current.onSplit?.(e.shiftKey ? "col" : "row");
         return false;
+      }
+      // ⌘⌥방향키: 옆 칸으로. 나뉘지 않았거나 그 방향에 칸이 없으면 셸에 그대로 넘긴다.
+      if (e.type === "keydown" && e.metaKey && e.altKey && ARROW_DIR[e.code]) {
+        return !cbs.current.onFocusPane?.(ARROW_DIR[e.code]);
       }
       return true;
     });

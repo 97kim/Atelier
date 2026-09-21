@@ -54,6 +54,20 @@ const result = (n, ok, note) => { if (!ok) fails += 1; console.log(`RESULT (${n}
   result("구분선이 가로다", await ev(() => document.querySelector("[data-terminal-split-resizer='col']") !== null));
   await page.screenshot({ path: E2E + "/shot-terminal-split.png" });
 
+  // ⌘⌥방향키로 옆 칸에 포커스가 간다. 지금은 상하로 나뉘어 있다.
+  const focusedView = () => ev(() => document.activeElement?.closest("[data-terminal-view]")?.getAttribute("data-terminal-view") ?? null);
+  await page.keyboard.press("Meta+Alt+ArrowDown");
+  await page.waitForTimeout(400);
+  const lower = await focusedView();
+  await page.keyboard.press("Meta+Alt+ArrowUp");
+  await page.waitForTimeout(400);
+  const upper = await focusedView();
+  result("⌘⌥↓ ⌘⌥↑ 로 칸을 오간다", Boolean(lower) && Boolean(upper) && lower !== upper, `(${lower} → ${upper})`);
+  // 나뉜 축과 다른 방향은 갈 곳이 없으니 포커스가 그대로다.
+  await page.keyboard.press("Meta+Alt+ArrowLeft");
+  await page.waitForTimeout(400);
+  result("축과 다른 방향은 움직이지 않는다", (await focusedView()) === upper);
+
   const s = await ev(() => window.workbench.workspaces.state());
   for (const w of s.model.workspaces) { for (const t of s.model.tabs.filter((t) => t.workspaceId === w.id)) await ev((id) => window.workbench.workspaces.deleteTab(id), t.id); await ev((id) => window.workbench.workspaces.remove(id), w.id); }
   await b.close();
