@@ -92,8 +92,6 @@ interface Draft {
   prompt: string;
   provider: ProviderId;
   policy: PermissionPolicy;
-  /** 결과 탭이 들어갈 워크스페이스. 화면에서는 묻지 않는다 — 비면 전용 워크스페이스("예약")가 쓰인다. */
-  workspaceId: string;
   /** 실행할 폴더. 워크스페이스 기본 경로에 기대지 않는다 — 이름만으로 만든 워크스페이스에는 그 값이 없다. */
   cwd: string;
   worktree: boolean;
@@ -187,7 +185,7 @@ function humanError(e: unknown): string {
   return raw.replace(/^Error invoking remote method '[^']*':\s*/, "").replace(/^Error:\s*/, "").trim();
 }
 
-function blankDraft(workspaceId: string): Draft {
+function blankDraft(): Draft {
   return {
     name: "",
     repeat: "daily",
@@ -199,7 +197,6 @@ function blankDraft(workspaceId: string): Draft {
     prompt: "",
     provider: "claude",
     policy: "ask",
-    workspaceId,
     cwd: "",
     worktree: false,
   };
@@ -208,7 +205,7 @@ function blankDraft(workspaceId: string): Draft {
 /** 저장된 예약을 폼 값으로 되읽는다. 프리셋이 아니면 "직접" 으로 열어 식을 그대로 보여 준다. */
 function toDraft(s: Schedule): Draft {
   const p = classify(s.cron);
-  const base = { ...blankDraft(s.target.workspaceId ?? "") };
+  const base = { ...blankDraft() };
   const hhmm = (h: number, m: number) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   const when: Partial<Draft> =
     p.kind === "hourly"
@@ -230,7 +227,6 @@ function toDraft(s: Schedule): Draft {
     prompt: s.prompt,
     provider: s.provider,
     policy: s.policy,
-    workspaceId: s.target.workspaceId ?? "",
     cwd: s.target.cwd ?? "",
     worktree: s.target.worktree,
   };
@@ -255,7 +251,7 @@ function draftCron(d: Draft): string {
   }
 }
 
-export function SchedulesSection({ workspaces }: { workspaces: { id: string; name: string }[] }) {
+export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) {
   const [data, setData] = useState<ScheduleListDto>({ schedules: [], runs: [] });
   const [busy, setBusy] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -305,7 +301,7 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
           prompt: draft.prompt.trim(),
           provider: draft.provider,
           policy: draft.policy,
-          target: { kind: "fresh", workspaceId: draft.workspaceId || undefined, cwd: draft.cwd || undefined, worktree: draft.worktree },
+          target: { kind: "fresh", cwd: draft.cwd || undefined, worktree: draft.worktree },
         }),
       );
       setDraft(null);
@@ -333,7 +329,7 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
           <button
             onClick={() => {
               setError(null);
-              setDraft(blankDraft(workspaces[0]?.id ?? ""));
+              setDraft({ ...blankDraft(), cwd: defaultCwd ?? "" });
             }}
             className="shrink-0 rounded-md border border-line px-2.5 py-1.5 text-[12.5px] hover:bg-panel-2"
             data-new-schedule

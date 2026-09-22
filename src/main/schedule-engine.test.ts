@@ -16,7 +16,7 @@ function harness(over: Partial<Schedule> = {}, deps: Partial<Parameters<typeof m
   const store = new ScheduleStore(dir);
   const s: Schedule = {
     id: "s1", name: "아침", cron: "30 9 * * *", timezone: KST, prompt: "요약해줘", provider: "claude",
-    policy: "ask", target: { kind: "fresh", workspaceId: "w1", worktree: true },
+    policy: "ask", target: { kind: "fresh", worktree: true },
     enabled: true, missedRunGraceMinutes: 120, createdAt: 0, activeSince: at("2026-09-19T00:00:00+09:00"), ...over,
   };
   store.upsertSchedule(s);

@@ -15,7 +15,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const ws = cli("ws", "add", "--path", E2E + "/repo").workspaceId;
   const add = cli("schedule", "add", "--name", "e2e예약", "--cron", "*/1 * * * *",
-    "--prompt", "'예약됨' 한 마디만 답해라. 도구는 쓰지 마라.", "--ws", ws, "--policy", "full");
+    "--prompt", "'예약됨' 한 마디만 답해라. 도구는 쓰지 마라.", "--cwd", E2E + "/repo", "--policy", "full");
   const id = add.schedule.id;
   result("예약이 만들어진다", Boolean(id));
 
@@ -62,7 +62,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const mark = `cwd-check-${Date.now()}.txt`;
   const isoId = cli("schedule", "add", "--name", "e2e격리", "--cron", "0 0 1 1 *",
     "--prompt", `지금 작업 폴더에 ${mark} 라는 빈 파일을 만들어라. 다른 말은 하지 마라.`,
-    "--ws", ws, "--policy", "full", "--worktree").schedule.id;
+    "--cwd", E2E + "/repo", "--policy", "full", "--worktree").schedule.id;
   let iso = cli("schedule", "run", "--id", isoId).run;
   for (let i = 0; i < 60; i += 1) {
     await sleep(2500);

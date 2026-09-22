@@ -271,13 +271,11 @@ let scheduleEngine: ScheduleEngine | null = null;
 
 /** 예약의 작업 경로. 격리 세션을 만들기 전 단계(precheck)는 여기서 돈다. */
 /**
- * 예약 탭이 살 워크스페이스. 사용자가 고른 것이 먼저고, 안 골랐으면 전용 워크스페이스를 찾아 쓴다.
- * 없으면 그때 만든다 — 예약을 만들 때마다 어디에 넣을지 묻지 않으려는 것이다.
+ * 예약 결과가 모이는 워크스페이스. 없으면 만든다 — 앱을 처음 깐 사람도 이 칸을 갖고 시작한다.
+ * 예약마다 어디에 둘지 묻지 않는다. 결과는 언제나 한곳에 모이는 편이 찾기 쉽다.
  */
-function scheduleWorkspaceId(picked?: string): string | null {
-  const model = workspaces.state().model;
-  if (picked && model.workspaces.some((w) => w.id === picked)) return picked;
-  const found = model.workspaces.find((w) => w.name === SCHEDULE_WORKSPACE);
+function scheduleWorkspaceId(): string | null {
+  const found = workspaces.state().model.workspaces.find((w) => w.name === SCHEDULE_WORKSPACE);
   if (found) return found.id;
   const made = workspaces.createWorkspace(SCHEDULE_WORKSPACE);
   // 워크스페이스를 만들면 빈 탭이 따라온다. 예약은 제 탭을 따로 만드니 그건 치운다.
@@ -287,9 +285,7 @@ function scheduleWorkspaceId(picked?: string): string | null {
 
 /** 예약이 돌 폴더. 예약에 적힌 것이 먼저고, 없으면(옛 예약) 워크스페이스 기본 경로로 읽는다. */
 function cwdForTarget(target: ScheduleTarget): string | null {
-  if (target.cwd) return target.cwd;
-  if (!target.workspaceId) return null;
-  return workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId)?.path || null;
+  return target.cwd || null;
 }
 
 /** 예약 실행을 시작한다. 켜질 때 끝을 못 본 회차부터 정리한다. */
@@ -313,7 +309,7 @@ function schedulesApi() {
             provider: input.provider ?? existing?.provider ?? "claude",
             ...(input.model ?? existing?.model ? { model: input.model ?? existing?.model } : {}),
             policy: input.policy ?? existing?.policy ?? "ask",
-            target: input.target ?? existing?.target ?? { kind: "fresh", workspaceId: "", worktree: false },
+            target: input.target ?? existing?.target ?? { kind: "fresh", worktree: false },
             ...(input.precheck ?? existing?.precheck ? { precheck: (input.precheck ?? existing?.precheck)! } : {}),
             enabled,
             missedRunGraceMinutes: input.missedRunGraceMinutes ?? existing?.missedRunGraceMinutes ?? 120,
@@ -344,17 +340,14 @@ function schedulesApi() {
 }
 
 function startSchedules() {
+  // 예약을 만들기 전에 칸을 먼저 둔다 — 처음 깐 사람도 사이드바에서 이 자리를 보고 시작한다.
+  scheduleWorkspaceId();
   if (scheduleEngine) return;
   scheduleStore = new ScheduleStore(app.getPath("userData"));
   const store = scheduleStore;
   scheduleEngine = new ScheduleEngine({
     store,
-    checkTarget: (target) => {
-      // 고른 적이 없으면 실행할 때 전용 워크스페이스를 만든다 — 여기서 막을 일이 아니다.
-      if (target.workspaceId && !workspaces.state().model.workspaces.some((w) => w.id === target.workspaceId))
-        return "대상 워크스페이스가 사라졌습니다.";
-      return cwdForTarget(target) ? null : "예약에 실행할 폴더가 없습니다.";
-    },
+    checkTarget: (target) => (cwdForTarget(target) ? null : "예약에 실행할 폴더가 없습니다."),
     checkBudget: () => {
       const settings = usageSettings();
       if (!settings.monthlyBudgetUsd || settings.monthlyBudgetUsd <= 0) return null;
@@ -380,11 +373,8 @@ function startSchedules() {
 
 /** 예약 한 회차를 실제로 띄운다. 격리 세션이면 worktree 를 만들고, 아니면 정해 둔 탭에 보낸다. */
 async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: string }> {
-  const wsId = scheduleWorkspaceId(schedule.target.workspaceId);
+  const wsId = scheduleWorkspaceId();
   if (!wsId) throw new Error("예약 탭을 둘 워크스페이스를 만들지 못했습니다.");
-  // 처음 정해졌으면 예약에 적어 둔다. 다음 회차부터는 찾지 않고 그대로 쓴다.
-  if (wsId !== schedule.target.workspaceId)
-    scheduleStore?.upsertSchedule({ ...schedule, target: { ...schedule.target, workspaceId: wsId } });
   const base = cwdForTarget(schedule.target);
   if (!base) throw new Error("예약에 실행할 폴더가 없습니다.");
   let tabId: string;

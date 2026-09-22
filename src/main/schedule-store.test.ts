@@ -9,12 +9,12 @@ import type { Run, RunStatus, Schedule } from "@shared/schedules";
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "sched-"));
 const sched = (id = "s1"): Schedule => ({
   id, name: "점검", cron: "30 9 * * *", timezone: "Asia/Seoul", prompt: "요약", provider: "claude",
-  policy: "ask", target: { kind: "fresh", workspaceId: "w1", worktree: true },
+  policy: "ask", target: { kind: "fresh", worktree: true },
   enabled: true, missedRunGraceMinutes: 120, createdAt: 0, activeSince: 0,
 });
 const run = (over: Partial<Run> = {}): Run => ({
   id: over.id ?? `r${Math.random()}`, scheduleId: "s1", scheduledFor: 1000, trigger: "scheduled",
-  status: "pending", snapshot: { prompt: "요약", cron: "30 9 * * *", timezone: "Asia/Seoul", policy: "ask", provider: "claude", target: { kind: "fresh", workspaceId: "w1", worktree: true } },
+  status: "pending", snapshot: { prompt: "요약", cron: "30 9 * * *", timezone: "Asia/Seoul", policy: "ask", provider: "claude", target: { kind: "fresh", worktree: true } },
   startedAt: null, endedAt: null, tabId: null, reason: null, ...over,
 });
 

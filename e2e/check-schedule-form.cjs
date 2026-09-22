@@ -113,27 +113,18 @@ const NAME = "화면에서만든예약";
   // 폼을 닫았으면 그 폼이 낸 오류도 사라져야 한다. 남으면 가리킬 대상이 없는 지적이 목록 위에 걸린다.
   result("취소하면 폼이 낸 오류도 사라진다", await ev(() => !document.querySelector("[data-schedule-error]")));
 
-  cli("schedule", "add", "--name", "주간 정리", "--cron", "0 9 * * 1", "--prompt", "지난 주 커밋을 한 문단으로 정리해 줘.", "--ws", ws);
-  cli("schedule", "add", "--name", "매시 점검", "--cron", "15 * * * *", "--prompt", "빌드가 깨졌는지 확인해 줘.", "--ws", ws, "--worktree", "--policy", "full");
+  cli("schedule", "add", "--name", "주간 정리", "--cron", "0 9 * * 1", "--prompt", "지난 주 커밋을 한 문단으로 정리해 줘.", "--cwd", E2E + "/repo");
+  cli("schedule", "add", "--name", "매시 점검", "--cron", "15 * * * *", "--prompt", "빌드가 깨졌는지 확인해 줘.", "--cwd", E2E + "/repo", "--worktree", "--policy", "full");
   await page.waitForTimeout(700);
   result("목록에 예약이 쌓인다", (await ev(() => document.querySelectorAll("[data-schedule]").length)) >= 3);
   await page.screenshot({ path: E2E + "/shot-schedules.png" });
 
-  // 이름만으로 만든 워크스페이스에는 기본 경로가 없다. 예전에는 그런 워크스페이스로는 예약을 만들 수
-  // 없었다 — 폼은 고를 수 있게 보여 주고 저장할 때서야 막았고, 화면에는 경로를 채울 방법도 없었다.
-  // 이제 예약이 제 폴더를 갖는다.
-  const bare = await ev(() => window.workbench.workspaces.create("경로없음"));
-  const bareId = bare?.workspaceId ?? null;
-  result("경로 없는 워크스페이스를 만든다", Boolean(bareId));
+  // 폴더는 예약이 직접 갖는다. 안 주면 막고, 주면 만들어진다.
   let blocked = "통과";
   try {
-    cli("schedule", "add", "--name", "경로없음예약", "--cron", "0 5 * * *", "--prompt", "안녕", "--ws", bareId);
+    cli("schedule", "add", "--name", "폴더없음예약", "--cron", "0 5 * * *", "--prompt", "안녕");
   } catch { blocked = "막힘"; }
   result("폴더를 안 주면 막는다", blocked === "막힘", `(${blocked})`);
-  cli("schedule", "add", "--name", "폴더지정예약", "--cron", "0 6 * * *", "--prompt", "안녕", "--ws", bareId, "--cwd", E2E + "/repo");
-  const listed = cli("schedule", "list").schedules.find((s) => s.name === "폴더지정예약");
-  result("폴더를 주면 경로 없는 워크스페이스에서도 만들어진다", Boolean(listed));
-  result("그 예약의 다음 실행 시각이 계산된다", typeof listed?.nextRunAt === "number", `(${listed?.nextRunAt})`);
 
   // 화면에서는 워크스페이스를 묻지 않는다. 안 고르고 만든 예약은 실행할 때 전용 워크스페이스로 간다.
   result("폼에 워크스페이스 칸이 없다", await ev(() => !document.querySelector("[data-f-ws]")));

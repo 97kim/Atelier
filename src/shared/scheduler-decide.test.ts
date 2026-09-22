@@ -12,7 +12,7 @@ const base: Schedule = {
   prompt: "어제 바뀐 것 요약해줘",
   provider: "claude",
   policy: "ask",
-  target: { kind: "fresh", workspaceId: "w1", worktree: true },
+  target: { kind: "fresh", worktree: true },
   enabled: true,
   missedRunGraceMinutes: 120,
   createdAt: 0,
