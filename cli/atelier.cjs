@@ -260,7 +260,7 @@ async function main() {
       id: f.id, name: f.name, cron: f.cron, timezone: f.timezone,
       prompt: f.prompt !== undefined ? readStdinIfDash(String(f.prompt)) : undefined,
       provider: f.provider, policy: f.policy, model: f.model,
-      tab: f.tab, workspace: f.workspace ?? f.ws, worktree: f.worktree === true,
+      tab: f.tab, workspace: f.workspace ?? f.ws, cwd: f.cwd, worktree: f.worktree === true,
       precheck: f.precheck, precheckTimeout: f.precheckTimeout, grace: f.grace,
       enabled: f.enabled,
     };

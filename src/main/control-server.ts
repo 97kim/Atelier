@@ -305,9 +305,14 @@ export class ControlServer {
         if (!["ask", "auto_edit", "full"].includes(policy)) throw new ControlError("--policy 는 ask, auto_edit, full 중 하나.");
         const provider = params.provider !== undefined ? this.requireString(params, "provider") : "claude";
         if (provider !== "claude" && provider !== "codex") throw new ControlError("--provider 는 claude 또는 codex.");
+        // --cwd 를 안 주면 워크스페이스 기본 경로로 돈다. 이름만으로 만든 워크스페이스에는 그 값이 없어
+        // 저장이 막히므로, 그때는 --cwd 로 직접 준다(화면의 "폴더 고르기" 와 같은 값이다).
+        const cwd = params.cwd !== undefined ? this.requireString(params, "cwd") : undefined;
+        if (cwd !== undefined && !cwd.startsWith("/")) throw new ControlError("--cwd 는 절대 경로여야 합니다.");
         const target = {
           kind: "fresh",
           workspaceId: this.resolveWorkspace(this.requireString(params, "workspace")).id,
+          cwd,
           worktree: params.worktree === true || params.worktree === "true",
         } as const;
         const saved = api.save({

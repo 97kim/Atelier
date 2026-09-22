@@ -93,6 +93,8 @@ interface Draft {
   provider: ProviderId;
   policy: PermissionPolicy;
   workspaceId: string;
+  /** 실행할 폴더. 워크스페이스 기본 경로에 기대지 않는다 — 이름만으로 만든 워크스페이스에는 그 값이 없다. */
+  cwd: string;
   worktree: boolean;
 }
 
@@ -107,6 +109,14 @@ const chip =
  */
 const chipWhen =
   "rounded-md border border-accent/30 bg-accent-tint px-2 py-1 font-medium text-accent outline-none transition-colors hover:border-accent/50 focus:border-accent/60";
+
+/** 문장 안에 들어갈 만큼 줄인 경로. 홈은 ~ 로, 너무 길면 뒤쪽 두 칸만 남긴다. */
+function shortPath(p: string): string {
+  const home = "/Users/";
+  const short = p.startsWith(home) ? `~/${p.split("/").slice(3).join("/")}` : p;
+  const parts = short.split("/");
+  return parts.length > 4 ? `…/${parts.slice(-2).join("/")}` : short;
+}
 
 /**
  * 시·분 고르기. 네이티브 time 입력을 쓰면 OS 가 제 드롭다운을 그린다 — 오전/오후 3열에 밝은 파란 막대라
@@ -189,6 +199,7 @@ function blankDraft(workspaceId: string): Draft {
     provider: "claude",
     policy: "ask",
     workspaceId,
+    cwd: "",
     worktree: false,
   };
 }
@@ -219,6 +230,7 @@ function toDraft(s: Schedule): Draft {
     provider: s.provider,
     policy: s.policy,
     workspaceId: s.target.workspaceId,
+    cwd: s.target.cwd ?? "",
     worktree: s.target.worktree,
   };
 }
@@ -292,7 +304,7 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
           prompt: draft.prompt.trim(),
           provider: draft.provider,
           policy: draft.policy,
-          target: { kind: "fresh", workspaceId: draft.workspaceId, worktree: draft.worktree },
+          target: { kind: "fresh", workspaceId: draft.workspaceId, cwd: draft.cwd || undefined, worktree: draft.worktree },
         }),
       );
       setDraft(null);
@@ -403,6 +415,19 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
                 </option>
               ))}
             </Pick>
+            <span>의</span>
+            <button
+              type="button"
+              onClick={async () => {
+                const dir = await window.workbench.dialog.pickDirectory();
+                if (dir) set({ cwd: dir });
+              }}
+              className={`${chipWhen} max-w-[14rem] truncate text-left`}
+              title={draft.cwd || "실행할 폴더를 고릅니다"}
+              data-f-cwd
+            >
+              {draft.cwd ? shortPath(draft.cwd) : "폴더 고르기"}
+            </button>
             <span>에서</span>
             <Pick value={draft.provider} onChange={(v) => set({ provider: v as ProviderId })}>
               <option value="claude">Claude Code</option>

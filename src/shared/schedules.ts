@@ -23,7 +23,18 @@ import type { ProviderId } from "./workspace-model";
  *
  * 격리 회차(worktree)는 계속 새 탭이다. 회차마다 작업 폴더가 다른데 탭의 경로는 하나뿐이다.
  */
-export type ScheduleTarget = { kind: "fresh"; workspaceId: string; worktree: boolean };
+export type ScheduleTarget = {
+  kind: "fresh";
+  /** 만들어질 탭이 살 집. 실행 경로는 아니다 — 그건 cwd 다. */
+  workspaceId: string;
+  /**
+   * 실행할 폴더. 예전에는 워크스페이스 기본 경로를 썼는데, 이름만으로 만든 워크스페이스에는
+   * 그 값이 없고 화면에서 채울 방법도 없어서 예약을 아예 만들 수 없었다. 예약이 제 경로를 갖는다.
+   * 없으면(옛 예약) 워크스페이스 기본 경로로 읽는다.
+   */
+  cwd?: string;
+  worktree: boolean;
+};
 
 export interface SchedulePrecheck {
   /** 셸 명령 하나. 종료코드 0 이면 실행하고, 0 이 아니면 그 회차를 건너뛴다. */

@@ -270,7 +270,9 @@ let scheduleStore: ScheduleStore | null = null;
 let scheduleEngine: ScheduleEngine | null = null;
 
 /** 예약의 작업 경로. 격리 세션을 만들기 전 단계(precheck)는 여기서 돈다. */
+/** 예약이 돌 폴더. 예약에 적힌 것이 먼저고, 없으면(옛 예약) 워크스페이스 기본 경로로 읽는다. */
 function cwdForTarget(target: ScheduleTarget): string | null {
+  if (target.cwd) return target.cwd;
   return workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId)?.path || null;
 }
 
@@ -308,7 +310,7 @@ function schedulesApi() {
           if (!next.name.trim()) throw new Error("이름을 적어 주세요.");
           if (!next.prompt.trim()) throw new Error("보낼 말을 적어 주세요.");
           if (!parseCron(next.cron)) throw new Error("cron 형식이 아닙니다(분 시 일 월 요일).");
-          if (!cwdForTarget(next.target)) throw new Error("실행할 워크스페이스를 고르세요(기본 경로가 있어야 합니다).");
+          if (!cwdForTarget(next.target)) throw new Error("실행할 폴더를 고르세요.");
           store.upsertSchedule(next);
           sendAll(IPC.schedulesChanged, scheduleSnapshot());
           return next;
@@ -334,7 +336,7 @@ function startSchedules() {
     checkTarget: (target) => {
       const ws = workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId);
       if (!ws) return "대상 워크스페이스가 사라졌습니다.";
-      return ws.path ? null : "워크스페이스에 기본 경로가 없습니다.";
+      return cwdForTarget(target) ? null : "예약에 실행할 폴더가 없습니다.";
     },
     checkBudget: () => {
       const settings = usageSettings();
@@ -345,7 +347,7 @@ function startSchedules() {
         ? `이번 달 추정 비용이 예산을 넘겼습니다($${sum.totals.costUsd.toFixed(2)} / $${settings.monthlyBudgetUsd.toFixed(2)}).`
         : null;
     },
-    // 선조건은 워크스페이스 기본 경로에서 돈다. 격리 회차의 worktree 는 이 시점에 아직 없다 —
+    // 선조건은 예약에 적힌 폴더에서 돈다. 격리 회차의 worktree 는 이 시점에 아직 없다 —
     // "무엇을 할 일이 있나" 는 원본을 보고 판단하는 것이 맞다.
     runPrecheck: async ({ command, timeoutMs, target }) =>
       runPrecheckCommand({ command, timeoutMs, cwd: cwdForTarget(target), env: await cliDiscovery().buildEnv() }),
@@ -362,15 +364,15 @@ function startSchedules() {
 /** 예약 한 회차를 실제로 띄운다. 격리 세션이면 worktree 를 만들고, 아니면 정해 둔 탭에 보낸다. */
 async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: string }> {
   const wsId = schedule.target.workspaceId;
-  const ws = workspaces.state().model.workspaces.find((w) => w.id === wsId);
-  if (!ws?.path) throw new Error("워크스페이스에 기본 경로가 없습니다.");
+  const base = cwdForTarget(schedule.target);
+  if (!base) throw new Error("예약에 실행할 폴더가 없습니다.");
   let tabId: string;
-  // 실제로 돌 경로. 격리면 worktree 안, 아니면 워크스페이스 기본 경로다.
+  // 실제로 돌 경로. 격리면 worktree 안, 아니면 예약에 적힌 폴더다.
   // 이걸 안 들고 다니면 configure 가 원본 경로로 덮어써 격리가 풀린다(실제로 그랬다).
-  let runCwd = ws.path;
+  let runCwd = base;
   if (schedule.target.worktree) {
     const env = await cliDiscovery().buildEnv();
-    const r = await worktreeCreate(ws.path, env, {
+    const r = await worktreeCreate(base, env, {
       rootDir: join(app.getPath("userData"), "worktrees"),
       slug: worktreeSlug(schedule.name),
     });
@@ -403,7 +405,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
       // cwd 를 명시한다. 그냥 만들면 활성 탭의 작업 경로를 물려받아,
       // 선조건은 워크스페이스 기본 경로에서 검사하고 실제 작업은 사용자가 보고 있던
       // 다른 worktree 에서 하는 일이 생긴다.
-      const made = workspaces.createTab(wsId, { cwd: ws.path, title: `${schedule.name} · 예약` });
+      const made = workspaces.createTab(wsId, { cwd: base, title: `${schedule.name} · 예약` });
       if (!made) throw new Error("세션을 만들지 못했습니다.");
       tabId = made;
       scheduleStore?.upsertSchedule({ ...schedule, pinnedTabId: made });

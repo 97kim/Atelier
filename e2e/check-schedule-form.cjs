@@ -120,6 +120,22 @@ const NAME = "화면에서만든예약";
   result("목록에 예약이 쌓인다", (await ev(() => document.querySelectorAll("[data-schedule]").length)) >= 3);
   await page.screenshot({ path: E2E + "/shot-schedules.png" });
 
+  // 이름만으로 만든 워크스페이스에는 기본 경로가 없다. 예전에는 그런 워크스페이스로는 예약을 만들 수
+  // 없었다 — 폼은 고를 수 있게 보여 주고 저장할 때서야 막았고, 화면에는 경로를 채울 방법도 없었다.
+  // 이제 예약이 제 폴더를 갖는다.
+  const bare = await ev(() => window.workbench.workspaces.create("경로없음"));
+  const bareId = bare?.workspaceId ?? null;
+  result("경로 없는 워크스페이스를 만든다", Boolean(bareId));
+  let blocked = "통과";
+  try {
+    cli("schedule", "add", "--name", "경로없음예약", "--cron", "0 5 * * *", "--prompt", "안녕", "--ws", bareId);
+  } catch { blocked = "막힘"; }
+  result("폴더를 안 주면 막는다", blocked === "막힘", `(${blocked})`);
+  cli("schedule", "add", "--name", "폴더지정예약", "--cron", "0 6 * * *", "--prompt", "안녕", "--ws", bareId, "--cwd", E2E + "/repo");
+  const listed = cli("schedule", "list").schedules.find((s) => s.name === "폴더지정예약");
+  result("폴더를 주면 경로 없는 워크스페이스에서도 만들어진다", Boolean(listed));
+  result("그 예약의 다음 실행 시각이 계산된다", typeof listed?.nextRunAt === "number", `(${listed?.nextRunAt})`);
+
   // 열어 둔 폼은 닫고 나간다 — 다음 시험이 같은 화면을 이어받는다.
   await ev(() => {
     const form = document.querySelector("[data-schedule-form]");
