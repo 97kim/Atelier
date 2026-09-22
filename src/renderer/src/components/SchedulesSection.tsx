@@ -92,6 +92,7 @@ interface Draft {
   prompt: string;
   provider: ProviderId;
   policy: PermissionPolicy;
+  /** 결과 탭이 들어갈 워크스페이스. 화면에서는 묻지 않는다 — 비면 전용 워크스페이스("예약")가 쓰인다. */
   workspaceId: string;
   /** 실행할 폴더. 워크스페이스 기본 경로에 기대지 않는다 — 이름만으로 만든 워크스페이스에는 그 값이 없다. */
   cwd: string;
@@ -207,7 +208,7 @@ function blankDraft(workspaceId: string): Draft {
 /** 저장된 예약을 폼 값으로 되읽는다. 프리셋이 아니면 "직접" 으로 열어 식을 그대로 보여 준다. */
 function toDraft(s: Schedule): Draft {
   const p = classify(s.cron);
-  const base = { ...blankDraft(s.target.workspaceId) };
+  const base = { ...blankDraft(s.target.workspaceId ?? "") };
   const hhmm = (h: number, m: number) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   const when: Partial<Draft> =
     p.kind === "hourly"
@@ -229,7 +230,7 @@ function toDraft(s: Schedule): Draft {
     prompt: s.prompt,
     provider: s.provider,
     policy: s.policy,
-    workspaceId: s.target.workspaceId,
+    workspaceId: s.target.workspaceId ?? "",
     cwd: s.target.cwd ?? "",
     worktree: s.target.worktree,
   };
@@ -304,7 +305,7 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
           prompt: draft.prompt.trim(),
           provider: draft.provider,
           policy: draft.policy,
-          target: { kind: "fresh", workspaceId: draft.workspaceId, cwd: draft.cwd || undefined, worktree: draft.worktree },
+          target: { kind: "fresh", workspaceId: draft.workspaceId || undefined, cwd: draft.cwd || undefined, worktree: draft.worktree },
         }),
       );
       setDraft(null);
@@ -407,15 +408,6 @@ export function SchedulesSection({ workspaces }: { workspaces: { id: string; nam
                 <span>에</span>
               </>
             )}
-            <Pick value={draft.workspaceId} onChange={(v) => set({ workspaceId: v })} className="max-w-[11rem] truncate" data-f-ws>
-              <option value="">워크스페이스</option>
-              {workspaces.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </Pick>
-            <span>의</span>
             <button
               type="button"
               onClick={async () => {

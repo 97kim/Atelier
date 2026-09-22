@@ -76,7 +76,7 @@ import { draftCommitMessage } from "./git-draft";
 import { ScheduleStore } from "./schedule-store";
 import { ScheduleEngine } from "./schedule-engine";
 import { runPrecheckCommand } from "./precheck";
-import type { Run, Schedule, ScheduleTarget } from "@shared/schedules";
+import { SCHEDULE_WORKSPACE, type Run, type Schedule, type ScheduleTarget } from "@shared/schedules";
 import { createFileLogger, type FileLogger } from "./logger";
 import { Store } from "./persistence";
 import { RendererState } from "./renderer-state";
@@ -270,9 +270,25 @@ let scheduleStore: ScheduleStore | null = null;
 let scheduleEngine: ScheduleEngine | null = null;
 
 /** 예약의 작업 경로. 격리 세션을 만들기 전 단계(precheck)는 여기서 돈다. */
+/**
+ * 예약 탭이 살 워크스페이스. 사용자가 고른 것이 먼저고, 안 골랐으면 전용 워크스페이스를 찾아 쓴다.
+ * 없으면 그때 만든다 — 예약을 만들 때마다 어디에 넣을지 묻지 않으려는 것이다.
+ */
+function scheduleWorkspaceId(picked?: string): string | null {
+  const model = workspaces.state().model;
+  if (picked && model.workspaces.some((w) => w.id === picked)) return picked;
+  const found = model.workspaces.find((w) => w.name === SCHEDULE_WORKSPACE);
+  if (found) return found.id;
+  const made = workspaces.createWorkspace(SCHEDULE_WORKSPACE);
+  // 워크스페이스를 만들면 빈 탭이 따라온다. 예약은 제 탭을 따로 만드니 그건 치운다.
+  if (made.tabId) workspaces.deleteTab(made.tabId);
+  return made.workspaceId;
+}
+
 /** 예약이 돌 폴더. 예약에 적힌 것이 먼저고, 없으면(옛 예약) 워크스페이스 기본 경로로 읽는다. */
 function cwdForTarget(target: ScheduleTarget): string | null {
   if (target.cwd) return target.cwd;
+  if (!target.workspaceId) return null;
   return workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId)?.path || null;
 }
 
@@ -334,8 +350,9 @@ function startSchedules() {
   scheduleEngine = new ScheduleEngine({
     store,
     checkTarget: (target) => {
-      const ws = workspaces.state().model.workspaces.find((w) => w.id === target.workspaceId);
-      if (!ws) return "대상 워크스페이스가 사라졌습니다.";
+      // 고른 적이 없으면 실행할 때 전용 워크스페이스를 만든다 — 여기서 막을 일이 아니다.
+      if (target.workspaceId && !workspaces.state().model.workspaces.some((w) => w.id === target.workspaceId))
+        return "대상 워크스페이스가 사라졌습니다.";
       return cwdForTarget(target) ? null : "예약에 실행할 폴더가 없습니다.";
     },
     checkBudget: () => {
@@ -363,7 +380,11 @@ function startSchedules() {
 
 /** 예약 한 회차를 실제로 띄운다. 격리 세션이면 worktree 를 만들고, 아니면 정해 둔 탭에 보낸다. */
 async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: string }> {
-  const wsId = schedule.target.workspaceId;
+  const wsId = scheduleWorkspaceId(schedule.target.workspaceId);
+  if (!wsId) throw new Error("예약 탭을 둘 워크스페이스를 만들지 못했습니다.");
+  // 처음 정해졌으면 예약에 적어 둔다. 다음 회차부터는 찾지 않고 그대로 쓴다.
+  if (wsId !== schedule.target.workspaceId)
+    scheduleStore?.upsertSchedule({ ...schedule, target: { ...schedule.target, workspaceId: wsId } });
   const base = cwdForTarget(schedule.target);
   if (!base) throw new Error("예약에 실행할 폴더가 없습니다.");
   let tabId: string;

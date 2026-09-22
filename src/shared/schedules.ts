@@ -23,10 +23,19 @@ import type { ProviderId } from "./workspace-model";
  *
  * 격리 회차(worktree)는 계속 새 탭이다. 회차마다 작업 폴더가 다른데 탭의 경로는 하나뿐이다.
  */
+/**
+ * 예약 결과가 모이는 워크스페이스 이름. main 이 만들고 사이드바가 맨 위로 올린다 —
+ * 양쪽이 같은 값을 봐야 해서 여기 둔다.
+ */
+export const SCHEDULE_WORKSPACE = "예약";
+
 export type ScheduleTarget = {
   kind: "fresh";
-  /** 만들어질 탭이 살 집. 실행 경로는 아니다 — 그건 cwd 다. */
-  workspaceId: string;
+  /**
+   * 만들어질 탭이 살 집. 실행 경로는 아니다 — 그건 cwd 다.
+   * 비워 두면 예약 전용 워크스페이스("예약")를 찾아 쓰고, 없으면 그때 만든다. 첫 회차에 정해져 적힌다.
+   */
+  workspaceId?: string;
   /**
    * 실행할 폴더. 예전에는 워크스페이스 기본 경로를 썼는데, 이름만으로 만든 워크스페이스에는
    * 그 값이 없고 화면에서 채울 방법도 없어서 예약을 아예 만들 수 없었다. 예약이 제 경로를 갖는다.

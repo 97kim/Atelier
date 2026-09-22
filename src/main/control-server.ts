@@ -311,7 +311,8 @@ export class ControlServer {
         if (cwd !== undefined && !cwd.startsWith("/")) throw new ControlError("--cwd 는 절대 경로여야 합니다.");
         const target = {
           kind: "fresh",
-          workspaceId: this.resolveWorkspace(this.requireString(params, "workspace")).id,
+          // --workspace 를 안 주면 실행할 때 예약 전용 워크스페이스가 쓰인다.
+          workspaceId: params.workspace !== undefined ? this.resolveWorkspace(this.requireString(params, "workspace")).id : undefined,
           cwd,
           worktree: params.worktree === true || params.worktree === "true",
         } as const;

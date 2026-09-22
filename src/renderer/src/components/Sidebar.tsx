@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionStatus } from "@shared/chat-events";
+import { SCHEDULE_WORKSPACE } from "@shared/schedules";
 import type { AppInfoDto, WorkspaceStateDto, SessionAttention } from "@shared/ipc";
 import {
   tabTitle,
@@ -106,7 +107,14 @@ export function Sidebar({
     null;
   // 사용자가 끌어서 정한 순서를 따른다. 최근 사용순으로 자동 정렬하면 자리가 계속 바뀌어
   // 손으로 맞춘 순서가 남지 않는다 — 둘은 같이 쓸 수 없다.
-  const workspaces = model.workspaces;
+  // 예약 결과가 모이는 칸만 맨 위에 둔다. 사람이 만든 것이 아니라 앱이 만든 자리라, 손으로 맞춘
+  // 순서 사이에 끼어 있으면 매번 찾아야 한다. 저장된 순서는 건드리지 않는다 — 보이는 순서만 바꾼다.
+  const workspaces = useMemo(() => {
+    const i = model.workspaces.findIndex((w) => w.name === SCHEDULE_WORKSPACE);
+    if (i <= 0) return model.workspaces;
+    const list = [...model.workspaces];
+    return [list.splice(i, 1)[0], ...list];
+  }, [model.workspaces]);
 
   // 끌어 옮기기. 워크스페이스끼리, 그리고 같은 워크스페이스의 "열린" 세션끼리만 자리를 바꾼다
   // (닫힌 세션은 최근 순으로 보여 주므로 자리를 정할 수 없다).
@@ -601,6 +609,7 @@ export function Sidebar({
                   ) : (
                     <span
                       className={`min-w-0 flex-1 truncate font-medium ${isActiveWs ? "text-fg" : "text-fg/80"}`}
+                      data-ws-name
                     >
                       {w.name}
                     </span>

@@ -56,7 +56,6 @@ const NAME = "화면에서만든예약";
   await page.selectOption("[data-f-repeat]", "daily");
   await page.selectOption("[data-f-hour]", "07");
   await page.selectOption("[data-f-minute]", "30");
-  await page.selectOption("[data-f-ws]", ws);
   await page.fill("[data-f-prompt]", "'예약됨' 한 마디만 답해라.");
   await page.waitForTimeout(300);
   const preview = await ev(() => document.querySelector("[data-f-preview]")?.textContent?.trim() ?? "");
@@ -135,6 +134,33 @@ const NAME = "화면에서만든예약";
   const listed = cli("schedule", "list").schedules.find((s) => s.name === "폴더지정예약");
   result("폴더를 주면 경로 없는 워크스페이스에서도 만들어진다", Boolean(listed));
   result("그 예약의 다음 실행 시각이 계산된다", typeof listed?.nextRunAt === "number", `(${listed?.nextRunAt})`);
+
+  // 화면에서는 워크스페이스를 묻지 않는다. 안 고르고 만든 예약은 실행할 때 전용 워크스페이스로 간다.
+  result("폼에 워크스페이스 칸이 없다", await ev(() => !document.querySelector("[data-f-ws]")));
+  const noWs = cli("schedule", "add", "--name", "워크스페이스없음", "--cron", "0 7 * * *", "--prompt", "'됨' 한 마디만 답해라.", "--cwd", E2E + "/repo");
+  const noWsId = noWs?.schedule?.id ?? noWs?.id ?? null;
+  result("워크스페이스 없이도 예약이 만들어진다", Boolean(noWsId));
+  if (noWsId) {
+    cli("schedule", "run", "--id", noWsId);
+    for (let i = 0; i < 40; i += 1) {
+      const r = cli("schedule", "runs", "--id", noWsId).runs[0];
+      if (r && ["completed", "failed", "interrupted", "skipped_unavailable"].includes(r.status)) break;
+      await page.waitForTimeout(1000);
+    }
+    const run = cli("schedule", "runs", "--id", noWsId).runs[0];
+    result("그 회차가 건너뛰지 않고 실제로 돈다", run?.status === "completed", `(${run?.status} ${run?.reason ?? ""})`);
+    const made = await ev(() => window.workbench.workspaces.state());
+    const sched = made.model.workspaces.find((w) => w.name === "예약");
+    result("예약 전용 워크스페이스가 생긴다", Boolean(sched));
+    const tab = made.model.tabs.find((t) => t.id === run?.tabId);
+    result("결과 탭이 그 워크스페이스에 들어간다", Boolean(tab) && tab.workspaceId === sched?.id);
+    // 사이드바에서는 맨 위에 둔다. 손으로 맞춘 순서 사이에 끼면 매번 찾아야 한다.
+    await ev(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "채팅")?.click());
+    await page.waitForTimeout(800);
+    const firstWs = await ev(() => document.querySelector("[data-ws-name]")?.textContent?.trim() ?? null);
+    result("사이드바에서 예약이 맨 위에 온다", firstWs === "예약", `(${firstWs})`);
+    cli("schedule", "rm", "--id", noWsId);
+  }
 
   // 열어 둔 폼은 닫고 나간다 — 다음 시험이 같은 화면을 이어받는다.
   await ev(() => {
