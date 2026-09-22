@@ -95,10 +95,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   result("오래된 작업 폴더는 치운다", alive.length <= 4, `(${alive.length}개 남음)`);
   result("가장 최근 회차의 폴더는 남는다", Boolean(isoPaths[isoPaths.length - 1]) && fs.existsSync(isoPaths[isoPaths.length - 1]));
   result("첫 회차의 폴더는 사라진다", Boolean(isoPaths[0]) && !fs.existsSync(isoPaths[0]), `(${isoPaths[0]})`);
-  // 폴더는 없어져도 결과는 브랜치에 남아 있어야 한다.
-  const branches = execFileSync("git", ["branch", "--list", "atelier/*"], { cwd: path.join(E2E, "repo"), encoding: "utf8" });
+  // 커밋하지 않은 회차는 브랜치도 남기지 않는다(worktree 를 지우면 빈 브랜치는 branch -d 로 지워진다).
+  // 남으면 폴더 대신 브랜치가 쌓이는 셈이라 정리가 아니다.
+  const branches = execFileSync("git", ["branch", "--list", "atelier/*"], { cwd: path.join(E2E, "repo"), encoding: "utf8" })
+    .split("\n").map((s) => s.replace(/^[+*]?\s*/, "").trim()).filter(Boolean);
   const firstBranch = isoPaths[0] ? path.basename(isoPaths[0]) : "";
-  result("치운 회차의 결과가 브랜치에 남는다", branches.includes(firstBranch), `(${branches.trim().split("\n").length}개 브랜치)`);
+  result("치운 회차는 브랜치도 남기지 않는다", !branches.includes(`atelier/${firstBranch}`), `(${branches.length}개: ${branches.join(", ")})`);
 
   // 치운다 — 탭을 닫아도 worktree 는 남는다.
   if (iso?.tabId) try { cli("tab", "close", "--tab", iso.tabId); } catch { /* 이미 닫힘 */ }

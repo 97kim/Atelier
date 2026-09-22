@@ -67,7 +67,6 @@ import {
   worktreeCreate,
   worktreeMerge,
   worktreePatch,
-  worktreeArchive,
   worktreeRemove,
   worktreeSnapshot,
   worktreeSlug,
@@ -379,9 +378,14 @@ const KEEP_ISOLATED_RUNS = 3;
  * 오래된 격리 회차가 남긴 작업 폴더와 탭을 치운다. 새 격리 회차를 띄우기 직전에 한 번 돈다 —
  * 격리를 안 쓰는 예약에는 아무 일도 일어나지 않는다.
  *
- * 강제로 지우지 않는다. worktreeRemove 는 커밋되지 않은 변경이 있으면 거부하고, 브랜치도 병합된
- * 것만 지운다(-d). 그래서 이 정리로 작업이 사라질 수는 없다 — 남길 것이 있으면 폴더가 그대로 남는다.
- * 돌고 있는 탭도 건드리지 않는다.
+ * 강제로 지운다. 격리 폴더는 거의 항상 더럽다 — 예약이 만든 파일뿐 아니라 도구가 작업 디렉터리에
+ * 쓰는 상태(.omc 등)가 매번 남는다. "더러우면 안 치운다" 로 두면 실기기에서 아무것도 치우지 못했다.
+ *
+ * 커밋된 작업은 그래도 남는다. 폴더만 지우고 브랜치는 `branch -d` 로 지우므로, 회차가 제 결과를
+ * 커밋해 뒀으면 병합되지 않은 브랜치라 거부되어 살아남는다 — `git switch atelier/<이름>` 으로 꺼낸다.
+ * 잃는 것은 커밋하지 않은 찌꺼기뿐이고, 그것도 최근 세 회차는 손대지 않는다.
+ *
+ * 돌고 있는 탭은 건드리지 않는다.
  */
 async function sweepIsolatedRuns(scheduleId: string): Promise<void> {
   const store = scheduleStore;
@@ -392,18 +396,7 @@ async function sweepIsolatedRuns(scheduleId: string): Promise<void> {
   const env = await cliDiscovery().buildEnv();
   for (const r of old) {
     if (r.tabId && sessions.isBusy(r.tabId)) continue;
-    // 남은 것은 제 브랜치에 커밋해 둔다. 폴더는 회수하되 결과는 잃지 않는다 —
-    // 격리 폴더는 도구가 쓰는 상태(.omc 등) 때문에 거의 항상 더러워서, 이걸 안 하면 영영 못 치운다.
-    const when = new Date(r.scheduledFor).toISOString().slice(0, 16).replace("T", " ");
-    const kept = await worktreeArchive(env, r.worktree!, `예약 회차 보관 (${when})`).catch((e: unknown) => ({
-      ok: false as const,
-      error: e instanceof Error ? e.message : String(e),
-    }));
-    if (!kept.ok) {
-      console.log(`[schedule] 작업 폴더를 그대로 둡니다(${r.worktree!.path}): ${kept.error}`);
-      continue;
-    }
-    const removed = await worktreeRemove(env, r.worktree!, {}).catch((e: unknown) => ({
+    const removed = await worktreeRemove(env, r.worktree!, { force: true }).catch((e: unknown) => ({
       ok: false as const,
       error: e instanceof Error ? e.message : String(e),
     }));
