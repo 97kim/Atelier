@@ -67,6 +67,7 @@ import {
   worktreeCreate,
   worktreeMerge,
   worktreePatch,
+  worktreeArchive,
   worktreeRemove,
   worktreeSnapshot,
   worktreeSlug,
@@ -371,6 +372,51 @@ function startSchedules() {
   scheduleEngine.start();
 }
 
+/** 격리 회차의 작업 폴더를 몇 개까지 남길지. 결과를 되돌아볼 만큼은 남기되 무한히 쌓이지는 않게. */
+const KEEP_ISOLATED_RUNS = 3;
+
+/**
+ * 오래된 격리 회차가 남긴 작업 폴더와 탭을 치운다. 새 격리 회차를 띄우기 직전에 한 번 돈다 —
+ * 격리를 안 쓰는 예약에는 아무 일도 일어나지 않는다.
+ *
+ * 강제로 지우지 않는다. worktreeRemove 는 커밋되지 않은 변경이 있으면 거부하고, 브랜치도 병합된
+ * 것만 지운다(-d). 그래서 이 정리로 작업이 사라질 수는 없다 — 남길 것이 있으면 폴더가 그대로 남는다.
+ * 돌고 있는 탭도 건드리지 않는다.
+ */
+async function sweepIsolatedRuns(scheduleId: string): Promise<void> {
+  const store = scheduleStore;
+  if (!store) return;
+  const withTree = store.runs(scheduleId).filter((r) => r.worktree);
+  const old = withTree.slice(KEEP_ISOLATED_RUNS);
+  if (old.length === 0) return;
+  const env = await cliDiscovery().buildEnv();
+  for (const r of old) {
+    if (r.tabId && sessions.isBusy(r.tabId)) continue;
+    // 남은 것은 제 브랜치에 커밋해 둔다. 폴더는 회수하되 결과는 잃지 않는다 —
+    // 격리 폴더는 도구가 쓰는 상태(.omc 등) 때문에 거의 항상 더러워서, 이걸 안 하면 영영 못 치운다.
+    const when = new Date(r.scheduledFor).toISOString().slice(0, 16).replace("T", " ");
+    const kept = await worktreeArchive(env, r.worktree!, `예약 회차 보관 (${when})`).catch((e: unknown) => ({
+      ok: false as const,
+      error: e instanceof Error ? e.message : String(e),
+    }));
+    if (!kept.ok) {
+      console.log(`[schedule] 작업 폴더를 그대로 둡니다(${r.worktree!.path}): ${kept.error}`);
+      continue;
+    }
+    const removed = await worktreeRemove(env, r.worktree!, {}).catch((e: unknown) => ({
+      ok: false as const,
+      error: e instanceof Error ? e.message : String(e),
+    }));
+    if (!removed.ok) {
+      console.log(`[schedule] 작업 폴더를 그대로 둡니다(${r.worktree!.path}): ${removed.error}`);
+      continue;
+    }
+    // 폴더가 없어진 탭은 열어 둘 이유가 없다.
+    if (r.tabId) workspaces.deleteTab(r.tabId);
+    store.updateRun(r.id, { worktree: undefined });
+  }
+}
+
 /** 예약 한 회차를 실제로 띄운다. 격리 세션이면 worktree 를 만들고, 아니면 정해 둔 탭에 보낸다. */
 async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: string }> {
   const wsId = scheduleWorkspaceId();
@@ -382,6 +428,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
   // 이걸 안 들고 다니면 configure 가 원본 경로로 덮어써 격리가 풀린다(실제로 그랬다).
   let runCwd = base;
   if (schedule.target.worktree) {
+    await sweepIsolatedRuns(schedule.id);
     const env = await cliDiscovery().buildEnv();
     const r = await worktreeCreate(base, env, {
       rootDir: join(app.getPath("userData"), "worktrees"),
@@ -404,6 +451,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
     }
     tabId = made;
     runCwd = r.worktree.path;
+    scheduleStore?.updateRun(run.id, { worktree: r.worktree });
   } else {
     // 예약이 잡아 둔 제 탭에 회차를 쌓는다. 사용자가 닫았으면 다시 만든다.
     const pinned = schedule.pinnedTabId && workspaces.tab(schedule.pinnedTabId) ? schedule.pinnedTabId : null;

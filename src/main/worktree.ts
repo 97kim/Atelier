@@ -124,6 +124,32 @@ export async function worktreeMerge(
 }
 
 /** worktree 를 지운다. 미커밋 변경이 있으면 force 없이는 거부. 브랜치는 base 에 합쳐졌을 때만 지운다(-d). */
+/**
+ * 치우기 전에 남은 것을 제 브랜치에 커밋해 둔다. 폴더는 회수하면서 결과는 잃지 않으려는 것이다.
+ *
+ * 격리 회차의 작업 폴더는 거의 항상 더럽다 — 예약이 만든 파일뿐 아니라 도구가 작업 디렉터리에
+ * 쓰는 상태(.omc 등)도 같이 남는다. 그래서 "더러우면 안 치운다" 로만 두면 아무것도 치우지 못한다.
+ *
+ * 커밋만 하고 브랜치는 지우지 않는다(worktreeRemove 의 `branch -d` 는 병합 안 된 브랜치를 거부한다).
+ * 나중에 `git switch atelier/<이름>` 으로 그대로 꺼내 볼 수 있다.
+ */
+export async function worktreeArchive(
+  env: NodeJS.ProcessEnv,
+  wt: WorktreeMeta,
+  message: string,
+): Promise<{ ok: true; committed: boolean } | { ok: false; error: string }> {
+  if (!fs.existsSync(wt.path)) return { ok: true, committed: false };
+  const st = await worktreeStatus(env, wt);
+  if (st.dirty === 0) return { ok: true, committed: false };
+  const add = await run(wt.path, ["add", "-A"], env);
+  if (add.code !== 0) return { ok: false, error: add.stderr.trim() || "git add 실패" };
+  const c = await run(wt.path, ["commit", "-m", message], env);
+  // 커밋할 것이 없다고 나오는 경우(무시된 파일만 있었다)는 실패가 아니다.
+  if (c.code !== 0 && !/nothing to commit|작성할 내용 없음/.test(c.stdout + c.stderr))
+    return { ok: false, error: c.stderr.trim() || c.stdout.trim() || "git commit 실패" };
+  return { ok: true, committed: c.code === 0 };
+}
+
 export async function worktreeRemove(
   env: NodeJS.ProcessEnv,
   wt: WorktreeMeta,

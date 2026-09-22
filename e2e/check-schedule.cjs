@@ -76,6 +76,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   result("작업 결과가 worktree 안에 남는다", Boolean(isoCwd) && fs.existsSync(path.join(isoCwd, mark)));
   result("원본 저장소는 건드리지 않는다", !fs.existsSync(path.join(E2E, "repo", mark)));
 
+  // 격리 회차는 회차마다 작업 폴더를 만든다. 치우지 않으면 매일 하나씩 쌓인다.
+  // 최근 3개만 남기고, 치우기 전에 남은 것은 제 브랜치에 커밋해 둔다 — 폴더는 회수하되 결과는 잃지 않는다.
+  const isoPaths = [isoCwd];
+  for (let n = 0; n < 4; n += 1) {
+    cli("schedule", "run", "--id", isoId);
+    let r = null;
+    for (let i = 0; i < 60; i += 1) {
+      await sleep(2500);
+      r = cli("schedule", "runs", "--id", isoId).runs[0];
+      if (r && ["completed", "failed", "interrupted"].includes(r.status)) break;
+    }
+    isoPaths.push(r?.tabId ? cli("tab", "status", "--tab", r.tabId).tab.cwd : null);
+  }
+  const alive = isoPaths.filter((p) => p && fs.existsSync(p));
+  console.log("작업 폴더:", JSON.stringify(isoPaths.map((p) => (p ? path.basename(p) : null))), "살아 있는 것", alive.length);
+  // 남기는 3개 + 방금 만든 것 = 4. 다섯 번 돌렸는데도 다섯 개가 남으면 치우지 못한 것이다.
+  result("오래된 작업 폴더는 치운다", alive.length <= 4, `(${alive.length}개 남음)`);
+  result("가장 최근 회차의 폴더는 남는다", Boolean(isoPaths[isoPaths.length - 1]) && fs.existsSync(isoPaths[isoPaths.length - 1]));
+  result("첫 회차의 폴더는 사라진다", Boolean(isoPaths[0]) && !fs.existsSync(isoPaths[0]), `(${isoPaths[0]})`);
+  // 폴더는 없어져도 결과는 브랜치에 남아 있어야 한다.
+  const branches = execFileSync("git", ["branch", "--list", "atelier/*"], { cwd: path.join(E2E, "repo"), encoding: "utf8" });
+  const firstBranch = isoPaths[0] ? path.basename(isoPaths[0]) : "";
+  result("치운 회차의 결과가 브랜치에 남는다", branches.includes(firstBranch), `(${branches.trim().split("\n").length}개 브랜치)`);
+
   // 치운다 — 탭을 닫아도 worktree 는 남는다.
   if (iso?.tabId) try { cli("tab", "close", "--tab", iso.tabId); } catch { /* 이미 닫힘 */ }
   if (isoCwd) try { execFileSync("git", ["worktree", "remove", "--force", isoCwd], { cwd: path.join(E2E, "repo") }); } catch { /* 이미 없음 */ }

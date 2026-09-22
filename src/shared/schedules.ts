@@ -7,7 +7,7 @@
 // 보냈는지 안 보냈는지 알 길이 없다.
 
 import type { PermissionPolicy } from "./chat-events";
-import type { ProviderId } from "./workspace-model";
+import type { ProviderId, WorktreeMeta } from "./workspace-model";
 
 /**
  * 실행 대상.
@@ -136,6 +136,11 @@ export interface Run {
   endedAt: number | null;
   /** 실제로 돌아간 탭. 이력에서 그 대화를 열 수 있게. */
   tabId: string | null;
+  /**
+   * 격리 회차가 만든 작업 폴더. 치울 때 어디를 치울지 알아야 해서 회차에 적어 둔다 —
+   * 탭에만 두면 사용자가 탭을 닫는 순간 경로를 잃고 폴더만 남는다. 치운 뒤에는 지운다.
+   */
+  worktree?: WorktreeMeta;
   precheck?: PrecheckResult;
   /** 사람이 읽을 사유. 건너뜀·중단이면 반드시 채운다. */
   reason: string | null;
