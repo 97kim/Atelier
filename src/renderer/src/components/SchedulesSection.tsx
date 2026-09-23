@@ -501,7 +501,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
 
           {draft.cwdAuto && (
             <div className="mt-1 text-[11px] text-muted-2" data-f-cwd-auto>
-              이 예약은 <span className="mono text-muted">{draft.cwd}</span> 에서 돕니다 — 최근 실행된 세션의 경로입니다. 다르면 눌러서 고르세요.
+              이 예약은 <span className="mono text-muted">{draft.cwd}</span> 에서 돕니다 — 최근 실행된 세션의 경로입니다. 다른 경로에서 실행하려면 수정하세요.
             </div>
           )}
 
