@@ -609,6 +609,8 @@ export function Sidebar({
                   ) : (
                     <span
                       className={`min-w-0 flex-1 truncate font-medium ${isActiveWs ? "text-fg" : "text-fg/80"}`}
+                      // 정해 둔 기본 경로를 볼 데가 없으면 정했는지도 알 수 없다.
+                      title={w.path ? `기본 경로 · ${w.path}` : "기본 경로 없음 — 우클릭해서 정합니다"}
                       data-ws-name
                     >
                       {w.name}
