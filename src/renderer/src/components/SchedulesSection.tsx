@@ -93,7 +93,7 @@ interface Draft {
   provider: ProviderId;
   policy: PermissionPolicy;
   /**
-   * 폴더를 앱이 채웠나. 폼을 열면 지금 보던 세션의 경로가 들어가는데, 그걸 알려 주지 않으면
+   * 폴더를 앱이 채웠나. 폼을 열면 최근 실행된 세션의 경로가 들어가는데, 그걸 알려 주지 않으면
    * 내가 고른 값인지 앱이 넣은 값인지 구분되지 않는다 — 탭마다 경로가 다르면 더 그렇다.
    * 사용자가 직접 고르는 순간 꺼진다.
    */
@@ -139,14 +139,19 @@ function Toggle({
       disabled={busy}
       title={title}
       onClick={onChange}
-      className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+      // 폭은 style 로 박는다. w-8 로 뒀더니 다른 규칙에 밀려 26px 로 그려졌고, 손잡이가 트랙을
+      // 4px 넘어 초승달처럼 삐져나왔다. 손잡이도 left 대신 translate 로 옮긴다 — 트랙 폭이
+      // 달라져도 오른쪽 끝에서 같은 간격을 지킨다.
+      style={{ width: 32, height: 18 }}
+      className={`relative shrink-0 rounded-full transition-colors disabled:opacity-50 ${
         on ? "bg-accent" : "bg-line"
       }`}
       {...rest}
     >
       <span
-        className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-panel shadow-sm transition-[left] ${
-          on ? "left-[16px]" : "left-[2px]"
+        style={{ width: 14, height: 14, top: 2, left: 2 }}
+        className={`absolute rounded-full bg-white shadow-sm transition-transform ${
+          on ? "translate-x-[14px]" : "translate-x-0"
         }`}
       />
     </button>
@@ -397,7 +402,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
           <input
             value={draft.name}
             onChange={(e) => set({ name: e.target.value })}
-            placeholder="예약 이름"
+            placeholder="예약 이름 (필수)"
             className="w-full bg-transparent text-[15px] font-medium outline-none placeholder:text-muted-2"
             data-f-name
           />
@@ -496,7 +501,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
 
           {draft.cwdAuto && (
             <div className="mt-1 text-[11px] text-muted-2" data-f-cwd-auto>
-              폴더는 지금 보던 세션에서 가져왔습니다. 다르면 눌러서 고르세요.
+              이 예약은 <span className="mono text-muted">{draft.cwd}</span> 에서 돕니다 — 최근 실행된 세션의 경로입니다. 다르면 눌러서 고르세요.
             </div>
           )}
 
