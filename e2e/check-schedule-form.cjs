@@ -61,6 +61,9 @@ const NAME = "화면에서만든예약";
   const preview = await ev(() => document.querySelector("[data-f-preview]")?.textContent?.trim() ?? "");
   console.log("미리보기:", preview);
   result("저장 전에 다음 실행 시각을 보여 준다", preview.includes("다음") && !preview.includes("cron 형식이 아닙니다"), `(${preview})`);
+  // 폴더를 앱이 채웠으면 그렇다고 적는다 — 내가 고른 값인지 구분되어야 한다.
+  result("자동으로 채운 폴더임을 알린다", await ev(() => !!document.querySelector("[data-f-cwd-auto]")));
+  result("그래도 폴더는 채워져 있다", await ev(() => (document.querySelector("[data-f-cwd]")?.textContent ?? "").trim() !== "폴더 고르기"));
   await page.screenshot({ path: E2E + "/shot-schedule-form.png" });
 
   await page.click("[data-f-save]");

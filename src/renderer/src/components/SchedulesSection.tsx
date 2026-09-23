@@ -92,6 +92,12 @@ interface Draft {
   prompt: string;
   provider: ProviderId;
   policy: PermissionPolicy;
+  /**
+   * 폴더를 앱이 채웠나. 폼을 열면 지금 보던 세션의 경로가 들어가는데, 그걸 알려 주지 않으면
+   * 내가 고른 값인지 앱이 넣은 값인지 구분되지 않는다 — 탭마다 경로가 다르면 더 그렇다.
+   * 사용자가 직접 고르는 순간 꺼진다.
+   */
+  cwdAuto: boolean;
   /** 실행할 폴더. 워크스페이스 기본 경로에 기대지 않는다 — 이름만으로 만든 워크스페이스에는 그 값이 없다. */
   cwd: string;
   worktree: boolean;
@@ -236,6 +242,7 @@ function blankDraft(): Draft {
     provider: "claude",
     policy: "ask",
     cwd: "",
+    cwdAuto: false,
     worktree: false,
   };
 }
@@ -266,6 +273,7 @@ function toDraft(s: Schedule): Draft {
     provider: s.provider,
     policy: s.policy,
     cwd: s.target.cwd ?? "",
+    cwdAuto: false,
     worktree: s.target.worktree,
   };
 }
@@ -367,7 +375,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
           <button
             onClick={() => {
               setError(null);
-              setDraft({ ...blankDraft(), cwd: defaultCwd ?? "" });
+              setDraft({ ...blankDraft(), cwd: defaultCwd ?? "", cwdAuto: Boolean(defaultCwd) });
             }}
             className="shrink-0 rounded-md border border-line px-2.5 py-1.5 text-[12.5px] hover:bg-panel-2"
             data-new-schedule
@@ -446,7 +454,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
               type="button"
               onClick={async () => {
                 const dir = await window.workbench.dialog.pickDirectory();
-                if (dir) set({ cwd: dir });
+                if (dir) set({ cwd: dir, cwdAuto: false });
               }}
               className={`${chipWhen} max-w-[14rem] truncate text-left`}
               title={draft.cwd || "실행할 폴더를 고릅니다"}
@@ -485,6 +493,12 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
               </>
             )}
           </div>
+
+          {draft.cwdAuto && (
+            <div className="mt-1 text-[11px] text-muted-2" data-f-cwd-auto>
+              폴더는 지금 보던 세션에서 가져왔습니다. 다르면 눌러서 고르세요.
+            </div>
+          )}
 
           <textarea
             value={draft.prompt}
