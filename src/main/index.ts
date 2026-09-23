@@ -428,7 +428,9 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
       slug: worktreeSlug(schedule.name),
     });
     if (!r.ok) throw new Error(r.error);
-    const made = workspaces.createTab(wsId, { cwd: r.worktree.path, worktree: r.worktree, title: `${schedule.name} · 예약` });
+    // 제목에 "· 예약" 을 붙이지 않는다. 이 탭은 "예약" 워크스페이스 안에 있어 사이드바에서
+    // "예약 > 아침 브리핑 · 예약" 으로 두 번 읽힌다.
+    const made = workspaces.createTab(wsId, { cwd: r.worktree.path, worktree: r.worktree, title: schedule.name });
     if (!made) {
       // 탭을 못 만들면 방금 만든 worktree 는 아무도 모르는 디렉터리로 남는다. 되돌린다.
       // 되돌리기까지 실패하면 경로를 사유에 적는다. 조용히 삼키면 사람이 모르는 폴더가 계속 쌓인다.
@@ -457,7 +459,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
       // cwd 를 명시한다. 그냥 만들면 활성 탭의 작업 경로를 물려받아,
       // 선조건은 워크스페이스 기본 경로에서 검사하고 실제 작업은 사용자가 보고 있던
       // 다른 worktree 에서 하는 일이 생긴다.
-      const made = workspaces.createTab(wsId, { cwd: base, title: `${schedule.name} · 예약` });
+      const made = workspaces.createTab(wsId, { cwd: base, title: schedule.name });
       if (!made) throw new Error("세션을 만들지 못했습니다.");
       tabId = made;
       scheduleStore?.upsertSchedule({ ...schedule, pinnedTabId: made });
