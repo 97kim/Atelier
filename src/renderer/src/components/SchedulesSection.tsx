@@ -109,6 +109,44 @@ const chip =
 const chipWhen =
   "rounded-md border border-accent/30 bg-accent-tint px-2 py-1 font-medium text-accent outline-none transition-colors hover:border-accent/50 focus:border-accent/60";
 
+/**
+ * 켜고 끄는 스위치. 글자("끄기"/"켜기")로 두면 지금 상태와 누르면 될 일이 헷갈린다 —
+ * "끄기" 는 지금 켜져 있다는 뜻인데 꺼져 있다는 뜻으로도 읽힌다. 스위치는 상태만 보여 준다.
+ */
+function Toggle({
+  on,
+  busy,
+  title,
+  onChange,
+  ...rest
+}: {
+  on: boolean;
+  busy: boolean;
+  title: string;
+  onChange: () => void;
+} & Record<`data-${string}`, string | boolean | undefined>) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={busy}
+      title={title}
+      onClick={onChange}
+      className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+        on ? "bg-accent" : "bg-line"
+      }`}
+      {...rest}
+    >
+      <span
+        className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-panel shadow-sm transition-[left] ${
+          on ? "left-[16px]" : "left-[2px]"
+        }`}
+      />
+    </button>
+  );
+}
+
 /** 문장 안에 들어갈 만큼 줄인 경로. 홈은 ~ 로, 너무 길면 뒤쪽 두 칸만 남긴다. */
 function shortPath(p: string): string {
   const home = "/Users/";
@@ -511,7 +549,6 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className={`font-medium ${s.enabled ? "text-fg" : "text-muted"}`}>{s.name}</span>
-                      {!s.enabled && <span className="label text-muted-2">꺼짐</span>}
                       {s.target.kind === "fresh" && s.target.worktree && <span className="label text-muted-2">격리 세션</span>}
                     </div>
                     <div className="mono mt-1 text-[11px] text-muted">
@@ -541,19 +578,18 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                         setDraft(toDraft(s));
                       }}
                       title="고치기"
-                      className="rounded-md px-2 py-1 text-[11px] text-muted hover:bg-panel-2 hover:text-fg"
+                      className="rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
                       data-edit-schedule
                     >
-                      고치기
+                      <Icon name="edit" size={13} />
                     </button>
-                    <button
-                      onClick={() => void act(s.id, () => window.workbench.schedules.save({ id: s.id, enabled: !s.enabled }))}
-                      disabled={busy === s.id}
+                    <Toggle
+                      on={s.enabled}
+                      busy={busy === s.id}
                       title={s.enabled ? "끄기" : "켜기"}
-                      className="rounded-md px-2 py-1 text-[11px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-50"
-                    >
-                      {s.enabled ? "끄기" : "켜기"}
-                    </button>
+                      onChange={() => void act(s.id, () => window.workbench.schedules.save({ id: s.id, enabled: !s.enabled }))}
+                      data-toggle-schedule={s.enabled ? "on" : "off"}
+                    />
                     <button
                       onClick={() => void act(s.id, () => window.workbench.schedules.remove(s.id))}
                       disabled={busy === s.id}

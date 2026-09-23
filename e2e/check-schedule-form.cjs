@@ -117,6 +117,19 @@ const NAME = "화면에서만든예약";
   cli("schedule", "add", "--name", "매시 점검", "--cron", "15 * * * *", "--prompt", "빌드가 깨졌는지 확인해 줘.", "--cwd", E2E + "/repo", "--worktree", "--policy", "full");
   await page.waitForTimeout(700);
   result("목록에 예약이 쌓인다", (await ev(() => document.querySelectorAll("[data-schedule]").length)) >= 3);
+
+  // 켜고 끄기는 토글이다. 글자("끄기"/"켜기")는 지금 상태와 누르면 될 일이 헷갈려서 바꿨다.
+  const toggles = () => ev(() => [...document.querySelectorAll("[data-toggle-schedule]")].map((e) => e.getAttribute("data-toggle-schedule")));
+  const before = await toggles();
+  result("목록에 토글이 있다", before.length > 0 && before.every((v) => v === "on"), JSON.stringify(before));
+  await page.click("[data-toggle-schedule]");
+  await page.waitForTimeout(900);
+  const after = await toggles();
+  result("토글을 누르면 꺼진다", after[0] === "off", JSON.stringify(after));
+  result("끈 것이 실제로 저장된다", cli("schedule", "list").schedules.some((s) => s.enabled === false));
+  await page.click("[data-toggle-schedule]");
+  await page.waitForTimeout(900);
+  result("다시 누르면 켜진다", (await toggles())[0] === "on");
   await page.screenshot({ path: E2E + "/shot-schedules.png" });
 
   // 폴더는 예약이 직접 갖는다. 안 주면 막고, 주면 만들어진다.
