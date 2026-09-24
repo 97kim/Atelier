@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { IPty } from "node-pty";
+import { TERMINAL_CLEAR_MARK } from "@shared/ipc";
 
 export interface TerminalOpenResult {
   ok: boolean;
@@ -22,14 +23,25 @@ export interface TerminalInfo {
   title: string;
 }
 
-/** 터미널당 보관하는 출력 백로그 상한. */
-const BACKLOG_MAX = 200_000;
+/** 터미널당 보관하는 출력 백로그 상한(글자). xterm 스크롤백 5000줄에 어림잡아 맞춘다 — 색·이동 시퀀스가 섞여 줄당 100자 안팎. */
+const BACKLOG_MAX = 500_000;
+
+/**
+ * 백로그가 상한을 넘으면 줄 경계에서 자른다. 글자 수로만 자르면 이스케이프 시퀀스나 여러 바이트 글자 한가운데가 잘려
+ * 복원한 화면 첫 줄이 깨진다. 상한 안에 줄바꿈이 하나도 없으면(한 줄짜리 진행 막대 등) 그냥 자른다.
+ */
+export function trimBacklog(s: string): string {
+  if (s.length <= BACKLOG_MAX) return s;
+  const cut = s.length - BACKLOG_MAX;
+  const nl = s.indexOf("\n", cut);
+  return nl === -1 ? s.slice(cut) : s.slice(nl + 1);
+}
 
 export type TerminalKind = "shell" | "command";
 
 export interface TerminalManagerDeps {
   onData(tabId: string, data: string): void;
-  /** kind="command" 는 openCommand 로 띄운 CLI(터미널 모드)가 끝난 것. */
+  /** kind="command" 는 openCommand 로 띄운 CLI(터미널 모드)가 끝난 것. 같은 id 의 가장 최근 pty 가 끝났을 때만 온다. */
   onExit(tabId: string, exitCode: number, kind: TerminalKind): void;
   /** 새 pty 가 생겼을 때 (renderer 가 탭을 추가하도록). */
   onOpen?(info: TerminalInfo): void;
@@ -73,6 +85,11 @@ function ensureSpawnHelperExecutable() {
 
 export class TerminalManager {
   private readonly entries = new Map<string, Entry>();
+  /**
+   * id 별로 가장 최근에 띄운 pty. entries 와 달리 close() 로는 지우지 않고 그 pty 의 exit 가 왔을 때 지운다 —
+   * 밀려났든(openCommand) 끊고 다시 띄웠든, 옛 pty 의 늦은 exit 를 새 것의 exit 로 오해하지 않기 위해서다.
+   */
+  private readonly latest = new Map<string, Entry>();
 
   constructor(private readonly deps: TerminalManagerDeps) {}
 
@@ -120,6 +137,7 @@ export class TerminalManager {
       const entry: Entry = { pty, shell, kind: "shell", backlog: "", cwd };
       this.wire(tabId, entry);
       this.entries.set(tabId, entry);
+      this.latest.set(tabId, entry);
       this.deps.onOpen?.({
         id: tabId,
         kind: "shell",
@@ -170,6 +188,7 @@ export class TerminalManager {
       };
       this.wire(tabId, entry);
       this.entries.set(tabId, entry);
+      this.latest.set(tabId, entry);
       this.deps.onOpen?.({
         id: tabId,
         kind: "command",
@@ -199,14 +218,31 @@ export class TerminalManager {
 
   private wire(tabId: string, entry: Entry) {
     entry.pty.onData((data) => {
-      entry.backlog = (entry.backlog + data).slice(-BACKLOG_MAX);
+      // 밀려난 옛 pty 가 늦게 뱉는 출력은 새 터미널에 섞이면 안 된다(renderer 는 출력을 받으면 종료 표시도 지운다).
+      if (this.latest.get(tabId) !== entry) return;
+      entry.backlog = trimBacklog(entry.backlog + data);
       this.deps.onData(tabId, data);
     });
     entry.pty.onExit(({ exitCode }) => {
-      // close() 로 교체된 뒤 늦게 오는 exit 는 새 항목을 지우면 안 된다.
+      // 같은 id 로 더 새 pty 가 생긴 뒤에 오는 옛 pty 의 exit 는 아무에게도 알리지 않는다 — 새 것에 종료 표시가 붙거나
+      // (CLI 면) 세션 제어가 엉뚱하게 앱으로 돌아간다. 새 것이 먼저 끝난 뒤에 와도 마찬가지다.
+      // close() 로 지운 뒤 새 pty 가 없으면 여전히 최신이라 그대로 알린다: 하이브리드 CLI 를 끊는 경로가 그 신호로 세션 제어를 되찾는다.
+      if (this.latest.get(tabId) !== entry) return;
+      this.latest.delete(tabId);
       if (this.entries.get(tabId) === entry) this.entries.delete(tabId);
       this.deps.onExit(tabId, exitCode, entry.kind);
     });
+  }
+
+  /**
+   * ⌘K. 백로그를 비우고 그 지점에 TERMINAL_CLEAR_MARK 를 출력 스트림으로 보낸다 — renderer 는 앞선 출력을 다 그린 뒤
+   * 그 표시에서 화면을 지우므로, "지우기 전" 의 경계가 양쪽에서 같다. 백로그가 남아 있으면 다음 복원 때 지운 출력이 되살아난다.
+   */
+  clearBacklog(tabId: string): void {
+    const cur = this.entries.get(tabId);
+    if (!cur) return;
+    cur.backlog = "";
+    this.deps.onData(tabId, TERMINAL_CLEAR_MARK);
   }
 
   write(tabId: string, data: string): boolean {

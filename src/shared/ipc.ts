@@ -252,6 +252,7 @@ export const IPC = {
   termWrite: "term:write",
   termResize: "term:resize",
   termClose: "term:close",
+  termClear: "term:clear",
   termData: "term:data",
   termExit: "term:exit",
   termList: "term:list",
@@ -268,6 +269,13 @@ export interface TerminalOpenResultDto {
   /** 이미 떠 있던 터미널에 다시 붙을 때 최근 출력. */
   backlog?: string;
 }
+
+/**
+ * ⌘K: main 이 백로그를 비운 그 지점에 출력 스트림으로 끼워 보내는 표시. renderer 는 이걸 받으면 앞선 출력을 다 그린 뒤
+ * 화면을 지운다 — 별도 채널로 지우면 어느 출력까지가 "지우기 전" 인지 main 과 renderer 가 다르게 본다.
+ * APC 시퀀스라 혹시 그대로 xterm 에 써도 아무것도 그리지 않는다.
+ */
+export const TERMINAL_CLEAR_MARK = "\u001b_atelier:clear\u001b\\";
 
 /** 터미널 id 는 "<채팅탭 id>:<이름>". kind=command 는 하이브리드 모드의 CLI. */
 export interface TerminalInfoDto {
@@ -287,9 +295,15 @@ export interface TerminalApi {
   write(termId: string, data: string): void;
   resize(termId: string, cols: number, rows: number): void;
   close(termId: string): Promise<void>;
+  /**
+   * ⌘K: main 이 들고 있는 출력 백로그를 비우고(안 비우면 채팅 탭을 오갈 때 지운 화면이 되살아난다)
+   * 그 자리에 TERMINAL_CLEAR_MARK 를 onData 로 보낸다. 화면은 그 표시를 받았을 때 지운다.
+   */
+  clear(termId: string): void;
   /** 이 채팅 탭에 붙어 있는 터미널 목록 ("<tabId>:" 접두어). */
   list(tabId: string): Promise<TerminalInfoDto[]>;
   onData(listener: (termId: string, data: string) => void): () => void;
+  /** 같은 id 의 가장 최근 프로세스가 끝났을 때만 온다(옛 프로세스의 늦은 exit 는 main 이 거른다). */
   onExit(listener: (termId: string, exitCode: number) => void): () => void;
   /** main 이 새 pty 를 만들었을 때 (하이브리드 CLI 등). */
   onOpened(listener: (info: TerminalInfoDto) => void): () => void;

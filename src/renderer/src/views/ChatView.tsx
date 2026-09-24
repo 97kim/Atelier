@@ -29,6 +29,7 @@ import { LocateFileContext, OpenFileContext, type LocateFile, type OpenFile } fr
 import { EditorPane } from "../components/EditorPane";
 import { isBrowserTab, openBrowserTab, openEditorFile, setEditorPaneVisible, setLastPane, useEditorTabs } from "../editor-tabs";
 import { appendComposerDraft, loadComposerDraft } from "../composer-draft";
+import { loadTerminalOpen, saveTerminalOpen } from "../terminal-panes";
 import { Icon } from "../components/Icon";
 import { ProviderLogo } from "../components/ProviderLogo";
 import { MessageList } from "../components/MessageList";
@@ -145,8 +146,10 @@ export function ChatView({
   }, []);
 
   // 통합 터미널 패널. 한 번 열리면 닫아도 마운트를 유지해 스크롤백을 보존한다.
-  const [terminalOpen, setTerminalOpen] = useState(false);
-  const [terminalMounted, setTerminalMounted] = useState(false);
+  // 열어 둔 채 다른 채팅 탭에 갔다 오면(이 컴포넌트가 다시 마운트된다) 열린 채로 돌아온다.
+  const [terminalOpen, setTerminalOpen] = useState(() => loadTerminalOpen(tabId));
+  const [terminalMounted, setTerminalMounted] = useState(terminalOpen);
+  useEffect(() => saveTerminalOpen(tabId, terminalOpen), [tabId, terminalOpen]);
   const toggleTerminal = useCallback(() => {
     setTerminalMounted(true);
     setTerminalOpen((o) => !o);

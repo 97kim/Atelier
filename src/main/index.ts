@@ -2135,6 +2135,7 @@ function registerIpc() {
     terminals.resize(tabId, cols, rows),
   );
   ipcMain.handle(IPC.termClose, (_e, tabId: string) => terminals.close(tabId));
+  ipcMain.on(IPC.termClear, (_e, tabId: string) => terminals.clearBacklog(tabId));
   ipcMain.handle(IPC.termList, (_e, tabId: string) =>
     terminals.list(`${tabId}:`),
   );

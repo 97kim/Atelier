@@ -1,23 +1,38 @@
 // 채팅 아래 통합 터미널 패널. ⌘J 로 열고 닫는다. 패널 안에 터미널 탭이 여러 개 있고(셸 t1, t2 …), 하이브리드 모드의 CLI 는
 // "cli" 탭으로 들어온다. 닫아도 xterm 은 숨김(hidden)으로 유지해 스크롤백이 남고, 프로세스는 main 이 "<채팅탭 id>:<이름>" 으로 들고 있다.
-// 채팅 탭을 오가며 다시 마운트되면 main 의 목록과 백로그로 화면을 복원한다.
+// 채팅 탭을 오가며 다시 마운트되면 main 의 목록과 백로그로 화면을, kv 에 저장한 배치(높이·분할·활성 탭)로 자리를 복원한다.
+//
+// 포커스가 이 패널 안에 있을 때 ⌘W·⌘K·⌘F 는 App 이 "atelier:terminal-command" 로 넘겨 준다 — 세션 닫기·워크스페이스 전환·
+// 대화 검색 대신 터미널 닫기·화면 지우기·터미널 안 찾기. 대상은 마지막으로 포커스가 있던 터미널(focused)이다. 나뉜 화면에서는
+// 첫 칸(active)과 포커스가 다를 수 있어서 active 를 기준으로 하면 엉뚱한 칸이 닫힌다.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
-import type { TerminalInfoDto } from "@shared/ipc";
+import { TERMINAL_CLEAR_MARK, type TerminalInfoDto } from "@shared/ipc";
 import { Icon } from "./Icon";
 import { onThemeChange } from "../theme";
 import { formatTerminalAttachment } from "@shared/attachments";
+import { loadTerminalLayout, removePane, saveTerminalLayout, selectPane, type SplitDir } from "../terminal-panes";
 
 const MIN_HEIGHT = 120;
 const DEFAULT_HEIGHT = 260;
+const maxHeight = () => Math.max(MIN_HEIGHT, Math.floor(window.innerHeight * 0.7));
+
+export type TerminalCommand = "close" | "clear" | "find";
 
 interface TermTab {
   id: string;
   kind: "shell" | "command";
   title: string;
+}
+
+interface FindResult {
+  id: string;
+  index: number;
+  count: number;
 }
 
 export function TerminalPanel({
@@ -31,30 +46,37 @@ export function TerminalPanel({
   cwd: string;
   open: boolean;
   onClose: () => void;
-  /** "채팅에 첨부": 활성 터미널의 선택 영역(없으면 최근 출력 40줄)을 입력창에 잇는다. */
+  /** "채팅에 첨부": 포커스가 있던 터미널의 선택 영역(없으면 최근 출력 40줄)을 입력창에 잇는다. */
   onAttach?: (block: string) => void;
 }) {
   const terms = useRef(new Map<string, Terminal>());
-  const attachActive = () => {
-    if (!active || !onAttach) return;
-    const term = terms.current.get(active);
-    if (!term) return;
-    const title = tabs.find((t) => t.id === active)?.title ?? "";
-    onAttach(terminalAttachment(term, title));
-  };
+  const searches = useRef(new Map<string, SearchAddon>());
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [tabs, setTabs] = useState<TermTab[]>([]);
   const [active, setActive] = useState<string | null>(null);
+  /** 마지막으로 포커스가 있던 터미널. 단축키·첨부·찾기의 대상. */
+  const [focused, setFocused] = useState<string | null>(null);
   /**
    * 화면을 둘로 나눠 쓴다. dir="row" 는 좌우, "col" 은 상하. 두 쪽까지만 — 중첩은 하지 않는다.
    * 터미널을 다른 부모로 옮기면 xterm 이 새로 만들어져 내용이 날아가므로, 부모는 그대로 두고
    * 인라인 스타일로 자리만 바꾼다.
    */
-  const [split, setSplit] = useState<{ dir: "row" | "col"; id: string } | null>(null);
+  const [split, setSplit] = useState<{ dir: SplitDir; id: string } | null>(null);
   const [ratio, setRatio] = useState(50);
   const areaRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false);
   const prefix = `${tabId}:`;
+
+  /** 단축키·첨부·찾기가 향하는 터미널: 포커스가 있던 것, 그것이 없어졌으면 첫 칸. */
+  const target = focused && tabs.some((t) => t.id === focused) ? focused : active;
+
+  const attachTarget = () => {
+    if (!target || !onAttach) return;
+    const term = terms.current.get(target);
+    if (!term) return;
+    const title = tabs.find((t) => t.id === target)?.title ?? "";
+    onAttach(terminalAttachment(term, title));
+  };
 
   // main 에 이미 떠 있는 터미널(채팅 탭 전환 전에 만든 것)을 복원한다. 없으면 셸 하나를 만든다.
   useEffect(() => {
@@ -68,11 +90,20 @@ export function TerminalPanel({
       }));
       if (restored.length === 0)
         restored.push({ id: `${prefix}t1`, kind: "shell", title: "셸" });
-      setTabs(restored);
-      setActive(
-        restored.find((t) => t.kind === "command")?.id ??
-          restored[restored.length - 1].id,
+      const layout = loadTerminalLayout(
+        tabId,
+        restored.map((t) => t.id),
+        {
+          active: restored.find((t) => t.kind === "command")?.id ?? restored[restored.length - 1].id,
+          height: DEFAULT_HEIGHT,
+        },
+        { minHeight: MIN_HEIGHT, maxHeight: maxHeight() },
       );
+      setTabs(restored);
+      setActive(layout.active);
+      setSplit(layout.split);
+      setHeight(layout.height);
+      setRatio(layout.ratio);
       setLoaded(true);
     });
     const offOpened = window.workbench.terminal.onOpened(
@@ -96,6 +127,12 @@ export function TerminalPanel({
     };
   }, [tabId, prefix]);
 
+  // 배치는 바뀔 때마다 저장한다. 채팅 탭을 오가면 이 컴포넌트가 다시 마운트되기 때문이다.
+  useEffect(() => {
+    if (!loaded) return;
+    saveTerminalLayout(tabId, { active, split, height, ratio });
+  }, [loaded, tabId, active, split, height, ratio]);
+
   const nextTermId = () => {
     const nums = tabs.map((t) => Number(/:t(\d+)$/.exec(t.id)?.[1] ?? 0));
     return `${prefix}t${Math.max(0, ...nums) + 1}`;
@@ -105,6 +142,15 @@ export function TerminalPanel({
     const id = nextTermId();
     setTabs((prev) => [...prev, { id, kind: "shell", title: "셸" }]);
     setActive(id);
+  };
+
+  const selectTab = (id: string) => {
+    const l = selectPane({ active, split }, id);
+    setActive(l.active);
+    setSplit(l.split);
+    // 고른 터미널이 이미 보이던 칸이면(분할 해제) 저절로 포커스를 잡지 않는다 — 그대로 두면 ⌘W 가 숨겨진 쪽을 닫는다.
+    setFocused(id);
+    setTimeout(() => terms.current.get(id)?.focus(), 0);
   };
 
   /**
@@ -124,7 +170,7 @@ export function TerminalPanel({
   };
 
   /** ⌘D 좌우, ⌘⇧D 상하. 이미 나뉘어 있으면 방향만 바꾼다 — 셸을 더 띄우지 않는다. */
-  const splitTerm = (dir: "row" | "col") => {
+  const splitTerm = (dir: SplitDir) => {
     if (split) {
       setSplit({ ...split, dir });
       return;
@@ -135,25 +181,12 @@ export function TerminalPanel({
     setRatio(50);
   };
 
-  const closeTab = (id: string) => {
-    void window.workbench.terminal.close(id);
-    // 나뉘어 있던 쪽을 닫으면 한 화면으로 돌아간다.
-    if (split?.id === id) setSplit(null);
-    setTabs((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      if (active === id) {
-        const fallback = next.filter((t) => t.id !== split?.id);
-        setActive((fallback[fallback.length - 1] ?? next[next.length - 1])?.id ?? null);
-      }
-      return next;
-    });
-  };
-
   const closeAll = () => {
     for (const t of tabs) void window.workbench.terminal.close(t.id);
     setTabs([]);
     setActive(null);
     setSplit(null);
+    setFocused(null);
     setLoaded(false);
     onClose();
     // 다음에 열면 셸 하나로 다시 시작
@@ -164,12 +197,108 @@ export function TerminalPanel({
     }, 0);
   };
 
+  /** 터미널 하나를 끝낸다. 마지막 하나면 패널을 접는다 — 빈 패널은 쓸모가 없다. */
+  const closeTab = (id: string) => {
+    if (tabs.length <= 1) {
+      closeAll();
+      return;
+    }
+    void window.workbench.terminal.close(id);
+    const l = removePane({ active, split }, tabs.map((t) => t.id), id);
+    setTabs((prev) => prev.filter((t) => t.id !== id));
+    setActive(l.active);
+    setSplit(l.split);
+    // 닫힌 칸에 있던 포커스는 남은 칸으로. 숨겨져 있던 터미널은 보이면서 스스로 포커스를 잡지만, 나뉘어 있던 쪽은 그렇지 않다.
+    if (focused === id && l.active) {
+      const next = l.active;
+      setFocused(next);
+      setTimeout(() => terms.current.get(next)?.focus(), 0);
+    }
+  };
+
+  // ⌘F: 패널 안 찾기. 대상은 target 터미널 하나이고, 다른 터미널로 포커스가 옮겨 가면 그쪽에서 다시 찾는다.
+  const [find, setFind] = useState(false);
+  const [query, setQuery] = useState("");
+  const [findResult, setFindResult] = useState<FindResult | null>(null);
+  const findInput = useRef<HTMLInputElement>(null);
+  const findOpts = () => {
+    const t = readTheme();
+    return {
+      decorations: {
+        matchBackground: t.accentTint,
+        matchBorder: t.accent,
+        matchOverviewRuler: t.accent,
+        activeMatchBackground: t.accent,
+        activeMatchBorder: t.accent,
+        activeMatchColorOverviewRuler: t.accent,
+      },
+    };
+  };
+  const doFind = (q: string, dir: "next" | "prev", incremental = false) => {
+    if (!target) return;
+    const s = searches.current.get(target);
+    if (!s) return;
+    if (!q) {
+      s.clearDecorations();
+      setFindResult(null);
+      return;
+    }
+    const opts = { ...findOpts(), incremental };
+    if (dir === "next") s.findNext(q, opts);
+    else s.findPrevious(q, opts);
+  };
+  const openFind = () => {
+    setFind(true);
+    // 이미 열려 있으면 입력창으로 돌아가 전체 선택 — 다시 치면 바로 바뀌게.
+    setTimeout(() => {
+      findInput.current?.focus();
+      findInput.current?.select();
+    }, 0);
+  };
+  const closeFind = () => {
+    setFind(false);
+    setFindResult(null);
+    for (const s of searches.current.values()) s.clearDecorations();
+    if (target) terms.current.get(target)?.focus();
+  };
+  const prevTarget = useRef<string | null>(null);
+  useEffect(() => {
+    if (!find) {
+      prevTarget.current = target;
+      return;
+    }
+    if (prevTarget.current && prevTarget.current !== target)
+      searches.current.get(prevTarget.current)?.clearDecorations();
+    prevTarget.current = target;
+    doFind(query, "next", true);
+    // query 는 입력 핸들러가 직접 찾는다 — 여기서는 대상이 바뀌었을 때만.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find, target]);
+
+  // App 이 넘겨 주는 ⌘W·⌘K·⌘F. 핸들러는 렌더마다 바뀌므로 ref 로 최신 것을 본다.
+  const commands = useRef<Record<TerminalCommand, () => void>>({ close: () => {}, clear: () => {}, find: () => {} });
+  commands.current = {
+    close: () => {
+      if (target) closeTab(target);
+    },
+    clear: () => {
+      // 화면은 여기서 바로 지우지 않는다. main 이 백로그를 비운 자리에 표시를 끼워 보내면 TerminalView 가 그 순서에 맞춰 지운다.
+      if (target) window.workbench.terminal.clear(target);
+    },
+    find: openFind,
+  };
+  useEffect(() => {
+    const onCmd = (e: Event) => commands.current[(e as CustomEvent<TerminalCommand>).detail]?.();
+    window.addEventListener("atelier:terminal-command", onCmd);
+    return () => window.removeEventListener("atelier:terminal-command", onCmd);
+  }, []);
+
   // 드래그로 높이 조절 (패널 상단 가장자리).
   const onDragStart = (e: React.MouseEvent) => {
     e.preventDefault();
     const startY = e.clientY;
     const startH = height;
-    const max = Math.max(MIN_HEIGHT, Math.floor(window.innerHeight * 0.7));
+    const max = maxHeight();
     const move = (ev: MouseEvent) =>
       setHeight(
         Math.min(max, Math.max(MIN_HEIGHT, startH + (startY - ev.clientY))),
@@ -187,7 +316,7 @@ export function TerminalPanel({
     const panel = (e.currentTarget as HTMLElement).parentElement;
     const above = panel?.previousElementSibling as HTMLElement | null;
     if (!panel || !above) return;
-    const max = Math.max(MIN_HEIGHT, Math.floor(window.innerHeight * 0.7));
+    const max = maxHeight();
     const half = (above.getBoundingClientRect().height + panel.getBoundingClientRect().height) / 2;
     setHeight(Math.min(max, Math.max(MIN_HEIGHT, Math.round(half))));
   };
@@ -215,7 +344,7 @@ export function TerminalPanel({
           {tabs.map((t) => (
             <div
               key={t.id}
-              onClick={() => setActive(t.id)}
+              onClick={() => selectTab(t.id)}
               className={`group flex shrink-0 cursor-default items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${
                 t.id === active
                   ? "bg-panel text-fg"
@@ -234,7 +363,7 @@ export function TerminalPanel({
                   closeTab(t.id);
                 }}
                 className="rounded p-0.5 text-muted opacity-0 hover:bg-panel-2 hover:text-err group-hover:opacity-100"
-                title={t.kind === "command" ? "터미널 CLI 종료" : "셸 종료"}
+                title={t.kind === "command" ? "터미널 CLI 종료 (⌘W)" : "셸 종료 (⌘W)"}
               >
                 <Icon name="x" size={10} />
               </button>
@@ -257,7 +386,7 @@ export function TerminalPanel({
         <div className="flex shrink-0 items-center gap-0.5">
           {onAttach && (
             <button
-              onClick={attachActive}
+              onClick={attachTarget}
               className="mr-1 flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted hover:bg-panel-2 hover:text-fg"
               title="선택한 출력(없으면 최근 40줄)을 채팅 입력창에 넣습니다 (터미널 안에서 ⌘⇧A)"
               data-attach-chat-terminal
@@ -266,6 +395,14 @@ export function TerminalPanel({
               채팅에 첨부
             </button>
           )}
+          <button
+            onClick={openFind}
+            className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
+            title="터미널에서 찾기 (⌘F)"
+            data-terminal-find-toggle
+          >
+            <Icon name="search" size={12} />
+          </button>
           <button
             onClick={onClose}
             className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
@@ -292,7 +429,17 @@ export function TerminalPanel({
               cwd={cwd}
               visible={open && (t.id === active || t.id === split?.id)}
               style={paneStyle(split, ratio, t.id === split?.id)}
-              onRegister={(term) => (term ? terms.current.set(t.id, term) : terms.current.delete(t.id))}
+              onRegister={(term, search) => {
+                if (term && search) {
+                  terms.current.set(t.id, term);
+                  searches.current.set(t.id, search);
+                } else {
+                  terms.current.delete(t.id);
+                  searches.current.delete(t.id);
+                }
+              }}
+              onFocus={() => setFocused(t.id)}
+              onFindResults={(index, count) => setFindResult({ id: t.id, index, count })}
               onAttach={onAttach ? () => { const term = terms.current.get(t.id); if (term) onAttach(terminalAttachment(term, t.title)); } : undefined}
               onSplit={splitTerm}
               onFocusPane={focusPane}
@@ -327,6 +474,54 @@ export function TerminalPanel({
             data-terminal-split-resizer={split.dir}
           />
         )}
+        {find && (
+          <div
+            className="absolute right-3 top-1.5 z-20 flex items-center gap-1 rounded-md border border-line bg-panel px-1.5 py-1 shadow-sm"
+            data-terminal-find
+            onKeyDown={(e) => {
+              // 입력창이든 다음/이전 버튼이든 Esc 는 닫기. 채팅 쪽 Esc(입력 비우기 등)로 새지 않게 여기서 끝낸다.
+              if (e.key !== "Escape") return;
+              e.preventDefault();
+              e.stopPropagation();
+              closeFind();
+            }}
+          >
+            <input
+              ref={findInput}
+              autoFocus
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                doFind(e.target.value, "next", true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  doFind(query, e.shiftKey ? "prev" : "next");
+                }
+              }}
+              placeholder="터미널에서 찾기"
+              spellCheck={false}
+              className="mono w-44 bg-transparent text-[11px] text-fg outline-none placeholder:text-muted-2"
+            />
+            <span className="mono min-w-[3ch] text-right text-[10px] text-muted-2" data-terminal-find-count>
+              {query && findResult && findResult.id === target
+                ? findResult.count === 0
+                  ? "0"
+                  : `${findResult.index + 1}/${findResult.count}`
+                : ""}
+            </span>
+            <button onClick={() => doFind(query, "prev")} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title="이전 (⇧Enter)">
+              <Icon name="chevronUp" size={11} />
+            </button>
+            <button onClick={() => doFind(query, "next")} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title="다음 (Enter)">
+              <Icon name="chevronDown" size={11} />
+            </button>
+            <button onClick={closeFind} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title="닫기 (Esc)">
+              <Icon name="x" size={11} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -345,7 +540,7 @@ const ARROW_DIR: Record<string, "left" | "right" | "up" | "down"> = {
  * 옮기면 xterm 이 다시 만들어져 그동안의 출력이 사라진다.
  */
 function paneStyle(
-  split: { dir: "row" | "col"; id: string } | null,
+  split: { dir: SplitDir; id: string } | null,
   ratio: number,
   second: boolean,
 ): React.CSSProperties {
@@ -369,6 +564,8 @@ function TerminalView({
   onSplit,
   onFocusPane,
   onRegister,
+  onFocus,
+  onFindResults,
   onAttach,
 }: {
   termId: string;
@@ -377,20 +574,28 @@ function TerminalView({
   visible: boolean;
   /** 나뉜 화면에서 앉을 자리. 부모를 바꾸지 않으려고 위치를 스타일로 준다. */
   style?: React.CSSProperties;
-  onSplit?: (dir: "row" | "col") => void;
+  onSplit?: (dir: SplitDir) => void;
   /** 옆 칸으로 포커스를 옮긴다. 옮겼으면 true — 못 옮겼으면 키를 셸에 그대로 넘긴다. */
   onFocusPane?: (dir: "left" | "right" | "up" | "down") => boolean;
-  onRegister?: (term: Terminal | null) => void;
+  onRegister?: (term: Terminal | null, search: SearchAddon | null) => void;
+  /** 이 터미널이 키 입력을 받게 됐다. */
+  onFocus?: () => void;
+  /** 찾기 결과가 바뀌었다(index 는 0부터, 결과가 없으면 count 0). */
+  onFindResults?: (index: number, count: number) => void;
   onAttach?: () => void;
 }) {
-  const cbs = useRef({ onRegister, onAttach, onSplit, onFocusPane });
-  cbs.current = { onRegister, onAttach, onSplit, onFocusPane };
+  const cbs = useRef({ onRegister, onAttach, onSplit, onFocusPane, onFocus, onFindResults });
+  cbs.current = { onRegister, onAttach, onSplit, onFocusPane, onFocus, onFindResults };
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const [exit, setExit] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 위로 올려 둔 동안 새 출력이 왔다. 바닥으로 내려가면 사라진다. */
+  const [unread, setUnread] = useState(false);
   const attached = useRef(false);
+  /** 백로그를 다시 그리는 중 — 그건 새 출력이 아니다. */
+  const restoring = useRef(false);
 
   const spawn = useCallback(async () => {
     const term = termRef.current;
@@ -408,8 +613,11 @@ function TerminalView({
       return;
     }
     if (r.existing && r.backlog && !attached.current) {
+      restoring.current = true;
       term.reset();
-      term.write(r.backlog);
+      term.write(r.backlog, () => {
+        restoring.current = false;
+      });
     }
     attached.current = true;
     term.focus();
@@ -439,13 +647,21 @@ function TerminalView({
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    const search = new SearchAddon();
+    term.loadAddon(search);
     term.open(host);
     termRef.current = term;
     fitRef.current = fit;
-    cbs.current.onRegister?.(term);
+    cbs.current.onRegister?.(term, search);
+    // 키 입력을 받는 건 xterm 의 숨은 textarea 다. 거기에 포커스가 오면 이 터미널이 단축키의 대상이 된다.
+    const onFocusIn = () => cbs.current.onFocus?.();
+    term.textarea?.addEventListener("focus", onFocusIn);
+    const onResults = search.onDidChangeResults(({ resultIndex, resultCount }) =>
+      cbs.current.onFindResults?.(resultIndex, resultCount),
+    );
     // ⌘⇧A: 터미널 안에서 바로 첨부(셸로는 안 보낸다)
     // ⌘D 좌우 · ⌘⇧D 상하 분할. 보통의 터미널 앱과 같은 자리다. ⌘D 는 셸에 아무 뜻이 없어(EOF 는 ⌃D)
-    // 가로채도 잃는 것이 없다.
+    // 가로채도 잃는 것이 없다. ⌘W·⌘K·⌘F 는 메뉴 가속기라 여기까지 오지 않고 App 이 패널에 넘긴다.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type === "keydown" && e.metaKey && e.shiftKey && e.code === "KeyA") {
         cbs.current.onAttach?.();
@@ -459,10 +675,35 @@ function TerminalView({
       if (e.type === "keydown" && e.metaKey && e.altKey && ARROW_DIR[e.code]) {
         return !cbs.current.onFocusPane?.(ARROW_DIR[e.code]);
       }
+      // ⌘← / ⌘→: 줄 처음 / 끝. Mac 텍스트 필드와 같은 손놀림. iTerm 기본값처럼 ^A/^E 를 보낸다 —
+      // Home/End 시퀀스는 zsh 기본 키맵에 없지만 ^A/^E 는 zsh·bash·fish·REPL 이 다 안다.
+      if (e.type === "keydown" && e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey && (e.code === "ArrowLeft" || e.code === "ArrowRight")) {
+        term.input(e.code === "ArrowLeft" ? "\x01" : "\x05");
+        return false;
+      }
       return true;
+    });
+    // "새 출력 ↓": 보이지 않는 새 출력이 있는가. 바닥이 아닌데 출력이 오면 켜고, 바닥에 닿으면 끈다.
+    // TUI(alternate buffer)는 스크롤 개념이 없으니 제외. 백로그 복원도 새 출력이 아니다.
+    const atBottom = () => {
+      const b = term.buffer.active;
+      return b.viewportY >= b.baseY;
+    };
+    const onParsed = term.onWriteParsed(() => {
+      if (restoring.current || term.buffer.active.type !== "normal") return;
+      if (!atBottom()) setUnread(true);
+    });
+    const onScroll = term.onScroll(() => {
+      if (atBottom()) setUnread(false);
     });
     const offData = window.workbench.terminal.onData((id, data) => {
       if (id !== termId) return;
+      if (data === TERMINAL_CLEAR_MARK) {
+        // ⌘K. xterm 의 write 는 큐에 쌓였다 비동기로 그려지므로 바로 clear() 하면 이미 받은 출력이 지운 뒤에 나타난다.
+        // 빈 write 의 콜백은 앞선 출력이 모두 그려진 뒤에 오고, 이 표시는 main 이 백로그를 비운 바로 그 자리에 있다.
+        term.write("", () => term.clear());
+        return;
+      }
       term.write(data);
       setExit(null); // 같은 id 에 새 프로세스가 붙었다
     });
@@ -493,7 +734,11 @@ function TerminalView({
       offExit();
       onInput.dispose();
       onResize.dispose();
-      cbs.current.onRegister?.(null);
+      onParsed.dispose();
+      onScroll.dispose();
+      onResults.dispose();
+      term.textarea?.removeEventListener("focus", onFocusIn);
+      cbs.current.onRegister?.(null, null);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -527,6 +772,20 @@ function TerminalView({
       data-terminal-view={termId}
     >
       <div ref={hostRef} className="absolute inset-0 px-2 pb-1" />
+      {unread && (
+        <button
+          onClick={() => {
+            termRef.current?.scrollToBottom();
+            termRef.current?.focus();
+          }}
+          className="absolute bottom-3 right-5 z-10 flex items-center gap-1 rounded-full border border-line bg-panel px-2 py-0.5 text-[10.5px] text-muted shadow-sm hover:text-fg"
+          title="맨 아래로"
+          data-terminal-unread
+        >
+          새 출력
+          <Icon name="chevronDown" size={10} />
+        </button>
+      )}
       {(exit !== null || error) && (
         <button
           onClick={() => void spawn()}
@@ -550,6 +809,8 @@ function readTheme() {
     bg: v("--color-inset", "#f8f9fc"),
     fg: v("--color-fg", "#18202a"),
     selection: v("--color-accent-tint", "#eef0ff"),
+    accent: v("--color-accent", "#696fea"),
+    accentTint: v("--color-accent-tint", "#eef0ff"),
     fontMono: v("--font-mono", "Menlo, monospace"),
   };
 }

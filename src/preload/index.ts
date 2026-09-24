@@ -244,6 +244,7 @@ const api: WorkbenchApi = {
     resize: (tabId: string, cols: number, rows: number) =>
       ipcRenderer.send(IPC.termResize, tabId, cols, rows),
     close: (tabId: string) => ipcRenderer.invoke(IPC.termClose, tabId),
+    clear: (tabId: string) => ipcRenderer.send(IPC.termClear, tabId),
     onData: (listener) => {
       const handler = (_e: IpcRendererEvent, tabId: string, data: string) =>
         listener(tabId, data);

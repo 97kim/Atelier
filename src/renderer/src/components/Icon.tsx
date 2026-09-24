@@ -15,6 +15,7 @@ const PATHS: Record<string, string> = {
   minus: "M5 12h14",
   plus: "M12 5v14M5 12h14",
   chevronRight: "M9 18l6-6-6-6",
+  chevronUp: "M18 15l-6-6-6 6",
   panelRight: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM15 3v18",
   refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",

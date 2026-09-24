@@ -12,6 +12,7 @@ import { closeTarget } from "./close-target";
 import { isBrowserTab } from "./editor-tabs";
 import { forgetEditorTabs, getEditorTabs, getLastPane, openBrowserTab, openEditorFile, pruneEditorTabs, reopenClosedEditorTab, setEditorMaximized } from "./editor-tabs";
 import { clearComposerDraft, pruneComposerDrafts } from "./composer-draft";
+import { pruneTerminalState } from "./terminal-panes";
 import { nextAttentionTab } from "@shared/attention-nav";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { ChatView } from "./views/ChatView";
@@ -89,6 +90,7 @@ export function App() {
     const live = new Set(model.tabs.map((t) => t.id));
     pruneEditorTabs(live);
     pruneComposerDrafts(live);
+    pruneTerminalState(live);
   }, [model.tabs]);
 
   const newWorktreeIn = useCallback(
@@ -138,7 +140,16 @@ export function App() {
         activeIsBrowser: !!t.active && isBrowserTab(t.active),
       });
     };
+    /** 통합 터미널에 포커스가 있나(xterm 의 입력 textarea 나 찾기 입력창). */
+    const terminalFocused = () => !!document.activeElement?.closest?.("[data-terminal-panel]");
     const handle = (name: ShortcutName) => {
+      // 터미널 안에서 ⌘W·⌘K·⌘F 는 터미널 관례대로 — 세션 닫기·워크스페이스 전환·대화 검색이 아니라
+      // 터미널 닫기·화면 지우기·터미널 안 찾기. 터미널에서 습관처럼 누른 ⌘W 로 세션이 통째로 사라지면 안 된다.
+      if ((name === "close-tab" || name === "switch-workspace" || name === "search") && terminalFocused()) {
+        const cmd = name === "close-tab" ? "close" : name === "switch-workspace" ? "clear" : "find";
+        window.dispatchEvent(new CustomEvent("atelier:terminal-command", { detail: cmd }));
+        return;
+      }
       if (name === "new-tab") void newTab();
       else if (name === "close-tab" && model.activeTabId) {
         const tabId = model.activeTabId;
