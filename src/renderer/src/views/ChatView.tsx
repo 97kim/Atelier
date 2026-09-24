@@ -91,7 +91,7 @@ export function ChatView({
   onOpenSettings: (section?: "general" | "cli") => void;
 }) {
   const tabId = tab.id;
-  const { state, config, setConfig } = useSession(tabId);
+  const { state, config, setConfig, loaded } = useSession(tabId);
   const [switching, setSwitching] = useState(false);
   // 에디터 패널(채팅 옆 분할). 변경 파일 목록·파일 트리·툴카드 경로 클릭으로 파일을 연다. 열린 파일은 탭마다 기억.
   const editorTabs = useEditorTabs(tabId);
@@ -705,6 +705,7 @@ export function ChatView({
               <MessageList
                 tabId={tabId}
                 blocks={state.blocks}
+                loading={!loaded}
                 status={state.status}
                 provider={provider}
                 reasoning={state.reasoning}

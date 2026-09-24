@@ -27,6 +27,7 @@ export function MessageList({
   turnStartedAt = null,
   sessionId = null,
   ambientFromBg = false,
+  loading = false,
 }: {
   tabId: string;
   blocks: Block[];
@@ -46,6 +47,8 @@ export function MessageList({
   onOpenOrchestration?: (runId: string) => void;
   /** 지금 턴이 실제로 시작된 시각(큐 대기 제외). 없으면 마지막 사용자 메시지 시각. */
   turnStartedAt?: number | null;
+  /** 기록을 아직 불러오는 중. 빈 대화와 구분해 "대화가 없다" 고 단정하지 않는다. */
+  loading?: boolean;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -167,14 +170,17 @@ export function MessageList({
       data-message-list
     >
       <div ref={contentRef} className="mx-auto flex max-w-[820px] flex-col gap-5">
-        {blocks.length === 0 && (
-          <div className="mt-24 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-panel text-fg">
-              <Logo size={20} />
+        {blocks.length === 0 &&
+          (loading ? (
+            <LoadingConversation />
+          ) : (
+            <div className="mt-24 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-panel text-fg">
+                <Logo size={20} />
+              </div>
+              <p className="text-muted">무엇을 조사하거나 고칠까요?</p>
             </div>
-            <p className="text-muted">무엇을 조사하거나 고칠까요?</p>
-          </div>
-        )}
+          ))}
         {groups.map((g, i) => (
           <Group key={g.blocks[0].id + i} group={g} provider={provider} tabId={tabId} onRerunVerify={onRerunVerify} onCompareFanout={onCompareFanout} onOpenOrchestration={onOpenOrchestration} />
         ))}
@@ -431,6 +437,23 @@ function Group({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 기록을 불러오는 동안의 자리. 금방 끝나면 눈에 띄지 않는다 — 짧게 스쳐 가는 표시는
+ * 없는 것보다 산만하다. 늦게 나타나는 일은 CSS(.late-in)에 맡긴다. 큰 대화를 재생하는
+ * 동안은 메인 스레드가 막혀서 JS 타이머가 제때 돌지 못하고, 그러면 정작 오래 걸리는
+ * 경우에만 표시가 빠진다 — 실제로 재어 보고 옮겼다.
+ */
+function LoadingConversation() {
+  return (
+    <div className="late-in mt-24 text-center" data-message-list-loading>
+      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-panel">
+        <span className="spin inline-block h-4 w-4 rounded-full border-[1.5px] border-muted border-t-transparent" />
+      </div>
+      <p className="text-muted">대화를 불러오는 중…</p>
     </div>
   );
 }

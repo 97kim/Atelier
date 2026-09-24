@@ -382,6 +382,18 @@ kbd,
     background-position: -120% 0;
   }
 }
+/* 잠깐 뒤에 스스로 나타난다. 금방 끝나는 일에는 아무것도 깜빡이지 않게 하는 용도다.
+   JS 타이머로 하면 메인 스레드가 막힌 동안(큰 대화 재생 등) 영영 나타나지 못하므로
+   일부러 CSS 로 둔다 — 애니메이션은 스레드가 막혀도 돈다. */
+.late-in {
+  opacity: 0;
+  animation: late-in 0.2s ease-out 0.16s forwards;
+}
+@keyframes late-in {
+  to {
+    opacity: 1;
+  }
+}
 /* 작은 회전 스피너(툴카드 진행 상태) */
 .spin {
   animation: spin 0.9s linear infinite;

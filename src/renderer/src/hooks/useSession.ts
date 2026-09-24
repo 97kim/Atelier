@@ -24,15 +24,26 @@ function reducer(state: SessionState, action: Action): SessionState {
 export function useSession(tabId: string) {
   const [state, dispatch] = useReducer(reducer, undefined, initialSessionState);
   const [config, setConfig] = useState<SessionSnapshotDto | null>(null);
+  // 첫 재생 전까지는 빈 상태와 "아직 모른다" 를 구분할 수 없다 — 화면이 "대화가 없다" 고
+  // 단정했다가 번복하지 않도록 이 값으로 가른다.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
+    setLoaded(false);
     const off = window.workbench.chat.onEvent(({ tabId: id, event }) => {
       if (id === tabId) dispatch({ kind: "event", event });
     });
-    window.workbench.chat.events(tabId).then((events) => {
-      if (alive) dispatch({ kind: "replay", events });
-    });
+    window.workbench.chat
+      .events(tabId)
+      .then((events) => {
+        if (alive) dispatch({ kind: "replay", events });
+      })
+      .catch(console.error)
+      // 조회가 실패해도 계속 불러오는 중으로 두지 않는다 — 영영 도는 표시가 남는다.
+      .finally(() => {
+        if (alive) setLoaded(true);
+      });
     // 마운트 직후의 조회가 푸시보다 늦게 도착하면 더 새 값을 옛 값으로 덮게 된다 — 푸시가 먼저 왔으면 조회 결과는 버린다.
     let pushed = false;
     window.workbench.chat
@@ -64,5 +75,5 @@ export function useSession(tabId: string) {
     return () => window.removeEventListener("hashchange", onHash);
   }, [tabId]);
 
-  return { state, config, setConfig };
+  return { state, config, setConfig, loaded };
 }
