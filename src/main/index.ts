@@ -552,7 +552,7 @@ let snippets: SnippetStore;
 let lsp: LspManager;
 let searchIndex: SearchIndex;
 
-const UNKNOWN_CWD = "알 수 없는 작업 디렉토리입니다.";
+const UNKNOWN_CWD = "알 수 없는 작업 경로입니다.";
 
 /** 외부 브라우저로 넘겨도 되는 URL(http/https/mailto). file:·javascript: 등은 거부. */
 function isExternalUrl(url: string): boolean {
@@ -1974,7 +1974,7 @@ function registerIpc() {
   );
   ipcMain.handle(IPC.lspStart, (_e, cwd: string, serverId: unknown) => {
     if (!isLspServerId(serverId)) return { ok: false, error: "알 수 없는 언어 서버" };
-    return typeof cwd === "string" && isKnownCwd(cwd) ? lsp.start(cwd, serverId) : { ok: false, error: "알 수 없는 작업 디렉토리" };
+    return typeof cwd === "string" && isKnownCwd(cwd) ? lsp.start(cwd, serverId) : { ok: false, error: "알 수 없는 작업 경로" };
   });
   ipcMain.on(IPC.lspSend, (_e, id: string, message: string) => {
     if (typeof id === "string" && typeof message === "string") lsp.send(id, message);

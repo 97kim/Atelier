@@ -150,7 +150,7 @@ export function buildHandoff(
   const pending = pendingTodos(lastTodoInput);
   const header = [
     `## 이전 세션 요약${opts.fromProvider ? ` (${opts.fromProvider} 에서 전환)` : ""}`,
-    opts.cwd ? `작업 디렉토리: ${opts.cwd}` : "",
+    opts.cwd ? `작업 경로: ${opts.cwd}` : "",
     // 무엇을 하려던 세션인지가 제일 중요하다 — 기록이 잘려도 이것만은 남게 머리말로 올린다.
     firstUserMessage ? `원래 요청: ${clip(firstUserMessage, 600)}` : "",
     files.size > 0 ? `다룬 파일: ${[...files].slice(0, 30).join(", ")}` : "",

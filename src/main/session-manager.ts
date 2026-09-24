@@ -563,7 +563,7 @@ export class SessionManager {
         ok: false,
         error: "실행 중인 턴이 끝난 뒤에 터미널로 넘길 수 있습니다.",
       };
-    if (!s.cwd) return { ok: false, error: "작업 디렉토리를 먼저 정하세요." };
+    if (!s.cwd) return { ok: false, error: "작업 경로를 먼저 정하세요." };
     if (!this.deps.terminalCli)
       return { ok: false, error: "터미널 모드를 쓸 수 없습니다." };
     // 같은 세션 id 에 앱의 SDK 프로세스와 CLI 가 동시에 붙으면 안 된다 — 살아 있던 프로세스를 먼저 내린다.
@@ -1156,7 +1156,7 @@ export class SessionManager {
         error:
           "터미널이 이 세션을 제어 중입니다. CLI 를 종료하면 채팅으로 돌아옵니다.",
       };
-    if (!s.cwd) return { ok: false, error: "작업 디렉토리가 없습니다." };
+    if (!s.cwd) return { ok: false, error: "작업 경로가 없습니다." };
     if (this.isBusy(tabId) || s.limitWait) {
       // 턴 진행 중(또는 한도 재시도 대기 중): 큐에 넣고, 이 턴이 끝나면 자동으로 보낸다.
       if (s.promptQueue.length >= MAX_PROMPT_QUEUE)

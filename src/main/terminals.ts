@@ -101,7 +101,7 @@ export class TerminalManager {
         ok: false,
         existing: false,
         shell,
-        error: `작업 디렉토리가 없습니다: ${cwd}`,
+        error: `작업 경로가 없습니다: ${cwd}`,
       };
     }
     try {

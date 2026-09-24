@@ -49,7 +49,7 @@ test("요약: 사용자/어시스턴트 텍스트, 툴 한 줄, 파일·할 일 
   assert.equal(h.stats.pendingTasks, 1);
   assert.ok(h.stats.tokensEstimate > 0);
   assert.match(h.summary, /claude 에서 전환/);
-  assert.match(h.summary, /작업 디렉토리: \/r/);
+  assert.match(h.summary, /작업 경로: \/r/);
   assert.match(h.summary, /### 사용자\n버그 고쳐/);
   assert.match(h.summary, /### 어시스턴트\n확인 중/);
   assert.match(h.summary, /- 툴 Edit: \/r\/a\.ts/);

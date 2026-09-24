@@ -37,6 +37,6 @@ test("TerminalManager: 없는 cwd 는 ok:false 로 알린다", () => {
   const tm = new TerminalManager({ onData: () => {}, onExit: () => {} });
   const r = tm.open("t2", "/nonexistent/dir/for/test", { PATH: "/usr/bin:/bin", SHELL: "/bin/sh" }, 80, 24);
   assert.equal(r.ok, false);
-  assert.match(r.error ?? "", /작업 디렉토리가 없습니다/);
+  assert.match(r.error ?? "", /작업 경로가 없습니다/);
   assert.equal(tm.has("t2"), false);
 });

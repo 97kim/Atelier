@@ -147,7 +147,7 @@ export function RightPanel({
         ) : cwd ? (
           <FileTree root={cwd} />
         ) : (
-          <p className="px-4 text-muted">작업 디렉토리가 없습니다.</p>
+          <p className="px-4 text-muted">작업 경로가 없습니다.</p>
         )}
       </div>
     </aside>

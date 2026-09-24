@@ -62,7 +62,7 @@ export function Composer({
   disabled: boolean;
   /** 쓰다 만 글을 보존할 키(채팅 탭 id). 없으면 보존하지 않는다. */
   draftKey?: string;
-  /** disabled 일 때 보여 줄 안내. 기본은 작업 디렉토리 안내. */
+  /** disabled 일 때 보여 줄 안내. 기본은 작업 경로 안내. */
   disabledText?: string;
   running: boolean;
   /** 턴이 돌 때 입력창에 보일 안내(없으면 기본 문구). 하위 에이전트·외부 프로세스가 턴을 잡고 있을 때 상황을 알린다. */
@@ -428,7 +428,7 @@ export function Composer({
           rows={1}
           placeholder={
             disabled
-              ? (disabledText ?? "작업 디렉토리를 먼저 선택하세요")
+              ? (disabledText ?? "작업 경로를 먼저 선택하세요")
               : running
                 ? (runningHint ?? "다음 요청을 보내 두면 현재 작업이 끝난 뒤 자동으로 전달합니다…")
                 : "무엇이든 조사하거나, 고치거나, 실행하게 하세요…"

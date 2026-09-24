@@ -208,7 +208,7 @@ test("ControlServer: 값 없는 --tab 거절, 중복 워크스페이스 이름�
   await assert.rejects(d("tab.new", { workspace: "w3", prompt: "x" }), /작업 경로가 필요/, "cwd 없이 프롬프트를 보내려 하면 만들기 전에 거절");
   const before = calls.filter((c) => c.startsWith("createTab")).length;
   assert.equal(calls.filter((c) => c.startsWith("createTab")).length, before);
-  deps.send = async () => ({ ok: false, error: "작업 디렉토리를 먼저 정하세요." });
+  deps.send = async () => ({ ok: false, error: "작업 경로를 먼저 정하세요." });
   await assert.rejects(d("tab.new", { workspace: "w1", prompt: "x" }), (e: Error & { code: string; data?: { tabId: string } }) => e.code === "send_failed" && e.data?.tabId === "t4");
   await d("tab.new", { workspace: "w1", activate: true });
   assert.equal(model.activeTabId, "t4");
