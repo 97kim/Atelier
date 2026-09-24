@@ -1001,6 +1001,12 @@ export class SessionManager {
       s.sessionId = null;
       meta.provider = patch.provider;
       meta.sessionId = null;
+      // 모델 id 는 provider 에 딸린 것이다. 새 탭이 활성 탭의 모델을 물려받은 채 provider 만 바뀌면(CLI `tab new --provider codex`)
+      // Codex 가 Claude 모델을 받아 400 으로 거절한다. 같은 patch 에 model 이 있으면 아래에서 그것으로 덮인다.
+      if (s.model !== undefined) {
+        s.model = undefined;
+        meta.model = undefined;
+      }
     }
     if (patch.cwd !== undefined && patch.cwd !== s.cwd) {
       // 작업 경로가 바뀌면 provider 세션은 새로 시작한다 (기록은 그대로). 살아 있던 프로세스는 옛 cwd 것이라 내린다.

@@ -557,3 +557,17 @@ test("터미널 resume(Claude): 같은 세션을 그대로 이어받아도 미�
   manager.release("tab1");
   rmSync(root, { recursive: true, force: true });
 });
+
+test("configure: provider 가 바뀌면 이전 provider 의 모델은 버리고, 같은 patch 의 model 은 그대로 쓴다", () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-model-"));
+  const { manager } = makeManager(root);
+  manager.configure("m1", { model: "claude-fable-5-1" });
+  assert.equal(manager.snapshot("m1").model, "claude-fable-5-1");
+  manager.configure("m1", { provider: "codex" });
+  assert.equal(manager.snapshot("m1").model, undefined, "Claude 모델이 Codex 탭에 남으면 Codex 가 400 으로 거절한다");
+  manager.configure("m1", { provider: "claude", model: "claude-opus-5-5" });
+  assert.equal(manager.snapshot("m1").model, "claude-opus-5-5", "함께 준 model 은 살아남는다");
+  manager.configure("m1", { policy: "auto_edit" });
+  assert.equal(manager.snapshot("m1").model, "claude-opus-5-5", "provider 가 그대로면 모델도 그대로");
+  rmSync(root, { recursive: true, force: true });
+});
