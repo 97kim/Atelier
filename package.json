@@ -1,6 +1,6 @@
 {
   "name": "atelier",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "A macOS studio for coding agents. Run Claude Code and Codex in tabs, delegate, compare, and pick what to keep.",
   "repository": {
     "type": "git",
