@@ -1,4 +1,4 @@
-// 팬아웃 비교 오버레이 — 왼쪽은 모든 변형이 건드린 파일의 합집합, 오른쪽은 변형별 열(그 파일의 diff). 열 머리에서 "채택".
+// 팬아웃 비교 오버레이 — 왼쪽은 모든 세션이 건드린 파일의 합집합, 오른쪽은 세션별 열(그 파일의 diff). 열 머리에서 "채택".
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FanoutCompareDto } from "@shared/ipc";
@@ -53,7 +53,7 @@ export function FanoutCompare({ tabId, fanoutId, adoptedTabId, onClose }: { tabI
           <div className="min-w-0 flex-1">
             <div className="text-[14px] font-semibold">팬아웃 비교</div>
             <div className="mt-0.5 text-[10.5px] text-muted">
-              {data ? `${data.variants.length}개 변형 · ${files.length}개 파일` : "불러오는 중…"} · 파일을 고르면 변형마다 그 파일의 diff 를 나란히 보여 줍니다
+              {data ? `${data.variants.length}개 세션 · ${files.length}개 파일` : "불러오는 중…"} · 파일을 고르면 세션별 diff를 나란히 볼 수 있습니다
             </div>
           </div>
           {msg && (
@@ -116,20 +116,20 @@ export function FanoutCompare({ tabId, fanoutId, adoptedTabId, onClose }: { tabI
                         onClick={() => setConfirm(v.tabId)}
                         disabled={!v.exists || v.changes.length === 0 || adopting !== null}
                         className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-                        title="이 변형의 변경(패치)을 원본 저장소 작업 트리에 적용합니다"
+                        title="이 세션의 패치를 원본 저장소에 적용합니다. 커밋은 직접 해야 합니다"
                         data-fanout-adopt={v.tabId}
                       >
                         채택
                       </button>
                     )}
-                    <button onClick={() => void window.workbench.workspaces.activateTab(v.tabId)} className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" title="이 변형의 탭으로">
+                    <button onClick={() => void window.workbench.workspaces.activateTab(v.tabId)} className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" title="이 세션의 탭 열기">
                       탭
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto p-3">
                     {v.summary && !current && <div className="text-[12px] text-muted" style={{ userSelect: "text" }}>{v.summary}</div>}
-                    {!v.exists && <div className="text-[11.5px] text-muted">worktree 가 정리되어 diff 를 볼 수 없습니다.</div>}
-                    {v.exists && current && (diff ? <UnifiedDiff diff={diff} /> : <div className="text-[11.5px] text-muted-2" data-fanout-nochange>이 변형은 이 파일을 바꾸지 않았습니다.</div>)}
+                    {!v.exists && <div className="text-[11.5px] text-muted">worktree가 없어 diff를 볼 수 없습니다.</div>}
+                    {v.exists && current && (diff ? <UnifiedDiff diff={diff} /> : <div className="text-[11.5px] text-muted-2" data-fanout-nochange>이 세션은 이 파일을 변경하지 않았습니다.</div>)}
                   </div>
                 </div>
               );

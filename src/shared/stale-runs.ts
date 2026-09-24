@@ -36,7 +36,7 @@ export function staleRunEvents(events: ChatEvent[], now = Date.now()): ChatEvent
         ...f,
         ts: now,
         status: "done",
-        variants: f.variants.map((x) => (x.status === "running" || x.status === "waiting" ? { ...x, status: "failed", error: `${STALE_NOTE} 변형 탭에서 직접 확인하세요.` } : x)),
+        variants: f.variants.map((x) => (x.status === "running" || x.status === "waiting" ? { ...x, status: "failed", error: `${STALE_NOTE} 해당 탭에서 직접 확인하세요.` } : x)),
       });
   for (const r of review.values()) if (r.status === "requested") out.push({ ...r, ts: now, status: "failed", text: `${STALE_NOTE} 리뷰 탭을 열어 확인하세요.` });
   // 마지막이 "도는 중" 이면 화면은 영영 돈다. main 은 새 프로세스라 idle 인데 화면만 어긋나고,

@@ -199,11 +199,11 @@ export function ChangeReview({
               {file && file.binary && <Empty>바이너리 파일이라 표시하지 않습니다.</Empty>}
               {file && file.tooLarge && <Empty>1MB 를 넘는 파일이라 표시하지 않습니다.</Empty>}
               {file && !file.binary && !file.tooLarge && (diff ? (
-                diff.added + diff.deleted === 0 ? <Empty>내용 차이 없음 (모드·이름만 바뀜)</Empty> : <DiffTable rows={diff.rows} />
+                diff.added + diff.deleted === 0 ? <Empty>파일 내용은 같고 이름이나 권한만 변경되었습니다.</Empty> : <DiffTable rows={diff.rows} />
               ) : shown ? (
                 <>
                   <div className="border-b border-line px-4 py-2 text-[11px] text-muted">
-                    {file.missing ? "삭제된 파일입니다. HEAD 버전을 보여줍니다." : "새 파일입니다. 전체 내용을 보여줍니다."}
+                    {file.missing ? "삭제된 파일입니다. 마지막 커밋의 내용을 보여줍니다." : "새 파일입니다. 전체 내용을 보여줍니다."}
                   </div>
                   <CodeTable html={html} lines={shown.split("\n").length} />
                 </>
@@ -237,7 +237,7 @@ export function ChangeReview({
                 onClick={() => void g.draft()}
                 disabled={g.busy !== null || g.selectedPaths.length === 0}
                 className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-                title="고른 파일의 diff 로 Claude(haiku) 에게 커밋 메시지 초안을 받습니다"
+                title="선택한 파일의 diff를 Claude에 보내 커밋 메시지 초안을 만듭니다"
               >
                 <Icon name="sparkles" size={11} />
                 {g.busy === "draft" ? "초안 작성 중…" : "초안"}
@@ -246,7 +246,7 @@ export function ChangeReview({
                 onClick={() => void g.commit()}
                 disabled={g.busy !== null || !canCommit || g.selectedPaths.length === 0 || !g.message.trim()}
                 className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40"
-                title={!canCommit ? "턴이 실행 중일 때는 커밋하지 않습니다" : "고른 파일만 커밋합니다"}
+                title={!canCommit ? "AI가 작업 중일 때는 커밋할 수 없습니다" : "고른 파일만 커밋합니다"}
                 data-review-commit-button
               >
                 <Icon name="check" size={11} />

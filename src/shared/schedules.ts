@@ -21,7 +21,7 @@ import type { ProviderId, WorktreeMeta } from "./workspace-model";
  * 예약이 제 탭을 소유하면 그 탭에 사용자 턴이 없어 셋 다 성립하지 않는다. 대기열에 들어갈 일도 없다 —
  * 앞 회차가 살아 있으면 엔진이 skipped_overlap 으로 먼저 끊는다.
  *
- * 격리 회차(worktree)는 계속 새 탭이다. 회차마다 작업 폴더가 다른데 탭의 경로는 하나뿐이다.
+ * 격리 회차(worktree)는 계속 새 탭이다. 회차마다 worktree가 다른데 탭의 경로는 하나뿐이다.
  */
 /**
  * 예약 결과가 모이는 워크스페이스 이름. 예약 결과는 언제나 여기로 모인다 — 어디에 둘지 묻지 않는다.
@@ -72,7 +72,7 @@ export interface Schedule {
   activeSince: number;
   /**
    * 이 예약이 쓰는 탭. 첫 회차에 만들어 잡아 두고 다음부터 거기에 쌓는다. 사용자가 닫았으면 다시 만든다.
-   * 격리 회차는 쓰지 않는다(회차마다 작업 폴더가 다르다).
+   * 격리 회차는 쓰지 않는다(회차마다 worktree가 다르다).
    */
   pinnedTabId?: string | null;
 }
@@ -137,7 +137,7 @@ export interface Run {
   /** 실제로 돌아간 탭. 이력에서 그 대화를 열 수 있게. */
   tabId: string | null;
   /**
-   * 격리 회차가 만든 작업 폴더. 치울 때 어디를 치울지 알아야 해서 회차에 적어 둔다 —
+   * 격리 회차가 만든 worktree. 치울 때 어디를 치울지 알아야 해서 회차에 적어 둔다 —
    * 탭에만 두면 사용자가 탭을 닫는 순간 경로를 잃고 폴더만 남는다. 치운 뒤에는 지운다.
    */
   worktree?: WorktreeMeta;

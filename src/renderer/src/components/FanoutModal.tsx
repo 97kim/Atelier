@@ -1,4 +1,4 @@
-// 팬아웃 시작 창 — 지시 하나 + 변형(제공자) 목록 + 정책. 각 변형은 격리 세션(git worktree)에서 돈다.
+// 팬아웃 시작 창 — 지시 하나 + 세션(제공자) 목록 + 정책. 각 세션은 별도의 git worktree에서 실행된다.
 import { useEffect, useState } from "react";
 import type { PermissionPolicy } from "@shared/chat-events";
 import type { FanoutStartDto, Provider } from "@shared/ipc";
@@ -8,12 +8,12 @@ import { ProviderLogo } from "./ProviderLogo";
 import { modelOptions, useModels } from "../models";
 
 const POLICY_LABEL: Record<PermissionPolicy, [string, string]> = {
-  ask: ["묻기", "도구마다 승인을 기다립니다 — 변형 탭마다 직접 답해야 합니다"],
-  auto_edit: ["편집 자동", "파일 편집은 자동, 명령 실행은 묻습니다"],
-  full: ["전부 자동", "승인 없이 실행합니다(격리 worktree 안이지만 명령은 PC 에서 돕니다)"],
+  ask: ["묻기", "CLI가 추가 권한을 요청하면 각 탭에서 승인할 수 있습니다."],
+  auto_edit: ["편집 자동", "작업 경로 안의 파일 편집을 허용합니다. 추가 승인 여부는 선택한 CLI의 권한 규칙에 따릅니다."],
+  full: ["전부 자동", "파일 변경과 명령 실행을 승인 없이 진행합니다. 명령은 이 Mac에서 실행됩니다."],
 };
 
-/** 변형 한 줄의 모델 셀렉트 — provider 의 실제 모델 목록(CLI 조회)을 쓴다. */
+/** 세션 한 줄의 모델 셀렉트 — provider 의 실제 모델 목록(CLI 조회)을 쓴다. */
 function VariantModelSelect({ provider, value, onChange }: { provider: Provider; value: string; onChange: (model: string) => void }) {
   const { models, source } = useModels(provider);
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
@@ -86,7 +86,7 @@ export function FanoutModal({
           <Icon name="sparkles" size={15} className="text-accent" />
           <div className="min-w-0 flex-1">
             <div className="text-[14px] font-semibold">팬아웃</div>
-            <div className="mt-0.5 text-[11px] text-muted">같은 지시를 격리 세션 여러 개에 동시에 보내고, 끝나면 변경을 나란히 비교해 하나를 채택합니다.</div>
+            <div className="mt-0.5 text-[11px] text-muted">같은 요청을 여러 격리 세션에 동시에 보냅니다. 세션마다 CLI와 모델을 선택할 수 있으며, 각각의 worktree에서 작업한 뒤 diff를 비교해 원본에 적용할 결과를 고릅니다.</div>
           </div>
           <button onClick={onClose} className="rounded-md border border-line p-1.5 text-muted hover:text-fg" title="닫기 (esc)">
             <Icon name="x" size={14} />
@@ -112,7 +112,7 @@ export function FanoutModal({
             />
           </label>
           <div className="flex flex-col gap-1.5">
-            <span className="label text-muted">변형 ({variants.length}개)</span>
+            <span className="label text-muted">세션 ({variants.length}개)</span>
             <div className="flex flex-col gap-1.5" data-fanout-variants>
               {variants.map((v, i) => (
                 <div key={i} className="flex items-center gap-2 rounded-md border border-line bg-inset px-2.5 py-1.5" data-fanout-variant={variantLabel(i)}>
@@ -135,7 +135,7 @@ export function FanoutModal({
                     onClick={() => setVariants((vs) => vs.filter((_, j) => j !== i))}
                     disabled={variants.length <= FANOUT_MIN_VARIANTS}
                     className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
-                    title="이 변형 빼기"
+                    title="이 세션을 비교에서 제외"
                   >
                     <Icon name="x" size={11} />
                   </button>
@@ -149,7 +149,7 @@ export function FanoutModal({
                 data-fanout-add
               >
                 <Icon name="plus" size={10} />
-                변형 추가
+                세션 추가
               </button>
             )}
           </div>
@@ -168,7 +168,7 @@ export function FanoutModal({
                 </button>
               ))}
             </div>
-            <div className="text-[11px] text-muted">{POLICY_LABEL[policy][1]}. 변형은 저장소 밖 worktree 에서 돌아 서로·원본의 파일을 건드리지 않습니다.</div>
+            <div className="text-[11px] text-muted">{POLICY_LABEL[policy][1]} worktree는 파일 변경을 분리하지만, Mac 전체의 접근 권한을 제한하는 것은 아닙니다.</div>
           </div>
           {error && (
             <div className="rounded-md border border-err/40 bg-err-bg px-3 py-2 text-[12px] text-err" data-fanout-error>

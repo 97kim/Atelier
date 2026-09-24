@@ -486,7 +486,7 @@ function BlockView({ block }: { block: Block }) {
         <div className="mt-1 flex items-center gap-2 rounded-md border border-err/40 bg-err-bg px-3 py-2 text-err">
           <Icon name="alert" size={13} />
           <span className="flex-1">
-            {block.errorText ?? "턴이 실패했습니다."}
+            {block.errorText ?? "작업을 완료하지 못했습니다. 변경된 파일을 확인한 뒤 다시 요청하세요."}
           </span>
           <span className="opacity-80">{stats}</span>
         </div>

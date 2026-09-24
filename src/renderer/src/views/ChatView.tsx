@@ -461,7 +461,7 @@ export function ChatView({
                   title={
                     running
                       ? cwd
-                      : `${cwd}\n작업 경로 변경 (provider 세션은 새로 시작)`
+                      : `${cwd}\n작업 경로 변경 (AI와의 대화를 새로 시작합니다)`
                   }
                   data-cwd
                 >
@@ -472,7 +472,7 @@ export function ChatView({
                 <button
                   onClick={() => void pickCwd()}
                   className="no-drag flex shrink-0 items-center gap-1 rounded bg-accent-tint px-1.5 py-0.5 text-accent hover:bg-accent/15"
-                  title="이 세션이 작업할 디렉토리를 고릅니다"
+                  title="이 대화에서 사용할 작업 경로를 선택합니다"
                   data-cwd
                 >
                   <Icon name="folder" size={10} />
@@ -492,7 +492,7 @@ export function ChatView({
                   <span className="shrink-0">·</span>
                   <span
                     className="shrink-0"
-                    title={config?.model ? "이 세션에 설정한 모델 (/model 로 변경)" : "마지막 턴이 쓴 모델 — 설정은 CLI 기본값 (/model 로 변경)"}
+                    title={config?.model ? "이 세션에 설정한 모델 (/model 로 변경)" : "마지막 응답에 사용한 모델 · 기본 모델 사용 중 (/model로 변경)"}
                     data-header-model
                   >
                     {config?.model || state.model}
@@ -549,7 +549,7 @@ export function ChatView({
           <button
             onClick={() => openBrowserTab(tabId)}
             className="no-drag flex shrink-0 items-center gap-2 rounded-md border border-line bg-panel px-3 py-1.5 hover:bg-panel-2"
-            title="인앱 브라우저 탭을 새로 엽니다 (개발 서버 미리보기·문서)"
+            title="인앱 브라우저를 열어 개발 중인 화면이나 문서를 봅니다"
             data-browser-open
           >
             <Icon name="globe" size={11} />
@@ -603,17 +603,17 @@ export function ChatView({
           {terminalControlled && config?.terminalExternal ? (
             <span
               className="no-drag flex shrink-0 items-center gap-2 rounded-md border border-accent/40 bg-accent-tint px-3 py-1.5 text-accent"
-              title="통합 터미널에서 직접 띄운 CLI 가 이 세션을 제어 중입니다. 그 CLI 를 종료(/exit)하면 채팅으로 돌아옵니다."
+              title="터미널에서 시작한 CLI에 연결되어 있습니다. 터미널에서 /exit로 종료하면 채팅으로 돌아옵니다."
               data-external-terminal
             >
               <Icon name="terminal" size={12} />
-              터미널의 CLI 에 연결됨
+              터미널 CLI에 연결됨
             </span>
           ) : terminalControlled ? (
             <button
               onClick={detachTerminal}
               className="no-drag flex shrink-0 items-center gap-2 rounded-md border border-accent/40 bg-accent-tint px-3 py-1.5 text-accent hover:bg-accent/15"
-              title="터미널의 CLI 를 끊고 채팅으로 돌아옵니다"
+              title="터미널에서 실행 중인 CLI를 종료하고 채팅으로 돌아옵니다"
               data-detach-terminal
             >
               <Icon name="chat" size={12} />
@@ -638,9 +638,9 @@ export function ChatView({
                     key: "fanout",
                     label: "팬아웃",
                     icon: "sparkles",
-                    hint: "같은 지시를 격리 세션 여러 개에 보내고 변경을 나란히 비교해 채택합니다",
+                    hint: "여러 격리 세션에 같은 요청을 보내고, diff를 비교해 원본에 적용할 결과를 고릅니다",
                     disabled: !cwd || terminalControlled,
-                    disabledReason: !cwd ? "작업 경로를 먼저 고르세요" : "터미널의 CLI 가 이 세션을 제어 중입니다",
+                    disabledReason: !cwd ? "작업 경로를 먼저 고르세요" : "현재 터미널의 CLI가 이 대화를 제어하고 있습니다",
                     onSelect: () => setFanoutOpen(true),
                   },
                   {
@@ -649,23 +649,23 @@ export function ChatView({
                     icon: "switch",
                     hint: `작업 트리 변경을 ${provider === "claude" ? "Codex" : "Claude Code"} 새 탭에 보내 독립 리뷰를 받습니다`,
                     disabled: !cwd || terminalControlled || reviewBusy,
-                    disabledReason: reviewBusy ? "리뷰가 이미 돌고 있습니다" : !cwd ? "작업 경로를 먼저 고르세요" : "터미널의 CLI 가 이 세션을 제어 중입니다",
+                    disabledReason: reviewBusy ? "리뷰가 이미 돌고 있습니다" : !cwd ? "작업 경로를 먼저 고르세요" : "현재 터미널의 CLI가 이 대화를 제어하고 있습니다",
                     onSelect: () => void requestCrossReview(),
                   },
                   {
                     key: "orchestration",
                     label: "오케스트레이션",
                     icon: "list",
-                    hint: "Run 의 워커·질문·보고를 봅니다 (Run 은 atelier orch CLI 로 만듭니다)",
+                    hint: "워커의 작업과 인박스를 확인합니다. Run은 atelier orch 명령으로 만듭니다",
                     onSelect: () => setOrchPanel({ runId: null }),
                   },
                   {
                     key: "attach-terminal",
                     label: "터미널에서 이어가기",
                     icon: "play",
-                    hint: "같은 세션을 터미널의 CLI 로 이어갑니다. 종료하면 채팅으로 돌아옵니다",
+                    hint: "같은 대화를 터미널의 CLI에서 이어갑니다. CLI를 종료하면 채팅으로 돌아옵니다",
                     disabled: !cwd || running || terminalControlled,
-                    disabledReason: terminalControlled ? "이미 터미널의 CLI 가 제어 중입니다" : running ? "턴이 끝난 뒤에 됩니다" : "작업 경로를 먼저 고르세요",
+                    disabledReason: terminalControlled ? "이미 터미널의 CLI에 연결되어 있습니다" : running ? "현재 작업이 끝난 뒤 사용할 수 있습니다" : "작업 경로를 먼저 고르세요",
                     onSelect: () => void attachTerminal(),
                   },
                 ]}
@@ -741,15 +741,15 @@ export function ChatView({
             )}
 
             {concurrent.length > 0 && concurrentDismissed !== concurrentKey && (
-              <div className="mx-6 mb-2 flex items-center gap-2 rounded-lg border border-warn/40 bg-warn-bg px-3 py-2 text-[12px] text-warn" data-concurrent-banner>
+              <div className="mx-6 mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-warn/40 bg-warn-bg px-3 py-2 text-[12px] text-warn" data-concurrent-banner>
                 <Icon name="alert" size={13} className="shrink-0" />
                 <span className="min-w-0 flex-1">
-                  같은 디렉토리에서 {concurrent.length}개 세션이 작업 중입니다: {concurrent.map((t) => shortTitle(tabTitle(t))).join(", ")}. 같은 파일을 고치면 서로 덮어쓸 수 있습니다.
+                  같은 작업 경로에서 다른 탭 {concurrent.length}개가 작업 중입니다: {concurrent.map((t) => shortTitle(tabTitle(t))).join(", ")}. 같은 파일을 고치면 서로 덮어쓸 수 있습니다.
                 </span>
                 <button onClick={() => onActivateTab(concurrent[0].id)} className="shrink-0 rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10" data-concurrent-view>
                   보기
                 </button>
-                <button onClick={onIsolate} className="shrink-0 rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10" title="워크스페이스 저장소에 git worktree 를 만들어 이 작업을 따로 진행합니다" data-concurrent-isolate>
+                <button onClick={onIsolate} className="shrink-0 rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10" title="현재 저장소에 worktree를 만들어 격리 세션을 시작합니다" data-concurrent-isolate>
                   격리 세션으로
                 </button>
                 <button onClick={() => setConcurrentDismissed(concurrentKey)} className="shrink-0 rounded p-0.5 hover:bg-warn/10" title="닫기" data-concurrent-dismiss>
@@ -842,8 +842,8 @@ export function ChatView({
                       </>
                     ) : (
                       config?.terminalExternal
-                        ? "통합 터미널에서 직접 띄운 CLI 에 연결됐습니다. 대화는 여기에도 따라 표시되고(첫 프롬프트부터), CLI 를 종료(/exit)하면 채팅으로 돌아옵니다."
-                        : "터미널의 CLI 가 이 세션을 제어 중입니다. 대화는 여기에도 따라 표시되고, CLI 를 종료(/exit)하거나 위의 버튼을 누르면 채팅으로 돌아옵니다."
+                        ? "터미널에서 시작한 CLI에 연결되어 있습니다. 첫 메시지를 보낸 뒤부터 대화가 여기에도 표시됩니다. 터미널에서 /exit로 종료하면 채팅으로 돌아옵니다."
+                        : "터미널의 CLI에서 대화를 이어가며 내용은 여기에도 표시됩니다. 터미널에서 /exit로 종료하거나 위의 ‘채팅으로 돌아가기’를 누르세요."
                     ))}
                 </span>
                 {attention && !terminalOpen && (
@@ -1132,7 +1132,7 @@ function PendingQueue({
     <div className="mx-6 mb-2 rounded-md border border-line bg-panel px-3 py-2 text-[12px]" data-pending-queue>
       <div className="label mb-1 flex items-center gap-1.5 text-muted">
         <Icon name="clock" size={11} />
-        {idle ? `대기 중인 지시 ${items.length} — 다음 턴이 끝나면 차례로 보냅니다` : `다음에 보낼 지시 ${items.length}`}
+        {idle ? `대기 중인 요청 ${items.length}개 · 지금 보내기를 누르면 시작합니다` : `다음에 보낼 요청 ${items.length}개`}
         {idle && (
           <button
             onClick={() => void window.workbench.chat.queueSendNext(tabId).then(onChanged)}
@@ -1177,7 +1177,7 @@ function PendingQueue({
             <button
               onClick={() => void window.workbench.chat.queueRemove(tabId, p.id).then(onChanged)}
               className="shrink-0 rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg"
-              title="큐에서 빼기"
+              title="대기 중인 요청 삭제"
               data-pending-remove
             >
               <Icon name="x" size={11} />
@@ -1216,7 +1216,7 @@ function LimitWaitBanner({
         사용 한도에 도달했습니다.{" "}
         {at
           ? `${at} 에 자동으로 다시 시도합니다 (약 ${remainMin}분 후${wait.attempts > 1 ? `, ${wait.attempts}번째` : ""}).`
-          : "리셋 시각을 알 수 없어 자동 재시도는 예약하지 않았습니다."}
+          : "자동 재시도가 예약되지 않았습니다. 사용 한도를 확인한 뒤 직접 다시 시도하세요."}
       </span>
       <button
         onClick={() => void window.workbench.chat.limitRetryNow(tabId).then(onChanged)}

@@ -1,12 +1,13 @@
 // 오케스트레이션 패널(오버레이): Run 목록 · Task/워커 · 인박스. 사람이 여기서 워커 질문에 답하고, 후속 지시를 보내고, 워커를 정리한다.
 // 화면을 연 것만으로 코디네이터 Delivery 를 ack 하지 않는다(코디네이터 탭의 check 가 소비한다).
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { OrchDispatch, OrchMessage, OrchRunState } from "@shared/orchestration";
+import type { OrchDispatch, OrchMessage, OrchRunState, OrchTaskStatus } from "@shared/orchestration";
 import { attention, runSummary, taskBlockers, taskWaves } from "@shared/orchestration";
 import { PROVIDER_NAME } from "@shared/fanout";
 import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
+import { cleanupState, createWorkerCleanup, type CleanupState } from "../orch-cleanup";
 
 const MSG_LABEL: Record<OrchMessage["type"], [string, string]> = {
   question: ["질문", "text-warn"],
@@ -20,14 +21,39 @@ const MSG_LABEL: Record<OrchMessage["type"], [string, string]> = {
 const DISPATCH_LABEL: Record<OrchDispatch["status"], string> = {
   starting: "시작 중",
   live: "실행 중",
-  reported: "보고됨 · 정산 대기",
-  settled: "정산됨",
+  reported: "결과 보고됨 · 실행 종료 대기",
+  settled: "결과 보고·실행 종료 확인",
   abandoned: "포기됨",
   failed_to_start: "시작 실패",
 };
 
+const TASK_LABEL: Record<OrchTaskStatus, string> = {
+  pending: "대기 중", running: "진행 중", succeeded: "성공", failed: "실패", abandoned: "포기",
+};
+const EXECUTION_LABEL: Record<OrchDispatch["execution"]["state"], string> = {
+  queued: "실행 순서 대기", running: "실행 중", waiting_permission: "승인 대기", waiting_reply: "답변 대기",
+  limit_wait: "사용 한도 대기", idle: "대기 중", error: "오류", unknown: "상태 확인 필요",
+};
+const OWNERSHIP_LABEL: Record<OrchDispatch["ownership"], string> = {
+  supervised: "관리 중", retained: "삭제 방지됨", released: "관리 해제됨",
+};
+
+const CLEANUP_LABEL: Record<CleanupState, string> = {
+  folder_and_tab: "worktree 삭제·탭 닫힘 확인",
+  folder_only: "worktree 삭제 확인 · 탭은 닫지 않음",
+  tab_only: "탭 닫힘 확인 · worktree는 삭제하지 않음",
+  nothing_removed: "삭제하거나 닫은 대상 없음",
+};
+
+const CLEANUP_MESSAGE: Record<CleanupState, string> = {
+  folder_and_tab: "처리 기록에서 worktree 삭제와 탭 닫기가 완료된 것을 확인했습니다.",
+  folder_only: "처리 기록에서 worktree 삭제를 확인했습니다. 탭은 닫지 않았습니다.",
+  tab_only: "처리 기록에서 탭 닫기를 확인했습니다. worktree는 삭제하지 않았습니다.",
+  nothing_removed: "처리 기록에 삭제한 worktree나 닫은 탭이 없습니다.",
+};
+
 function fmtActor(a: OrchMessage["from"]): string {
-  return a.kind === "user" ? "사람" : a.kind === "app" ? "앱" : a.kind === "tab" ? "코디네이터 탭" : "워커";
+  return a.kind === "user" ? "사람" : a.kind === "app" ? "앱" : a.kind === "tab" ? "코디네이터" : "워커";
 }
 
 export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: string | null; onClose: () => void }) {
@@ -36,11 +62,43 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [followup, setFollowup] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const load = () => void window.workbench.orch.list().then((r) => setRuns(r));
-  useEffect(() => {
-    load();
-    return window.workbench.orch.onChanged(() => load());
+  const [cleaning, setCleaning] = useState<Set<string>>(() => new Set());
+  const loadVersion = useRef(0);
+  const mounted = useRef(true);
+  const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showMessage = useCallback((message: { ok: boolean; text: string }) => {
+    if (!mounted.current) return;
+    if (messageTimer.current) clearTimeout(messageTimer.current);
+    setMsg(message);
+    messageTimer.current = setTimeout(() => setMsg(null), 6000);
   }, []);
+  const refresh = useCallback(async () => {
+    const version = ++loadVersion.current;
+    const next = await window.workbench.orch.list();
+    if (mounted.current && version === loadVersion.current) setRuns(next);
+    return next;
+  }, []);
+  const load = useCallback(() => {
+    const version = loadVersion.current + 1;
+    void refresh().catch(() => {
+      if (version === loadVersion.current) showMessage({ ok: false, text: "작업 상태를 불러오지 못했습니다. 다시 확인해 주세요." });
+    });
+  }, [refresh, showMessage]);
+  const cleanupAction = useMemo(() => createWorkerCleanup({
+    remove: (runId, dispatchId) => window.workbench.orch.worker(runId, dispatchId, "cleanup"),
+    refresh,
+  }), [refresh]);
+  useEffect(() => {
+    mounted.current = true;
+    load();
+    const unsubscribe = window.workbench.orch.onChanged(load);
+    return () => {
+      mounted.current = false;
+      loadVersion.current++;
+      if (messageTimer.current) clearTimeout(messageTimer.current);
+      unsubscribe();
+    };
+  }, [load]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -53,8 +111,19 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
   const run = useMemo(() => runs.find((r) => r.run.id === (selected ?? runs[0]?.run.id)) ?? null, [runs, selected]);
   const act = async (p: Promise<{ ok: true } | { ok: false; error: string }>, okText: string) => {
     const r = await p;
-    setMsg(r.ok ? { ok: true, text: okText } : { ok: false, text: r.error });
-    setTimeout(() => setMsg(null), 4000);
+    showMessage(r.ok ? { ok: true, text: okText } : { ok: false, text: r.error });
+  };
+  const cleanup = async (runId: string, dispatchId: string) => {
+    if (cleanupAction.isPending(runId, dispatchId)) return;
+    setCleaning((current) => new Set(current).add(dispatchId));
+    const outcome = await cleanupAction.run(runId, dispatchId);
+    if (!mounted.current) return;
+    setCleaning((current) => { const next = new Set(current); next.delete(dispatchId); return next; });
+    showMessage(outcome.kind === "confirmed"
+      ? { ok: true, text: CLEANUP_MESSAGE[outcome.state] }
+      : outcome.kind === "failed"
+        ? { ok: false, text: outcome.error }
+        : { ok: false, text: "처리 요청은 완료됐지만 결과를 확인하지 못했습니다. 작업 상태를 다시 확인해 주세요." });
   };
   const a = run ? attention(run) : null;
   return createPortal(
@@ -64,7 +133,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
           <Icon name="list" size={15} className="shrink-0 text-accent" />
           <div className="min-w-0 flex-1">
             <div className="text-[14px] font-semibold">오케스트레이션</div>
-            <div className="mt-0.5 text-[10.5px] text-muted">Run 의 Task·워커·인박스. 워커의 질문에 답하고, 후속 지시를 보내고, 끝난 워커를 정리합니다.</div>
+            <div className="mt-0.5 text-[10.5px] text-muted">Run에 속한 Task와 워커의 진행 상황 및 결과를 확인합니다. 인박스의 질문에 답하고, 워커에 추가 지시를 보낼 수 있습니다.</div>
           </div>
           {msg && (
             <span className={`text-[11.5px] ${msg.ok ? "text-ok" : "text-err"}`} data-orch-msg={msg.ok ? "ok" : "error"}>
@@ -80,14 +149,14 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
         </div>
         <div className="flex min-h-0 flex-1">
           <div className="flex w-[260px] shrink-0 flex-col overflow-y-auto border-r border-line" data-orch-runs>
-            {runs.length === 0 && <div className="px-3 py-3 text-[11.5px] text-muted">Run 이 없습니다. CLI 로 만듭니다: atelier orch run-create --objective "…"</div>}
+            {runs.length === 0 && <div className="px-3 py-3 text-[11.5px] text-muted">Run이 없습니다. 터미널에서 만들 수 있습니다: atelier orch run-create --objective "…"</div>}
             {runs.map((r) => {
               const at = attention(r);
               return (
                 <button key={r.run.id} onClick={() => setSelected(r.run.id)} className={`flex flex-col gap-0.5 border-b border-line px-3 py-2 text-left ${run?.run.id === r.run.id ? "bg-accent-tint" : "hover:bg-panel-2"}`} data-orch-run={r.run.id}>
                   <span className="truncate text-[12px]">{r.run.objective}</span>
                   <span className="mono text-[10px] text-muted-2">
-                    {r.run.id} · {r.run.coordinator.kind === "tab" ? "탭 코디네이터" : "사람"} · {r.run.status === "closed" ? "닫힘" : runSummary(r)}
+                    {r.run.id} · {r.run.coordinator.kind === "tab" ? "코디네이터" : "사람 코디네이터"} · {r.run.status === "closed" ? "닫힘" : runSummary(r)}
                     {at.questions.length > 0 ? ` · 질문 ${at.questions.length}` : ""}
                   </span>
                 </button>
@@ -101,12 +170,12 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                 <span className="mono text-[10.5px] text-muted-2">{run.run.id}</span>
                 <span className="flex-1" />
                 {run.run.coordinator.kind === "tab" && run.run.status === "active" && (
-                  <button onClick={() => void act(window.workbench.orch.takeover(run.run.id), "코디네이터를 인수했습니다.")} className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" title="탭 코디네이터의 키를 무효화하고 사람이 인박스를 맡습니다" data-orch-takeover>
+                  <button onClick={() => void act(window.workbench.orch.takeover(run.run.id), "사람 코디네이터로 작업을 인수했습니다.")} className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" title="코디네이터 대신 직접 질문에 답하고 작업 진행을 관리합니다" data-orch-takeover>
                     코디네이터 인수
                   </button>
                 )}
                 {run.run.status === "active" && (
-                  <button onClick={() => void act(window.workbench.orch.close(run.run.id), "Run 을 닫았습니다.")} className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" data-orch-close>
+                  <button onClick={() => void act(window.workbench.orch.close(run.run.id), "Run을 닫았습니다.")} className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" data-orch-close>
                     Run 닫기
                   </button>
                 )}
@@ -121,7 +190,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                     <div key={t.id} className="mb-1.5 rounded-md border border-line" data-orch-panel-task={t.id}>
                       <div className="flex items-center gap-2 px-2.5 py-1.5">
                         <span className="mono text-[11px] text-muted">{t.seq}</span>
-                        {maxWave > 1 && <span className="mono rounded bg-inset px-1 text-[10px] text-muted-2" title="웨이브(의존 깊이)" data-orch-wave={wave}>W{wave}</span>}
+                        {maxWave > 1 && <span className="mono rounded bg-inset px-1 text-[10px] text-muted-2" title="앞선 작업이 끝나야 시작할 수 있는 실행 단계" data-orch-wave={wave}>W{wave}</span>}
                         <span className="min-w-0 flex-1 truncate text-[12px]" title={t.spec}>
                           {t.spec.split("\n")[0]}
                         </span>
@@ -130,9 +199,9 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                             ← {t.deps.map((id) => run.tasks.find((x) => x.id === id)?.seq ?? "?").join(",")}
                           </span>
                         )}
-                        {t.status === "pending" && b.unmetDeps.length > 0 && <span className="label text-muted-2">의존 대기</span>}
-                        {t.status === "pending" && b.pendingGates.length > 0 && <span className="label text-warn">게이트 대기</span>}
-                        <span className={`label ${t.status === "succeeded" ? "text-ok" : t.status === "failed" || t.status === "abandoned" ? "text-err" : t.status === "running" ? "text-accent" : "text-muted-2"}`}>{t.status}</span>
+                        {t.status === "pending" && b.unmetDeps.length > 0 && <span className="label text-muted-2">선행 Task 대기</span>}
+                        {t.status === "pending" && b.pendingGates.length > 0 && <span className="label text-warn">게이트 결정 대기</span>}
+                        <span className={`label ${t.status === "succeeded" ? "text-ok" : t.status === "failed" || t.status === "abandoned" ? "text-err" : t.status === "running" ? "text-accent" : "text-muted-2"}`}>{TASK_LABEL[t.status]}</span>
                       </div>
                       {gates.map((g) => (
                         <div key={g.id} className="flex flex-wrap items-center gap-2 border-t border-line bg-warn-bg/40 px-2.5 py-1 text-[11.5px]" data-orch-gate={g.id} data-orch-gate-resolved={g.resolution ? "true" : "false"}>
@@ -142,7 +211,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                             <span className="text-ok">결정: {g.resolution.choice}</span>
                           ) : (
                             g.options.map((o) => (
-                              <button key={o} onClick={() => void act(window.workbench.orch.gate(run.run.id, g.id, o), `게이트를 "${o}" 로 결정했습니다.`)} className="rounded-md border border-warn/40 px-2 py-0.5 text-[11px] text-warn hover:bg-warn/10" data-orch-gate-option={o}>
+                              <button key={o} onClick={() => void act(window.workbench.orch.gate(run.run.id, g.id, o), `게이트를 "${o}"(으)로 결정했습니다.`)} className="rounded-md border border-warn/40 px-2 py-0.5 text-[11px] text-warn hover:bg-warn/10" data-orch-gate-option={o}>
                                 {o}
                               </button>
                             ))
@@ -150,11 +219,11 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                         </div>
                       ))}
                       {ds.map((d) => (
-                        <div key={d.id} className="flex items-center gap-2 border-t border-line px-2.5 py-1 text-[11.5px]" data-orch-dispatch={d.id} data-orch-dispatch-status={d.status}>
+                        <div key={d.id} className="flex flex-wrap items-center gap-2 border-t border-line px-2.5 py-1 text-[11.5px]" data-orch-dispatch={d.id} data-orch-dispatch-status={d.status}>
                           <ProviderLogo provider={d.provider} size={13} />
                           <span className="text-muted">
                             {PROVIDER_NAME[d.provider]} · 시도 {d.attempt} · {DISPATCH_LABEL[d.status]}
-                            {d.status === "live" ? ` (${d.execution.state})` : ""} · {d.ownership}
+                            {d.status === "live" ? ` (${EXECUTION_LABEL[d.execution.state]})` : ""} · {OWNERSHIP_LABEL[d.ownership]}
                           </span>
                           {d.worktree && <span className="mono text-[10px] text-muted-2">worktree</span>}
                           <span className="flex-1" />
@@ -169,23 +238,26 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                             </button>
                           )}
                           {d.status === "live" && d.execution.state !== "running" && d.execution.state !== "queued" && d.execution.state !== "waiting_permission" && (
-                            <button onClick={() => void act(window.workbench.orch.worker(run.run.id, d.id, "abandon"), "abandon 했습니다.")} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:bg-warn/10 hover:text-warn" data-orch-worker-abandon>
+                            <button onClick={() => void act(window.workbench.orch.worker(run.run.id, d.id, "abandon"), "이 Dispatch를 포기했습니다.")} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:bg-warn/10 hover:text-warn" data-orch-worker-abandon>
                               포기
                             </button>
                           )}
                           {(d.status === "settled" || d.status === "abandoned" || d.status === "failed_to_start") && !d.cleaned && d.tabId && (
-                            <button onClick={() => void act(window.workbench.orch.worker(run.run.id, d.id, "cleanup"), "탭을 닫고 worktree 를 지웠습니다.")} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:bg-err/10 hover:text-err" title="탭을 닫고 worktree 를 지웁니다(커밋 안 된 변경 포함)" data-orch-worker-cleanup>
-                              정리
+                            <button onClick={() => void cleanup(run.run.id, d.id)} disabled={cleaning.has(d.id)} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:bg-err/10 hover:text-err disabled:opacity-40" title={d.worktree ? "worktree와 탭을 삭제합니다. 커밋하지 않은 변경도 삭제됩니다." : "이 작업의 탭을 닫습니다."} data-orch-worker-cleanup>
+                              {cleaning.has(d.id) ? "처리 중…" : d.worktree ? "worktree 삭제" : "탭 닫기"}
                             </button>
                           )}
-                          {d.cleaned && <span className="text-[10px] text-muted-2">정리됨</span>}
+                          {(d.status === "settled" || d.status === "abandoned" || d.status === "failed_to_start") && !d.cleaned && d.tabId && d.worktree && (
+                            <span className="text-[10.5px] text-warn">worktree를 삭제하면 커밋하지 않은 변경도 삭제됩니다.</span>
+                          )}
+                          {d.cleaned && <span className="text-[10px] text-muted-2">{CLEANUP_LABEL[cleanupState(d.cleaned)]}</span>}
                           {d.status === "settled" && d.ownership === "supervised" && (
                             <>
-                              <button onClick={() => void act(window.workbench.orch.worker(run.run.id, d.id, "retain"), "보존했습니다.")} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" data-orch-worker-retain>
-                                보존
+                              <button onClick={() => void act(window.workbench.orch.worker(run.run.id, d.id, "retain"), "이 작업을 삭제하지 않도록 표시했습니다.")} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" data-orch-worker-retain>
+                                삭제 방지
                               </button>
-                              <button onClick={() => void act(window.workbench.orch.worker(run.run.id, d.id, "release"), "해제했습니다.")} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" data-orch-worker-release>
-                                해제
+                              <button onClick={() => void act(window.workbench.orch.worker(run.run.id, d.id, "release"), "이 작업의 관리를 해제했습니다. 탭은 그대로 남습니다.")} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" data-orch-worker-release>
+                                관리 해제
                               </button>
                             </>
                           )}
@@ -196,7 +268,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                           <input
                             value={followup[t.id] ?? ""}
                             onChange={(e) => setFollowup((m) => ({ ...m, [t.id]: e.target.value }))}
-                            placeholder="워커에게 후속 지시 (워커는 다음 체크포인트에서 읽습니다)"
+                            placeholder="워커에 추가 지시 (다음 진행 확인 시 전달됩니다)"
                             className="min-w-0 flex-1 rounded border border-line bg-inset px-2 py-1 text-[11.5px] outline-none focus:border-accent"
                             data-orch-followup-input
                           />
@@ -220,7 +292,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
               </div>
               <div className="px-4 py-2">
                 <div className="label mb-1 text-muted">
-                  인박스{a && a.questions.length > 0 ? ` · 답 없는 질문 ${a.questions.length}` : ""}
+                  인박스{a && a.questions.length > 0 ? ` · 답변 대기 ${a.questions.length}개` : ""}
                 </div>
                 {run.messages.length === 0 && <div className="text-[11.5px] text-muted">메시지가 없습니다.</div>}
                 {run.messages
@@ -235,7 +307,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                           <span className={`label ${tone}`}>{label}</span>
                           <span>{fmtActor(m.from)}</span>
                           {task && <span>· Task {task.seq}</span>}
-                          {m.outcome && <span className={m.outcome === "succeeded" ? "text-ok" : "text-err"}>· {m.outcome}</span>}
+                          {m.outcome && <span className={m.outcome === "succeeded" ? "text-ok" : "text-err"}>· {m.outcome === "succeeded" ? "성공" : "실패"}</span>}
                           <span className="flex-1" />
                           <span className="mono">{new Date(m.ts).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
                         </div>
@@ -282,7 +354,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
               </div>
             </div>
           ) : (
-            <div className="flex flex-1 items-center justify-center text-[12px] text-muted">왼쪽에서 Run 을 고르세요.</div>
+            <div className="flex flex-1 items-center justify-center text-[12px] text-muted">왼쪽에서 Run을 고르세요.</div>
           )}
         </div>
       </div>

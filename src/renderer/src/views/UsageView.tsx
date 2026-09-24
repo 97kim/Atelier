@@ -130,20 +130,19 @@ export function UsageView() {
         <div>
           <div className="text-[15px] font-semibold">사용량</div>
           <div className="text-[11px] text-muted">
-            터미널·앱에서 쓴 Claude Code / Codex 토큰을 로컬 트랜스크립트에서
-            합산 · 비용은 API 환산 추정
+            이 Mac에 저장된 Claude Code·Codex 대화 기록을 바탕으로 사용량을 계산합니다.
           </div>
         </div>
         <div className="no-drag mono flex items-center gap-2 text-[10px] text-muted">
           {status?.scanning
-            ? "스캔 중…"
+            ? "사용량 집계 중…"
             : status?.lastScanAt
               ? `${status.files}개 파일 · ${fmtTime(status.lastScanAt)} 갱신`
               : ""}
           <button
             onClick={() => void window.workbench.usage.rescan().then(setStatus)}
             className="rounded-md border border-line p-1.5 hover:bg-panel-2"
-            title="다시 스캔"
+            title="사용량 다시 집계"
           >
             <Icon name="refresh" size={12} />
           </button>
@@ -216,8 +215,8 @@ export function UsageView() {
               delta={t && prev ? pctChange(t.costUsd, prev.costUsd) : null}
               sub={
                 t && t.unpricedModels.length > 0
-                  ? `가격표 없음: ${t.unpricedModels.join(", ")}`
-                  : undefined
+                  ? `실제 청구액이 아닙니다. 단가가 없어 제외한 모델: ${t.unpricedModels.join(", ")}`
+                  : "실제 청구액이 아닙니다."
               }
               icon="sparkles"
             />
@@ -228,7 +227,7 @@ export function UsageView() {
               icon="play"
             />
             <Kpi
-              label="평균 비용 / 요청"
+              label="요청당 평균 추정 비용"
               value={
                 t && t.requests > 0 ? fmtUsd(t.costUsd / t.requests, 4) : "-"
               }
@@ -448,7 +447,7 @@ export function UsageView() {
                     </span>
                   </div>
                   <p className="text-[10.5px] text-muted">
-                    앱·터미널 트랜스크립트의 토큰 합계. 구독 한도 소진율은 아래.
+                    앱과 터미널의 대화 기록에 남은 토큰 합계입니다. 구독 한도는 아래에서 확인하세요.
                   </p>
                 </div>
 
@@ -456,7 +455,7 @@ export function UsageView() {
                   label="Claude Code 구독 한도"
                   color="bg-accent"
                   limit={limits?.claude ?? null}
-                  hint="턴이 돌 때 갱신 · 새로고침은 /usage 로 조회 (비용 없음)"
+                  hint="작업 중 갱신됩니다. 새로고침하면 추가 비용 없이 사용 한도를 조회합니다."
                   onRefresh={refreshLimits}
                   refreshing={refreshingLimits}
                 />
@@ -464,7 +463,7 @@ export function UsageView() {
                   label="Codex 구독 한도"
                   color="bg-[#2A9D8F]"
                   limit={limits?.codex ?? null}
-                  hint="Codex 트랜스크립트의 rate_limits 기준 · 터미널 사용도 반영"
+                  hint="Codex 대화 기록에 남은 사용 한도 정보입니다. 터미널에서 사용한 내역도 반영합니다."
                   onRefresh={refreshLimits}
                   refreshing={refreshingLimits}
                 />
@@ -516,12 +515,11 @@ export function UsageView() {
           )}
 
           <p className="mono pb-2 text-[10px] text-muted">
-            비용은 모델별 단가표(USD/MTok)로 환산한 추정치입니다. 구독(OAuth)
-            사용자는 실제 청구와 다릅니다. 단가는
+            비용은 모델별 API 단가로 환산한 추정치이며, 구독 요금이나 실제 청구액이 아닙니다. 단가표는
             {status?.customPricing
-              ? " userData/pricing.json 을 사용 중"
-              : " 앱 기본값(userData/pricing.json 으로 교체 가능)"}{" "}
-            · Codex 단가는 공식 표 미확인.
+              ? " 사용자 설정(pricing.json)을 사용합니다"
+              : " 앱 기본값을 사용합니다"}{" "}
+            · Codex 단가는 공식 가격표와 대조하지 않았습니다.
           </p>
         </div>
       </div>
@@ -580,7 +578,7 @@ function Kpi({
         ) : (
           <span className={delta > 0 ? "text-warn" : "text-ok"}>
             {delta > 0 ? "+" : ""}
-            {delta.toFixed(1)}% vs 이전 기간
+            {delta.toFixed(1)}% · 이전 기간 대비
           </span>
         )}
         {sub && (
@@ -716,7 +714,7 @@ function RateLimitBlock({
         </div>
       ) : (
         <p className="text-[10.5px] text-muted">
-          {hint} · 턴을 한 번 돌리면 표시됩니다.
+          {hint} 아직 정보가 없다면 해당 AI에 메시지를 보내 응답을 받은 뒤 다시 확인하세요.
         </p>
       )}
     </div>
@@ -738,7 +736,7 @@ function RateLimitBar({
     <div>
       <div className="mb-1 flex items-center justify-between text-[11px]">
         <span className="text-muted">
-          {fmtWindow(w.windowMinutes)} 창{suffix}
+          {fmtWindow(w.windowMinutes)} 기준{suffix}
         </span>
         <span className="mono text-[10.5px] text-muted">
           {pct >= 100 ? "한도 도달" : `${Math.round(pct)}% 사용 · ${Math.round(left)}% 남음`}

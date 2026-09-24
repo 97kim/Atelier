@@ -27,9 +27,9 @@ export function OrchestrationCard({ block, onOpen }: { block: OrchestrationBlock
   const attention = block.questions + block.escalations;
   return (
     <div className="content-indent rounded-lg border border-line bg-panel" data-orch-card={block.id} data-orch-status={block.status}>
-      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
         <Icon name="list" size={13} className="shrink-0 text-accent" />
-        <span className="font-medium">오케스트레이션</span>
+        <span className="shrink-0 font-medium">오케스트레이션</span>
         <span className="min-w-0 truncate text-[11.5px] text-muted" title={block.objective}>
           {block.objective}
         </span>
@@ -42,21 +42,21 @@ export function OrchestrationCard({ block, onOpen }: { block: OrchestrationBlock
         {block.escalations > 0 && <span className="label text-err">에스컬레이션 {block.escalations}</span>}
         {block.gates > 0 && (
           <span className="label text-warn" data-orch-gates={block.gates}>
-            게이트 {block.gates}
+            게이트 {block.gates}개 대기
           </span>
         )}
         {block.status === "closed" && <span className="label text-muted-2">닫힘</span>}
         <button
           onClick={() => onOpen(block.id)}
           className={`rounded-md border px-2 py-0.5 text-[10.5px] ${attention > 0 ? "border-warn/40 bg-warn-bg text-warn hover:bg-warn/10" : "border-line text-muted hover:bg-panel-2 hover:text-fg"}`}
-          title="Run 패널(인박스·워커) 열기"
+          title="Run 패널에서 Task와 워커, 인박스 보기"
           data-orch-open
         >
-          패널
+          자세히 보기
         </button>
       </div>
       <div>
-        {block.tasks.length === 0 && <div className="px-3 py-2 text-[11.5px] text-muted">아직 Task 가 없습니다.</div>}
+        {block.tasks.length === 0 && <div className="px-3 py-2 text-[11.5px] text-muted">아직 Task가 없습니다.</div>}
         {block.tasks.map((t) => {
           const [label, tone] = TASK_LABEL[t.status] ?? [t.status, "text-muted"];
           return (
@@ -72,7 +72,7 @@ export function OrchestrationCard({ block, onOpen }: { block: OrchestrationBlock
                   {t.status === "running" && t.execution && EXEC_LABEL[t.execution] && <span className="shrink-0 text-[10.5px] text-muted-2">{EXEC_LABEL[t.execution]}</span>}
                   <span className="flex-1" />
                   {t.tabId && (
-                    <button onClick={() => void window.workbench.workspaces.activateTab(t.tabId!)} className="shrink-0 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" title={`워커 탭 (${t.provider ? PROVIDER_NAME[t.provider] : ""})`} data-orch-task-tab>
+                    <button onClick={() => void window.workbench.workspaces.activateTab(t.tabId!)} className="shrink-0 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" title={`워커의 작업 탭 열기 (${t.provider ? PROVIDER_NAME[t.provider] : ""})`} data-orch-task-tab>
                       탭
                     </button>
                   )}

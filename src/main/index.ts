@@ -371,11 +371,11 @@ function startSchedules() {
   scheduleEngine.start();
 }
 
-/** 격리 회차의 작업 폴더를 몇 개까지 남길지. 결과를 되돌아볼 만큼은 남기되 무한히 쌓이지는 않게. */
+/** 격리 회차의 worktree를 몇 개까지 남길지. 결과를 되돌아볼 만큼은 남기되 무한히 쌓이지는 않게. */
 const KEEP_ISOLATED_RUNS = 3;
 
 /**
- * 오래된 격리 회차가 남긴 작업 폴더와 탭을 치운다. 새 격리 회차를 띄우기 직전에 한 번 돈다 —
+ * 오래된 격리 회차가 남긴 worktree와 탭을 치운다. 새 격리 회차를 띄우기 직전에 한 번 돈다 —
  * 격리를 안 쓰는 예약에는 아무 일도 일어나지 않는다.
  *
  * 강제로 지운다. 격리 폴더는 거의 항상 더럽다 — 예약이 만든 파일뿐 아니라 도구가 작업 디렉터리에
@@ -401,7 +401,7 @@ async function sweepIsolatedRuns(scheduleId: string): Promise<void> {
       error: e instanceof Error ? e.message : String(e),
     }));
     if (!removed.ok) {
-      console.log(`[schedule] 작업 폴더를 그대로 둡니다(${r.worktree!.path}): ${removed.error}`);
+      console.log(`[schedule] worktree를 그대로 둡니다(${r.worktree!.path}): ${removed.error}`);
       continue;
     }
     // 폴더가 없어진 탭은 열어 둘 이유가 없다.
@@ -441,7 +441,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
       throw new Error(
         undo.ok
           ? "세션을 만들지 못했습니다."
-          : `세션을 만들지 못했고, 만들어 둔 작업 폴더도 치우지 못했습니다(${r.worktree.path}): ${undo.error}`,
+          : `세션을 만들지 못했고, 만들어 둔 worktree도 치우지 못했습니다(${r.worktree.path}): ${undo.error}`,
       );
     }
     tabId = made;
@@ -683,13 +683,13 @@ async function startCrossReview(tabId: string): Promise<{ ok: true; reviewTabId:
   const tab = workspaces.tab(tabId);
   if (!tab) return { ok: false, error: "탭을 찾지 못했습니다." };
   const snap = sessions.snapshot(tabId);
-  if (!snap.cwd) return { ok: false, error: "작업 디렉토리가 없는 탭입니다." };
+  if (!snap.cwd) return { ok: false, error: "이 탭에서 사용할 작업 경로를 먼저 선택하세요." };
   const cwd = snap.cwd;
   const env = await cliDiscovery().buildEnv();
   const changes = await gitChanges(cwd, env);
-  if (changes.length === 0) return { ok: false, error: "리뷰할 변경이 없습니다(작업 트리가 깨끗합니다)." };
+  if (changes.length === 0) return { ok: false, error: "리뷰할 파일 변경이 없습니다." };
   const diff = await gitDiffFor(cwd, env, changes.map((c) => c.path));
-  if (!diff.trim()) return { ok: false, error: "diff 를 만들지 못했습니다." };
+  if (!diff.trim()) return { ok: false, error: "리뷰할 diff를 읽지 못했습니다." };
   const reviewer = otherProvider(snap.provider);
   const originTitle = tabTitleOf(tabId);
   const prevActive = workspaces.state().model.activeTabId;
@@ -749,8 +749,8 @@ async function startVerify(tabId: string, commands?: string[]): Promise<VerifySt
   const tab = workspaces.tab(tabId);
   if (!tab) return { ok: false, error: "탭을 찾지 못했습니다." };
   const cwd = sessions.snapshot(tabId).cwd;
-  if (!cwd) return { ok: false, error: "작업 디렉토리가 없는 탭입니다." };
-  if (!existsSync(cwd)) return { ok: false, error: `작업 디렉토리가 없습니다: ${cwd}` };
+  if (!cwd) return { ok: false, error: "이 탭에서 사용할 작업 경로를 먼저 선택하세요." };
+  if (!existsSync(cwd)) return { ok: false, error: `작업 경로를 찾을 수 없습니다: ${cwd}` };
   const ws = workspaces.state().model.workspaces.find((w) => w.id === tab.workspaceId);
   const list = commands && commands.length > 0 ? commands : (ws?.verifyCommands ?? []);
   if (list.length === 0) return { ok: false, error: "검증 명령이 없습니다. 먼저 명령을 정해 주세요." };
@@ -775,8 +775,8 @@ function noteFanout(tabId: string, e: FanoutEvent, patch: Partial<Omit<FanoutEve
 }
 
 /**
- * 팬아웃: 지시 하나를 격리 세션(worktree) N개에 동시에 보낸다. 변형 탭은 화면을 빼앗지 않고(활성 탭 복원), 결과는 원래 탭의 fanout 카드에.
- * 각 변형이 끝나면 worktree 의 변경 통계와 답변 앞부분을 카드에 적는다. 권한 대기(ask 정책)는 waiting 으로 표시만 한다 — 사람이 그 탭에서 답한다.
+ * 팬아웃: 지시 하나를 격리 세션(worktree) N개에 동시에 보낸다. 각 탭은 화면을 빼앗지 않고(활성 탭 복원), 결과는 원래 탭의 fanout 카드에.
+ * 각 세션이 끝나면 worktree 의 변경 통계와 답변 앞부분을 카드에 적는다. 권한 대기(ask 정책)는 waiting 으로 표시만 한다 — 사람이 그 탭에서 답한다.
  */
 async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutStartResult> {
   const v = validateFanoutRequest(req);
@@ -784,7 +784,7 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
   const tab = workspaces.tab(tabId);
   if (!tab) return { ok: false, error: "탭을 찾지 못했습니다." };
   const cwd = sessions.snapshot(tabId).cwd;
-  if (!cwd) return { ok: false, error: "작업 디렉토리가 없는 탭입니다." };
+  if (!cwd) return { ok: false, error: "이 탭에서 사용할 작업 경로를 먼저 선택하세요." };
   const env = await cliDiscovery().buildEnv();
   const originTitle = tabTitleOf(tabId);
   const prevActive = workspaces.state().model.activeTabId;
@@ -796,16 +796,16 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
     const label = variantLabel(i);
     const wt = await worktreeCreate(cwd, env, { rootDir: join(app.getPath("userData"), "worktrees"), slug: worktreeSlug(`fanout-${label.toLowerCase()}-${spec.provider}`) });
     if (!wt.ok) {
-      // 이미 만든 변형은 되돌린다
+      // 이미 만든 세션은 되돌린다
       for (const m of meta) {
         const t = workspaces.tab(m.tabId)?.worktree;
         if (t) await worktreeRemove(env, t, { force: true });
         workspaces.deleteTab(m.tabId);
       }
-      return { ok: false, error: `변형 ${label} 의 worktree 를 만들지 못했습니다: ${wt.error}` };
+      return { ok: false, error: `세션 ${label}의 worktree를 만들지 못했습니다: ${wt.error}` };
     }
     const vTab = workspaces.createTab(tab.workspaceId, { cwd: wt.worktree.path, worktree: wt.worktree, title: fanoutTabTitle(label, spec.provider, originTitle) });
-    if (!vTab) return { ok: false, error: "변형 탭을 만들지 못했습니다." };
+    if (!vTab) return { ok: false, error: "팬아웃 세션의 탭을 만들지 못했습니다." };
     // model 은 항상 명시(없으면 비움) — 활성 탭의 다른 provider 모델명이 물려지지 않게
     sessions.configure(vTab, { cwd: wt.worktree.path, provider: spec.provider, policy: v.policy, model: spec.model });
     variants.push({ tabId: vTab, label, provider: spec.provider, ...(spec.model ? { model: spec.model } : {}), status: "running" });
@@ -847,7 +847,7 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
           const changes = snap?.ok ? snap.changes : [];
           const text = lastReplyText(sessions.events(x.tabId));
           const failed = st.status === "error" && !text;
-          next[i] = { ...x, status: failed ? "failed" : "done", ...changeStats(changes), summary: excerpt(text, FANOUT_SUMMARY_EXCERPT), durationMs: Date.now() - started, ...(failed ? { error: "변형 탭에서 오류가 났습니다." } : {}) };
+          next[i] = { ...x, status: failed ? "failed" : "done", ...changeStats(changes), summary: excerpt(text, FANOUT_SUMMARY_EXCERPT), durationMs: Date.now() - started, ...(failed ? { error: "팬아웃 세션에서 오류가 발생했습니다. 해당 탭에서 내용을 확인하세요." } : {}) };
           changed = true;
         } else if (Date.now() - started > 90 * 60_000) {
           next[i] = { ...x, status: "failed", error: "90분 안에 끝나지 않았습니다." };
@@ -855,7 +855,7 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
         }
       }
       if (!changed) continue;
-      // 위의 await 동안 정리(cleanup)·채택이 끝났을 수 있다 — 최신 기록 위에 "아직 진행 중이던" 변형만 덮어쓴다
+      // 위의 await 동안 정리(cleanup)·채택이 끝났을 수 있다 — 최신 기록 위에 "아직 진행 중이던" 세션만 덮어쓴다
       const latest = fanoutBlock(tabId, fanoutId) ?? cur;
       if (latest.status !== "running") return;
       const merged = latest.variants.map((lv) => {
@@ -870,7 +870,7 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
 
 async function fanoutCompare(tabId: string, fanoutId: string): Promise<FanoutCompareDto> {
   const ev = fanoutBlock(tabId, fanoutId);
-  if (!ev) throw new Error("팬아웃을 찾지 못했습니다.");
+  if (!ev) throw new Error("팬아웃 기록을 찾지 못했습니다.");
   const env = await cliDiscovery().buildEnv();
   const variants: FanoutCompareDto["variants"] = [];
   for (const x of ev.variants) {
@@ -885,15 +885,15 @@ async function fanoutCompare(tabId: string, fanoutId: string): Promise<FanoutCom
 
 async function fanoutAdopt(tabId: string, fanoutId: string, variantTabId: string): Promise<FanoutAdoptResult> {
   const ev = fanoutBlock(tabId, fanoutId);
-  if (!ev) return { ok: false, error: "팬아웃을 찾지 못했습니다." };
+  if (!ev) return { ok: false, error: "팬아웃 기록을 찾지 못했습니다." };
   const x = ev.variants.find((v) => v.tabId === variantTabId);
-  if (!x) return { ok: false, error: "그 변형이 이 팬아웃에 없습니다." };
-  if (x.status === "running" || x.status === "waiting") return { ok: false, error: "변형이 아직 진행 중입니다." };
+  if (!x) return { ok: false, error: "이 팬아웃에서 선택한 세션의 결과를 찾지 못했습니다." };
+  if (x.status === "running" || x.status === "waiting") return { ok: false, error: "선택한 세션이 아직 작업 중입니다. 작업이 끝난 뒤 적용하세요." };
   const wt = workspaces.tab(variantTabId)?.worktree;
-  if (!wt || !existsSync(wt.path)) return { ok: false, error: "변형의 worktree 가 없습니다(정리됨)." };
+  if (!wt || !existsSync(wt.path)) return { ok: false, error: "선택한 세션의 worktree가 없어 결과를 적용할 수 없습니다." };
   const cwd = sessions.snapshot(tabId).cwd;
-  if (!cwd) return { ok: false, error: "원래 탭의 작업 디렉토리가 없습니다." };
-  if (sessions.isBusy(tabId)) return { ok: false, error: "원래 탭의 턴이 끝난 뒤에 적용할 수 있습니다." };
+  if (!cwd) return { ok: false, error: "결과를 적용할 원래 탭의 작업 경로가 없습니다." };
+  if (sessions.isBusy(tabId)) return { ok: false, error: "원래 탭의 작업이 끝난 뒤 결과를 적용할 수 있습니다." };
   const env = await cliDiscovery().buildEnv();
   // 팬아웃을 만든 저장소에만 적용한다 — 그 사이 탭의 작업 경로가 다른 저장소로 바뀌었으면 거부
   const top = (await gitInfo(cwd, env))?.root ?? null;
@@ -904,7 +904,7 @@ async function fanoutAdopt(tabId: string, fanoutId: string, variantTabId: string
       return false;
     }
   };
-  if (!same(top, wt.repo)) return { ok: false, error: `이 팬아웃은 ${wt.repo} 에서 만들었습니다. 지금 탭의 작업 경로(${cwd})는 그 저장소가 아니라 적용하지 않습니다.` };
+  if (!same(top, wt.repo)) return { ok: false, error: `이 팬아웃의 원본 저장소는 ${wt.repo}입니다. 현재 탭의 작업 경로(${cwd})가 다른 저장소여서 결과를 적용하지 않았습니다.` };
   const p = await worktreePatch(env, wt);
   if (!p.ok) return p;
   const a = await applyPatch(env, cwd, p.patch);
@@ -915,7 +915,7 @@ async function fanoutAdopt(tabId: string, fanoutId: string, variantTabId: string
 
 async function fanoutCleanup(tabId: string, fanoutId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const ev = fanoutBlock(tabId, fanoutId);
-  if (!ev) return { ok: false, error: "팬아웃을 찾지 못했습니다." };
+  if (!ev) return { ok: false, error: "팬아웃 기록을 찾지 못했습니다." };
   const env = await cliDiscovery().buildEnv();
   const errors: string[] = [];
   const variants = ev.variants.slice();
@@ -1774,7 +1774,7 @@ function registerIpc() {
       sendAll(IPC.orchChanged, runId);
       // Run 단위 알림: 사람이 봐야 하는 질문/에스컬레이션/탭 소실, 그리고 모든 Task 가 끝났을 때
       if (event.type === "message" && event.message.to === "run" && (event.message.type === "question" || event.message.type === "escalation" || event.message.noteKind === "worker_tab_missing" || event.message.noteKind === "turn_ended_without_report")) {
-        const kind = event.message.type === "question" ? "워커 질문" : event.message.type === "escalation" ? "워커 에스컬레이션" : "확인 필요";
+        const kind = event.message.type === "question" ? "워커의 질문" : event.message.type === "escalation" ? "워커 에스컬레이션" : "확인 필요";
         notifyIfUnfocused(`${kind} · ${state.run.objective.slice(0, 40)}`, event.message.body, state.run.coordinator.kind === "tab" ? state.run.coordinator.tabId : undefined);
       }
       if ((event.type === "dispatch_settled" || event.type === "dispatch_abandoned") && runSettled(state) && !notifiedRuns.has(runId)) {
@@ -2234,7 +2234,7 @@ function registerIpc() {
       if (!r.ok)
         return {
           ok: false,
-          error: `worktree 를 정리하지 못해 세션을 남겼습니다: ${r.error} 세션 헤더의 브랜치 칩에서 커밋하거나 강제 정리하세요.`,
+          error: `worktree를 삭제하지 못해 탭을 남겼습니다: ${r.error} 탭 위의 브랜치 메뉴에서 변경을 확인하고 커밋하거나 worktree를 삭제하세요.`,
         };
     }
     terminals.closePrefix(`${tabId}:`);

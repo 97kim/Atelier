@@ -76,8 +76,8 @@ atelier browser fill --selector "#email" --value "a@b.c"       # React 도 상�
 atelier tab fanout --tab <sel> --prompt "<지시>" --provider claude --provider codex --policy auto_edit --wait --timeout-ms 1800000
 ```
 
-- 변형마다 저장소의 git worktree 와 새 탭이 생겨 서로 파일을 건드리지 않는다. `--wait` 결과의 `result.variants[]` 에 변형별 `status`(done|failed|waiting)·변경 통계(`files`/`added`/`deleted`)·답변 요약이 온다. `waiting` 은 그 탭이 권한 응답을 기다린다는 뜻(사람이 봐야 함).
-- 어느 변형을 채택할지는 사용자가 앱의 비교 화면에서 고른다(패치를 원본에 적용). CLI 는 채택하지 않는다.
+- 세션마다 저장소의 git worktree 와 새 탭이 생겨 서로 파일을 건드리지 않는다. `--wait` 결과의 `result.variants[]` 에 세션별 `status`(done|failed|waiting)·변경 통계(`files`/`added`/`deleted`)·답변 요약이 온다. `waiting` 은 그 탭이 권한 응답을 기다린다는 뜻(사람이 봐야 함).
+- 어느 세션을 채택할지는 사용자가 앱의 비교 화면에서 고른다(패치를 원본에 적용). CLI 는 채택하지 않는다.
 
 ## 오케스트레이션(감독이 필요한 다중 워커)
 

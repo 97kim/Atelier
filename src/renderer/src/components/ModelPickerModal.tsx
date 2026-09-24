@@ -59,7 +59,7 @@ export function ModelPickerModal({
         <div className="flex items-start justify-between border-b border-line px-5 py-4">
           <div>
             <h2 className="text-[15px] font-semibold">모델 바꾸기</h2>
-            <p className="mt-0.5 text-muted">이 세션의 다음 턴부터 적용됩니다. 대화는 그대로 이어집니다.</p>
+            <p className="mt-0.5 text-muted">다음 메시지부터 선택한 모델을 사용합니다. 대화는 그대로 이어집니다.</p>
           </div>
           <button onClick={onClose} className="rounded-md border border-line p-1.5 text-muted hover:text-fg">
             <Icon name="x" size={14} />

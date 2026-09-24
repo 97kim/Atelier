@@ -48,7 +48,7 @@ export async function draftCommitMessage(
     gitDiffFor(cwd, runtime.env, paths),
     gitRecentSubjects(cwd, runtime.env),
   ]);
-  if (!diff.trim()) return { ok: false, error: "고른 파일에 diff 가 없습니다." };
+  if (!diff.trim()) return { ok: false, error: "선택한 파일의 diff가 없습니다. 커밋할 파일을 다시 선택하세요." };
   const { query } = await importClaudeSdk();
   const abort = new AbortController();
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
@@ -76,17 +76,17 @@ export async function draftCommitMessage(
   try {
     for await (const m of q) {
       if (m.type === "result") {
-        if (m.subtype !== "success") return { ok: false, error: `초안 생성 실패 (${m.subtype})` };
+        if (m.subtype !== "success") return { ok: false, error: `커밋 메시지 초안을 받지 못했습니다. 다시 시도하거나 직접 입력하세요. (${m.subtype})` };
         text = m.result;
         // 결과를 받았으면 바로 닫는다 — 프로세스 종료를 기다리면 수십 초가 더 걸린다.
         break;
       }
     }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: `커밋 메시지 초안을 만들지 못했습니다. 다시 시도하거나 직접 입력하세요. 상세: ${e instanceof Error ? e.message : String(e)}` };
   } finally {
     abort.abort();
   }
   const message = cleanDraft(text);
-  return message ? { ok: true, message } : { ok: false, error: "빈 응답" };
+  return message ? { ok: true, message } : { ok: false, error: "커밋 메시지 초안을 받지 못했습니다. 다시 시도하거나 직접 입력하세요." };
 }

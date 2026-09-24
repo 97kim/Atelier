@@ -14,7 +14,7 @@ import { Icon } from "./Icon";
 
 const STATUS_LABEL: Record<RunStatus, string> = {
   pending: "시작하는 중",
-  running: "도는 중",
+  running: "실행 중",
   needs_action: "승인 대기",
   completed: "완료",
   failed: "실패",
@@ -374,7 +374,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-semibold">예약</h1>
-          <p className="mt-1 text-muted">정해진 시각에 프롬프트를 보냅니다. 회차마다 결과가 남습니다.</p>
+          <p className="mt-1 text-muted">정해진 시각에 AI에 메시지를 보내고 실행 결과를 남깁니다.</p>
         </div>
         {!draft && (
           <button
@@ -395,6 +395,14 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
           {error}
         </div>
       )}
+
+      <p className="mb-4 text-[12px] leading-5 text-muted">
+        예약은 Atelier가 실행 중이고 Mac이 깨어 있을 때 동작합니다. 앱 종료나 절전으로 놓친 예약은 설정된 지연 허용 시간 안에 돌아오면 실행을 시도하고, 시간이 지나면 건너뜁니다. 실행 점검 간격에 따른 짧은 여유 시간이 추가됩니다.
+      </p>
+      <p className="mb-4 text-[12px] leading-5 text-muted">
+        격리 세션을 사용하는 예약은 새 실행 전에 기존 worktree 중 최근 3회분을 남기고 오래된 worktree와 탭을 자동 삭제합니다.
+        커밋하지 않은 변경도 삭제되므로 필요한 결과는 미리 보관하세요. 실행 중인 탭은 삭제하지 않습니다.
+      </p>
 
       {draft && (
         <div className="mb-4 rounded-lg border border-accent/40 bg-panel px-4 py-4" data-schedule-form>
@@ -501,7 +509,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
 
           {draft.cwdAuto && (
             <div className="mt-1 text-[11px] text-muted-2" data-f-cwd-auto>
-              이 예약은 <span className="mono text-muted">{draft.cwd}</span> 에서 돕니다 — 최근 실행된 세션의 경로입니다. 다른 경로에서 실행하려면 수정하세요.
+              이 예약은 <span className="mono text-muted">{draft.cwd}</span>에서 실행합니다. 최근에 사용한 작업 경로이므로 예약에 사용할 경로가 맞는지 확인하세요.
             </div>
           )}
 
@@ -515,10 +523,10 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
           />
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <label className="flex cursor-pointer items-center gap-2 text-[12.5px]">
+            <label className="flex cursor-pointer flex-wrap items-center gap-2 text-[12.5px]">
               <input type="checkbox" checked={draft.worktree} onChange={(e) => set({ worktree: e.target.checked })} data-f-worktree />
-              <span>격리 세션에서 돌린다</span>
-              <span className="text-muted-2">작업 폴더를 따로 만듭니다. 원본은 그대로 둡니다.</span>
+              <span>격리 세션에서 실행</span>
+              <span className="text-muted-2">worktree를 만들어 원본과 분리해 작업합니다. 오래된 worktree는 위 안내에 따라 자동 삭제됩니다.</span>
             </label>
             <div className="flex items-center gap-2">
               <button
@@ -543,7 +551,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
           </div>
 
           {draft.policy === "full" && (
-            <p className="mt-2 text-[11.5px] text-warn">사람이 안 보는 사이에 승인 없이 돕니다. 격리 세션과 함께 쓰는 편이 안전합니다.</p>
+            <p className="mt-2 text-[11.5px] text-warn">파일 변경과 명령 실행을 승인 없이 진행합니다. 격리 세션을 사용해도 명령은 이 Mac에서 실행됩니다.</p>
           )}
         </div>
       )}
@@ -572,6 +580,11 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                     </div>
                     <div className="mono mt-1 text-[11px] text-muted">
                       {scheduleLabel(s.cron)} · {s.timezone} · 다음 {when(s.nextRunAt)}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-2">
+                      {s.missedRunGraceMinutes > 0
+                        ? `지연 허용: ${s.missedRunGraceMinutes}분 · 이 시간 안에 돌아오면 놓친 예약의 실행을 시도합니다.`
+                        : "놓친 예약을 기다리는 시간은 0분입니다. 실행 점검에 필요한 짧은 여유 시간만 허용합니다."}
                     </div>
                     <div className="mt-1 truncate text-[12px] text-muted-2" title={s.prompt}>{s.prompt}</div>
                     {last && (

@@ -200,8 +200,8 @@ export class Orchestrator {
   /** 검증이 끝난 이벤트를 영속하고 메모리에 반영한다. 저장 실패면 상태를 바꾸지 않고 던진다. */
   private commit(runId: string, ...events: OrchEvent[]): OrchRunState {
     let s = this.runs.get(runId);
-    if (!s && events[0]?.type !== "run_created") throw new OrchError("Run 이 없습니다.", "not_found");
-    if (this.storageBroken.has(runId)) throw new OrchError("이 Run 의 기록이 손상돼 쓰기를 멈췄습니다. 앱을 재시작하면 정상 경계까지 복구합니다.", "storage_failed");
+    if (!s && events[0]?.type !== "run_created") throw new OrchError("Run을 찾지 못했습니다.", "not_found");
+    if (this.storageBroken.has(runId)) throw new OrchError("Run 기록이 손상되어 추가 기록을 멈췄습니다. 앱을 다시 시작하면 정상적으로 저장된 부분까지 복구합니다.", "storage_failed");
     const lines = events.map((e) => JSON.stringify(e)).join("\n") + "\n";
     const file = this.file(runId);
     let before = 0;
@@ -246,7 +246,7 @@ export class Orchestrator {
 
   get(runId: string): OrchRunState {
     const s = this.runs.get(runId);
-    if (!s) throw new OrchError(`Run 을 찾지 못했습니다: ${runId}`, "not_found");
+    if (!s) throw new OrchError(`Run 기록을 찾지 못했습니다: ${runId}`, "not_found");
     return s;
   }
 
@@ -264,7 +264,7 @@ export class Orchestrator {
   private requireDispatch(s: OrchRunState, dispatchId: string | undefined, capability: string | undefined): OrchDispatch {
     if (!dispatchId) throw new OrchError("--dispatch 가 필요합니다.", "bad_request");
     const d = s.dispatches.find((x) => x.id === dispatchId);
-    if (!d) throw new OrchError(`Dispatch 를 찾지 못했습니다: ${dispatchId}`, "not_found");
+    if (!d) throw new OrchError(`Dispatch를 찾지 못했습니다: ${dispatchId}`, "not_found");
     if (!capability || capability !== d.capability) throw new OrchError("capability 가 이 Dispatch 의 것이 아닙니다(이전 세대이거나 잘못된 값).", "consumer_fenced", { dispatchId });
     return d;
   }
@@ -333,10 +333,10 @@ export class Orchestrator {
     const choice = o.resolution.trim();
     if (g.resolution) {
       if (g.resolution.choice === choice) return g;
-      throw new OrchError(`이미 "${g.resolution.choice}" 로 결정된 게이트입니다.`, "conflict");
+      throw new OrchError(`이미 "${g.resolution.choice}"(으)로 결정된 게이트입니다.`, "conflict");
     }
     if (!g.options.includes(choice)) throw new OrchError(`선택지에 없는 값입니다: ${choice} (가능: ${g.options.join(", ")})`, "bad_request");
-    this.commit(s.run.id, { type: "gate_resolved", ts: this.now(), gateId: g.id, resolution: { choice, by: o.actor, at: this.now() } }, this.appNote(s.run.id, "gate_resolved", `게이트 "${g.question}" 가 "${choice}" 로 결정됐습니다. Task ${g.taskId} 를 시작할 수 있습니다.`, g.taskId));
+    this.commit(s.run.id, { type: "gate_resolved", ts: this.now(), gateId: g.id, resolution: { choice, by: o.actor, at: this.now() } }, this.appNote(s.run.id, "gate_resolved", `게이트 "${g.question}"에 대해 "${choice}"(으)로 결정했습니다. Task ${g.taskId}의 나머지 실행 조건도 확인해 주세요.`, g.taskId));
     return this.get(o.runId).gates.find((x) => x.id === g.id)!;
   }
 
@@ -354,17 +354,17 @@ export class Orchestrator {
     const s = this.get(o.runId);
     this.requireCoordinator(s, o.key, o.actor);
     const d = s.dispatches.find((x) => x.id === o.dispatchId);
-    if (!d) throw new OrchError(`Dispatch 를 찾지 못했습니다: ${o.dispatchId}`, "not_found");
-    if (isOpenDispatch(d)) throw new OrchError("아직 감독 중인 시도는 정리할 수 없습니다(먼저 정산·abandon).", "not_settled");
-    if (d.ownership === "retained") throw new OrchError("사용자가 보존(retain)한 시도입니다. 먼저 release 한 뒤 정리하세요.", "retained");
+    if (!d) throw new OrchError(`Dispatch를 찾지 못했습니다: ${o.dispatchId}`, "not_found");
+    if (isOpenDispatch(d)) throw new OrchError("진행 중인 Dispatch의 worktree와 탭은 삭제할 수 없습니다. 결과 보고와 실행 종료를 기다리거나, 작업을 중단한 뒤 포기하세요.", "not_settled");
+    if (d.ownership === "retained") throw new OrchError("삭제 방지된 작업입니다. 먼저 관리 해제(release)를 한 뒤 삭제하세요.", "retained");
     if (d.cleaned) return this.workerShow(o.runId, o.dispatchId);
-    if (!d.tabId) throw new OrchError("이 시도는 탭이 없습니다(시작 중 취소). 탭이 나중에 생기면 다시 정리할 수 있습니다.", "nothing_to_clean");
-    if (this.isSupervisedTab(d.tabId)) throw new OrchError("그 탭은 (다른 Run 을 포함해) 다른 시도가 다시 쓰고 있습니다.", "conflict");
+    if (!d.tabId) throw new OrchError("이 작업의 탭이 아직 없거나 생성되지 않았습니다. 나중에 탭이 생성되면 다시 삭제할 수 있습니다.", "nothing_to_clean");
+    if (this.isSupervisedTab(d.tabId)) throw new OrchError("다른 작업이 이 탭을 사용하고 있어 닫을 수 없습니다.", "conflict");
     if (d.worktree) {
       const others = this.deps.tabsUsingCwd(d.worktree.path, d.tabId);
-      if (others.length) throw new OrchError(`다른 탭 ${others.length}개가 이 worktree 를 작업 경로로 쓰고 있습니다. 그 탭을 먼저 옮기거나 닫으세요.`, "worktree_in_use", { tabs: others });
+      if (others.length) throw new OrchError(`다른 탭 ${others.length}개가 이 worktree를 사용하고 있습니다. 해당 탭의 작업 경로를 바꾸거나 탭을 닫은 뒤 삭제하세요.`, "worktree_in_use", { tabs: others });
     }
-    if (this.cleaning.has(d.tabId)) throw new OrchError("이미 정리 중입니다.", "conflict");
+    if (this.cleaning.has(d.tabId)) throw new OrchError("이미 worktree 삭제와 탭 닫기를 처리 중입니다.", "conflict");
     this.cleaning.add(d.tabId);
     try {
       const snap = this.deps.snapshot(d.tabId);
@@ -471,7 +471,7 @@ export class Orchestrator {
       throw new OrchError("시작 중에 취소되었습니다(abandon 또는 Run 종료).", "cancelled", { dispatchId: dispatch.id, residualResources: made.ok ? { tabId: made.tabId, worktree: made.worktree?.path } : undefined });
     }
     if (!made.ok) {
-      this.commit(s.run.id, { type: "dispatch_stage", ts: this.now(), dispatchId: dispatch.id, stage: "failed", error: made.error }, this.appNote(s.run.id, "start_failed", `워커 시작 실패 (${made.stage}): ${made.error}`, task.id, dispatch.id));
+      this.commit(s.run.id, { type: "dispatch_stage", ts: this.now(), dispatchId: dispatch.id, stage: "failed", error: made.error }, this.appNote(s.run.id, "start_failed", `워커를 시작하지 못했습니다. 진행 단계: ${made.stage}. ${made.error}`, task.id, dispatch.id));
       throw new OrchError(made.error, "start_failed", { failedStage: made.stage, dispatchId: dispatch.id, stages });
     }
     stages.push("configured");
@@ -483,7 +483,7 @@ export class Orchestrator {
     const sent = await this.deps.send(made.tabId, prompt);
     if (!stillStarting()) throw new OrchError("시작 중에 취소되었습니다(abandon 또는 Run 종료). 워커 탭에 이미 프롬프트가 갔을 수 있습니다.", "cancelled", { dispatchId: withTab.id, residualResources: { tabId: made.tabId, worktree: made.worktree?.path } });
     if (!sent.ok) {
-      this.commit(s.run.id, { type: "dispatch_stage", ts: this.now(), dispatchId: withTab.id, stage: "failed", error: sent.error }, this.appNote(s.run.id, "start_failed", `프롬프트 전송 실패: ${sent.error}`, task.id, withTab.id));
+      this.commit(s.run.id, { type: "dispatch_stage", ts: this.now(), dispatchId: withTab.id, stage: "failed", error: sent.error }, this.appNote(s.run.id, "start_failed", `요청을 보내지 못했습니다: ${sent.error}`, task.id, withTab.id));
       throw new OrchError(sent.error, "start_failed", { failedStage: "queued", dispatchId: withTab.id, stages, residualResources: { tabId: made.tabId, worktree: made.worktree?.path } });
     }
     stages.push(sent.queued || sent.pending ? "queued" : "started");
@@ -533,7 +533,7 @@ export class Orchestrator {
       const target = (o.to ?? "").replace(/^dispatch:/, "") || o.dispatchId;
       const d = s.dispatches.find((x) => x.id === target);
       if (!d) throw new OrchError("--to dispatch:<id> 가 필요합니다.", "bad_request");
-      if (d.status !== "live") throw new OrchError("정산된 Dispatch 에는 후속 지시를 보낼 수 없습니다. 새 Dispatch 를 시작하세요.", "already_settled");
+      if (d.status !== "live") throw new OrchError("현재 Dispatch 상태에서는 추가 지시를 보낼 수 없습니다. 실행이 시작됐는지 또는 종료됐는지 확인하세요.", "already_settled");
       const m = this.mk(s, o.actor, `dispatch:${d.id}`, "followup", o.subject ?? "Follow-up", o.body ?? "", d.taskId, d.id);
       this.commit(s.run.id, { type: "message", ts: m.ts, message: m });
       return { message: m };
@@ -733,7 +733,7 @@ export class Orchestrator {
   workerShow(runId: string, dispatchId: string): Record<string, unknown> {
     const s = this.get(runId);
     const d = s.dispatches.find((x) => x.id === dispatchId);
-    if (!d) throw new OrchError(`Dispatch 를 찾지 못했습니다: ${dispatchId}`, "not_found");
+    if (!d) throw new OrchError(`Dispatch를 찾지 못했습니다: ${dispatchId}`, "not_found");
     return this.workerView(s, d);
   }
 
@@ -765,29 +765,29 @@ export class Orchestrator {
     const s = this.get(o.runId);
     this.requireCoordinator(s, o.key, o.actor);
     const d = s.dispatches.find((x) => x.id === o.dispatchId);
-    if (!d) throw new OrchError(`Dispatch 를 찾지 못했습니다: ${o.dispatchId}`, "not_found");
+    if (!d) throw new OrchError(`Dispatch를 찾지 못했습니다: ${o.dispatchId}`, "not_found");
     const settled = d.status === "settled" || d.status === "abandoned" || d.status === "failed_to_start";
     switch (o.action) {
       case "retain":
-        if (!settled) throw new OrchError("정산된 Dispatch 만 보존할 수 있습니다.", "not_settled");
+        if (!settled) throw new OrchError("결과 보고와 실행 종료가 확인되었거나, 포기 또는 시작 실패한 작업만 삭제 방지할 수 있습니다.", "not_settled");
         this.commit(s.run.id, { type: "dispatch_ownership", ts: this.now(), dispatchId: d.id, ownership: "retained" });
         break;
       case "release":
-        if (!settled) throw new OrchError("정산되지 않은 Dispatch 는 해제할 수 없습니다(먼저 보고를 받거나 abandon).", "not_settled");
+        if (!settled) throw new OrchError("진행 중인 작업은 관리를 해제할 수 없습니다. 결과 보고와 실행 종료를 기다리거나, 작업을 중단한 뒤 포기하세요.", "not_settled");
         this.commit(s.run.id, { type: "dispatch_ownership", ts: this.now(), dispatchId: d.id, ownership: "released" });
         break;
       case "stop":
-        if (d.status !== "live" && d.status !== "reported") throw new OrchError("실행 중이 아닌 Dispatch 입니다.", "not_live");
-        this.commit(s.run.id, { type: "dispatch_stop_requested", ts: this.now(), dispatchId: d.id }, this.appNote(s.run.id, "stop_requested", "코디네이터가 중단을 요청했습니다. 실행이 멎으면 정산 또는 abandon 으로 닫습니다.", d.taskId, d.id));
+        if (d.status !== "live" && d.status !== "reported") throw new OrchError("현재 실행 중인 작업이 아니어서 중단할 수 없습니다.", "not_live");
+        this.commit(s.run.id, { type: "dispatch_stop_requested", ts: this.now(), dispatchId: d.id }, this.appNote(s.run.id, "stop_requested", "작업 중단을 요청했습니다. 실행이 종료되면 보고된 결과를 반영합니다. 결과 보고가 없다면 상태를 확인한 뒤 포기할 수 있습니다.", d.taskId, d.id));
         if (d.tabId) this.deps.abort(d.tabId);
         break;
       case "abandon": {
-        if (settled) throw new OrchError("이미 정산된 Dispatch 입니다.", "already_settled");
+        if (settled) throw new OrchError("이미 종료 처리된 작업입니다.", "already_settled");
         const snap = d.tabId ? this.deps.snapshot(d.tabId) : null;
         const busy = snap && (snap.status === "running" || snap.status === "queued" || snap.status === "waiting_permission" || snap.limitWait);
-        if (busy) throw new OrchError("워커가 아직 실행 중입니다. 먼저 stop 하고 멎은 뒤 abandon 하세요.", "still_live");
-        if (d.report) throw new OrchError("보고가 있는 Dispatch 는 abandon 이 아니라 정산 대상입니다.", "conflict");
-        this.commit(s.run.id, { type: "dispatch_abandoned", ts: this.now(), dispatchId: d.id, reason: o.reason ?? "코디네이터가 포기" }, this.appNote(s.run.id, "abandoned", `Dispatch ${d.id} 를 abandon 했습니다${o.reason ? `: ${o.reason}` : ""}.`, d.taskId, d.id));
+        if (busy) throw new OrchError("워커가 아직 실행 중입니다. 먼저 중단하고, 실행이 멈춘 뒤 포기하세요.", "still_live");
+        if (d.report) throw new OrchError("이미 결과가 보고된 작업입니다. 포기할 수 없으며, 실행 종료를 확인하면 결과가 반영됩니다.", "conflict");
+        this.commit(s.run.id, { type: "dispatch_abandoned", ts: this.now(), dispatchId: d.id, reason: o.reason ?? "코디네이터가 포기" }, this.appNote(s.run.id, "abandoned", `Dispatch ${d.id}를 포기했습니다${o.reason ? `: ${o.reason}` : ""}.`, d.taskId, d.id));
         break;
       }
     }
@@ -798,14 +798,14 @@ export class Orchestrator {
   takeover(runId: string): OrchRun {
     const s = this.get(runId);
     const coordinator: OrchRun["coordinator"] = { kind: "user", epoch: s.run.coordinator.epoch + 1, key: randomUUID() };
-    this.commit(runId, { type: "coordinator_changed", ts: this.now(), coordinator }, this.appNote(runId, "coordinator_changed", "사람이 코디네이터를 인수했습니다. 이전 코디네이터 키는 더 이상 유효하지 않습니다."));
+    this.commit(runId, { type: "coordinator_changed", ts: this.now(), coordinator }, this.appNote(runId, "coordinator_changed", "사람 코디네이터가 작업을 인수했습니다. 이전 코디네이터의 접근 키는 더 이상 사용할 수 없습니다."));
     return this.get(runId).run;
   }
 
   close(runId: string, actor: OrchActor, key?: string): OrchRun {
     const s = this.get(runId);
     this.requireCoordinator(s, key, actor);
-    if (s.dispatches.some(isOpenDispatch)) throw new OrchError("아직 감독 중인 워커가 있습니다(실행 중이거나 정산 대기). 먼저 정리하세요.", "still_live");
+    if (s.dispatches.some(isOpenDispatch)) throw new OrchError("진행 중이거나 실행 종료를 확인 중인 워커가 있습니다. 모든 Dispatch가 종료된 뒤 Run을 닫을 수 있습니다.", "still_live");
     if (s.run.status === "active") this.commit(runId, { type: "run_closed", ts: this.now() });
     return this.get(runId).run;
   }
@@ -839,7 +839,7 @@ export class Orchestrator {
           }
           if (!this.missingNoted.has(d.id)) {
             this.missingNoted.add(d.id);
-            this.commit(s.run.id, ...(cur0.execution.state !== "unknown" ? [{ type: "dispatch_execution", ts: this.now(), dispatchId: d.id, state: "unknown" } as OrchEvent] : []), this.appNote(s.run.id, "worker_tab_missing", "워커 탭을 찾을 수 없습니다(닫혔거나 삭제됨). 실행 상태를 알 수 없으니 확인 뒤 abandon 하세요.", d.taskId, d.id));
+            this.commit(s.run.id, ...(cur0.execution.state !== "unknown" ? [{ type: "dispatch_execution", ts: this.now(), dispatchId: d.id, state: "unknown" } as OrchEvent] : []), this.appNote(s.run.id, "worker_tab_missing", "워커의 탭을 찾을 수 없어 실행 상태를 확인하지 못했습니다. 작업 상태를 확인한 뒤 포기 여부를 결정하세요.", d.taskId, d.id));
           }
           continue;
         }
@@ -850,7 +850,7 @@ export class Orchestrator {
         // 권한 대기: 사람이 봐야 한다(한 번만)
         if (state === "waiting_permission" && !this.permissionNoted.has(d.id)) {
           this.permissionNoted.add(d.id);
-          this.commit(s.run.id, this.appNote(s.run.id, "permission_pending", "워커 탭이 권한 승인을 기다리고 있습니다. 탭에서 답해 주세요.", d.taskId, d.id));
+          this.commit(s.run.id, this.appNote(s.run.id, "permission_pending", "워커가 작업 승인을 기다리고 있습니다. 해당 탭에서 요청을 확인해 주세요.", d.taskId, d.id));
         } else if (state !== "waiting_permission") this.permissionNoted.delete(d.id);
         const busy = state === "running" || state === "queued" || state === "waiting_permission" || state === "limit_wait" || state === "waiting_reply";
         if (busy) continue;
@@ -864,7 +864,7 @@ export class Orchestrator {
         // 시작 시점의 이벤트 수를 모르면(옛 기록) 턴 종료를 단정하지 않는다 — 통지 대신 그대로 관측만
         const turned = since !== undefined ? snap.turnedSince(since) : false;
         if (turned && !cur.reportMissingNotified)
-          this.commit(s.run.id, { type: "dispatch_report_missing", ts: this.now(), dispatchId: d.id }, this.appNote(s.run.id, "turn_ended_without_report", "워커 턴이 완료 보고(worker_done) 없이 끝났습니다. 탭을 확인하고 후속 지시를 보내거나 abandon 하세요.", d.taskId, d.id));
+          this.commit(s.run.id, { type: "dispatch_report_missing", ts: this.now(), dispatchId: d.id }, this.appNote(s.run.id, "turn_ended_without_report", "워커의 응답이 끝났지만 결과 보고가 없습니다. 해당 탭을 확인하고 추가 지시를 보내거나 작업을 포기하세요.", d.taskId, d.id));
       }
     }
   }
@@ -886,7 +886,7 @@ export class Orchestrator {
       tasks: s.tasks.map((t) => {
         const d = s.dispatches.find((x) => x.id === (t.activeDispatchId ?? t.outcome?.dispatchId));
         const b = taskBlockers(s, t);
-        const blocked = t.status === "pending" ? (b.unmetDeps.length ? `의존 ${b.unmetDeps.map((id) => s.tasks.find((x) => x.id === id)?.seq ?? "?").join(",")} 대기` : b.pendingGates.length ? "게이트 대기" : null) : null;
+        const blocked = t.status === "pending" ? (b.unmetDeps.length ? `선행 Task ${b.unmetDeps.map((id) => s.tasks.find((x) => x.id === id)?.seq ?? "?").join(",")} 대기` : b.pendingGates.length ? "게이트 결정 대기" : null) : null;
         return { id: t.id, seq: t.seq, spec: t.spec.split("\n")[0].slice(0, 80), status: t.status, tabId: d?.tabId ?? null, provider: d?.provider ?? null, execution: d?.execution.state ?? null, summary: t.outcome?.summary?.slice(0, 200) ?? null, blocked };
       }),
       gates: s.gates.filter((g) => !g.resolution).length,

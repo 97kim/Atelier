@@ -1,4 +1,4 @@
-// 팬아웃 카드 — 변형별 진행 상태·변경 통계·답변 요약. 끝나면 "비교" 로 diff 를 나란히 보고 채택, "정리" 로 worktree 와 탭을 지운다.
+// 팬아웃 카드 — 세션별 진행 상태·변경 통계·답변 요약. 끝나면 "비교" 로 diff 를 나란히 보고 채택, "정리" 로 worktree 와 탭을 지운다.
 import { useEffect, useState } from "react";
 import type { FanoutVariant } from "@shared/chat-events";
 import type { FanoutBlock } from "@shared/session-state";
@@ -19,7 +19,7 @@ function VariantStatus({ v }: { v: FanoutVariant }) {
     );
   if (v.status === "waiting") return <span className="label text-warn">응답 필요</span>;
   if (v.status === "failed") return <span className="label text-err">실패</span>;
-  if (v.status === "cleaned") return <span className="label text-muted-2">정리됨</span>;
+  if (v.status === "cleaned") return <span className="label text-muted-2">비교 종료</span>;
   return <span className="label text-ok">완료</span>;
 }
 
@@ -46,9 +46,9 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
   const canCompare = block.variants.some((v) => v.status === "done" || v.status === "failed");
   return (
     <div className="content-indent rounded-lg border border-line bg-panel" data-fanout-card={block.id} data-fanout-status={block.status}>
-      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
         <Icon name="sparkles" size={13} className="shrink-0 text-accent" />
-        <span className="font-medium">팬아웃</span>
+        <span className="shrink-0 font-medium">팬아웃</span>
         <span className="text-[11px] text-muted" data-fanout-summary>
           {fanoutSummary(block.variants)}
         </span>
@@ -63,7 +63,7 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
           onClick={() => onCompare(block.id)}
           disabled={!canCompare || block.status === "cleaned"}
           className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-          title="변형별 변경을 나란히 보고 하나를 채택합니다"
+          title="세션별 diff를 나란히 보고 원본에 적용할 결과를 고릅니다"
           data-fanout-compare
         >
           비교
@@ -73,10 +73,10 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
             onClick={() => setConfirmClean(true)}
             disabled={busy}
             className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-            title="변형 worktree 를 모두 지우고 탭을 닫습니다"
+            title="세션의 worktree를 모두 삭제하고 탭을 닫습니다"
             data-fanout-cleanup
           >
-            정리
+            worktree 삭제
           </button>
         )}
       </div>
@@ -106,7 +106,7 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
                   <button
                     onClick={() => void window.workbench.workspaces.activateTab(v.tabId)}
                     className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg"
-                    title="이 변형의 탭으로"
+                    title="이 세션의 탭 열기"
                     data-fanout-open
                   >
                     탭
@@ -125,9 +125,9 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
       </div>
       {confirmClean && (
         <div className="flex items-center gap-2 border-t border-err/30 bg-err-bg px-3 py-2 text-[11.5px] text-err" data-fanout-cleanup-confirm>
-          <span className="flex-1">변형 worktree 를 모두 지웁니다(커밋 안 된 변경 포함). 채택하지 않은 변경은 사라집니다.</span>
+          <span className="flex-1">모든 세션의 worktree와 탭을 삭제합니다. 커밋하지 않은 변경도 삭제됩니다. 필요한 결과를 먼저 원본에 적용하거나 따로 보관하세요.</span>
           <button onClick={() => void cleanup()} disabled={busy} className="rounded border border-err/40 px-2 py-0.5 hover:bg-err/10" data-fanout-cleanup-yes>
-            {busy ? "정리 중…" : "지우기"}
+            {busy ? "삭제 중…" : "worktree 삭제"}
           </button>
           <button onClick={() => setConfirmClean(false)} className="rounded px-1.5 py-0.5 hover:bg-err/10">
             취소

@@ -234,7 +234,7 @@ export function TerminalPanel({
                   closeTab(t.id);
                 }}
                 className="rounded p-0.5 text-muted opacity-0 hover:bg-panel-2 hover:text-err group-hover:opacity-100"
-                title={t.kind === "command" ? "CLI 종료" : "셸 종료"}
+                title={t.kind === "command" ? "터미널 CLI 종료" : "셸 종료"}
               >
                 <Icon name="x" size={10} />
               </button>
@@ -534,7 +534,7 @@ function TerminalView({
         >
           {error
             ? `${error} · 클릭해서 다시 시도`
-            : `${kind === "command" ? "CLI 가" : "셸이"} 종료되었습니다${exit !== null && exit >= 0 ? ` (code ${exit})` : ""} · 클릭하면 셸을 시작합니다`}
+            : `${kind === "command" ? "CLI가" : "셸이"} 종료되었습니다${exit !== null && exit >= 0 ? ` (종료 코드 ${exit})` : ""} · 클릭하면 셸을 시작합니다`}
         </button>
       )}
     </div>

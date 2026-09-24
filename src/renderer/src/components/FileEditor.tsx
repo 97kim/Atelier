@@ -256,11 +256,11 @@ export function FileEditor({
           <button
             onClick={() => void openInBrowser()}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg"
-            title="인앱 브라우저 탭에서 이 파일을 렌더해 봅니다. 저장하면 그 탭이 새로고침됩니다."
+            title="인앱 브라우저에서 이 HTML 파일을 미리 봅니다. 파일을 저장하면 미리보기도 갱신됩니다."
             data-open-in-browser
           >
             <Icon name="globe" size={11} />
-            브라우저에서 보기
+            인앱 브라우저에서 보기
           </button>
         )}
         {previewError && (
@@ -290,10 +290,10 @@ export function FileEditor({
         </button>
       </div>
       {conflict && (
-        <div className="flex items-center gap-2 border-b border-err/40 bg-err-bg px-3 py-1.5 text-[11.5px] text-err" data-conflict>
+        <div className="flex flex-wrap items-center gap-2 border-b border-err/40 bg-err-bg px-3 py-1.5 text-[11.5px] text-err" data-conflict>
           <Icon name="alert" size={12} />
-          <span className="flex-1">파일이 밖에서 바뀌었습니다(에이전트가 고쳤을 수 있습니다).</span>
-          <button onClick={() => void save(true)} className="rounded border border-err/40 px-2 py-0.5 hover:bg-err/10" data-conflict-overwrite>
+          <span className="min-w-0 basis-[calc(100%-24px)]">다른 앱이나 AI가 이 파일을 변경했습니다. 내 편집을 저장할지, 변경된 파일을 다시 읽을지 선택하세요.</span>
+          <button onClick={() => void save(true)} className="shrink-0 rounded border border-err/40 px-2 py-0.5 hover:bg-err/10" data-conflict-overwrite>
             내 내용으로 덮어쓰기
           </button>
           <button
@@ -302,10 +302,10 @@ export function FileEditor({
               setEditorDraft(path, null); // "디스크 내용으로" 는 내 편집을 버리는 것 — 되살리지 않는다
               setReloadKey((k) => k + 1);
             }}
-            className="rounded border border-err/40 px-2 py-0.5 hover:bg-err/10"
+            className="shrink-0 rounded border border-err/40 px-2 py-0.5 hover:bg-err/10"
             data-conflict-reload
           >
-            디스크 내용으로 다시 읽기
+            {dirty ? "내 편집을 버리고 다시 읽기" : "변경된 파일 다시 읽기"}
           </button>
         </div>
       )}
@@ -320,7 +320,7 @@ export function FileEditor({
           <div className="flex h-full flex-col">
             {file.missing && (
               <div className="border-b border-line px-3 py-1.5 text-[11px] text-muted">
-                작업 트리에서 삭제된 파일입니다. HEAD 버전을 보여줍니다 — 저장하면 다시 만들어집니다.
+                삭제된 파일입니다. 마지막 커밋의 내용을 보여주며, 저장하면 파일이 다시 만들어집니다.
               </div>
             )}
             {isMarkdown && mdView === "preview" && (

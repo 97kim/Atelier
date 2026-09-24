@@ -8,25 +8,28 @@ import { contextUsage, type SessionState } from "@shared/session-state";
 import { useOpenFile } from "./FileViewer";
 import { Icon } from "./Icon";
 
-const POLICIES: { id: PermissionPolicy; label: string; codexLabel: string; help: string }[] =
+const POLICIES: { id: PermissionPolicy; label: string; codexLabel: string; help: string; codexHelp: string }[] =
   [
     {
       id: "ask",
       label: "변경 전 물어보기",
-      codexLabel: "읽기 전용 (Codex 는 승인 대화 없음)",
-      help: "쓰기·실행 시 승인을 요청합니다. 승인 대기 중엔 알림이 옵니다.",
+      codexLabel: "읽기 전용 · 필요 시 승인",
+      help: "파일 변경이나 명령 실행에 승인이 필요하면 이 화면에서 물어봅니다.",
+      codexHelp: "기본적으로 파일을 읽기만 합니다. Codex가 추가 권한을 요청하면 이 화면에서 승인할 수 있습니다.",
     },
     {
       id: "auto_edit",
       label: "편집 자동 승인",
-      codexLabel: "작업 디렉토리 쓰기 허용",
-      help: "파일 편집은 묻지 않고, 명령 실행 등은 승인을 요청합니다.",
+      codexLabel: "작업 경로 내 파일 편집 허용",
+      help: "파일 편집은 자동으로 허용합니다. 추가 승인이 필요한 명령은 실행 전에 물어봅니다.",
+      codexHelp: "작업 경로 안의 파일 변경과 네트워크 접근을 허용합니다. Codex가 추가 권한을 요청하면 승인을 물어봅니다.",
     },
     {
       id: "full",
       label: "전부 자동 (주의)",
       codexLabel: "전체 접근 (주의)",
-      help: "승인 없이 실행합니다. 모델이 선택지를 물을 때(AskUserQuestion)만 답을 기다립니다.",
+      help: "파일 변경과 명령 실행을 승인 없이 진행합니다. AI가 작업에 필요한 질문을 하면 답을 기다립니다.",
+      codexHelp: "파일 변경과 명령 실행을 승인 없이 진행하며, 작업 경로 밖에도 접근할 수 있습니다.",
     },
   ];
 
@@ -89,7 +92,7 @@ export function ContextPanel({
               )}
             </>
           ) : (
-            <p className="text-muted">작업 디렉토리를 선택하세요.</p>
+            <p className="text-muted">작업 경로를 선택하세요.</p>
           )}
         </Section>
 
@@ -114,7 +117,7 @@ export function ContextPanel({
                   <button
                     onClick={() => setReviewOpen(true)}
                     className="flex items-center gap-1 rounded px-1 text-accent hover:bg-panel-2"
-                    title="파일별 diff 를 보며 되돌리기·커밋"
+                    title="파일별 diff를 확인하고, 변경을 버리거나 커밋합니다"
                     data-review-open
                   >
                     <Icon name="branch" size={10} />
@@ -205,7 +208,7 @@ export function ContextPanel({
                     onClick={() => void draft()}
                     disabled={busy !== null || selectedPaths.length === 0}
                     className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-                    title="고른 파일의 diff 로 Claude(haiku) 에게 커밋 메시지 초안을 받습니다"
+                    title="선택한 파일의 diff를 Claude에 보내 커밋 메시지 초안을 만듭니다"
                     data-git-draft
                   >
                     <Icon name="sparkles" size={11} />
@@ -222,7 +225,7 @@ export function ContextPanel({
                     className="ml-auto flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40"
                     title={
                       !idle
-                        ? "턴이 실행 중일 때는 커밋하지 않습니다"
+                        ? "AI가 작업 중일 때는 커밋할 수 없습니다"
                         : "고른 파일만 커밋합니다 (파일의 작업 트리 내용 전체가 들어갑니다)"
                     }
                     data-git-commit-button
@@ -277,13 +280,14 @@ export function ContextPanel({
                 <Dot color="bg-ok" label={`출력 ${fmt(last.usage.output)}`} />
               </div>
               <p className="mt-2 text-[10px] text-muted">
-                마지막 턴 기준. 누적 {state.totals.turns}턴 · $
-                {state.totals.costUsd.toFixed(3)}
-                {isCodex && " (Codex 비용은 Phase 4 가격표 반영 예정)"}
+                마지막 응답 기준 · 총 {state.totals.turns}회 응답
+                {isCodex
+                  ? " · 이 대화의 Codex 비용은 집계하지 않습니다. 추정 비용은 사용량 화면에서 확인하세요."
+                  : ` · 누적 비용 $${state.totals.costUsd.toFixed(3)}`}
               </p>
             </>
           ) : (
-            <p className="text-muted">아직 턴이 없습니다.</p>
+            <p className="text-muted">첫 응답을 받은 뒤 표시됩니다.</p>
           )}
         </Section>
 
@@ -317,9 +321,10 @@ export function ContextPanel({
             })}
           </div>
           <p className="mt-2 text-[10px] text-muted">
-            {isCodex
-              ? "Codex SDK 는 승인을 물어볼 수 없어 샌드박스 단계로 대응합니다."
-              : (POLICIES.find((p) => p.id === (config?.policy ?? "ask"))?.help ?? "")}
+            {(() => {
+              const policy = POLICIES.find((p) => p.id === (config?.policy ?? "ask"));
+              return isCodex ? policy?.codexHelp : policy?.help;
+            })()}
           </p>
         </Section>
       </div>

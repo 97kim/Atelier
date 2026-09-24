@@ -416,7 +416,7 @@ export function runSummary(s: OrchRunState): string {
   const gates = s.gates.filter((g) => !g.resolution).length;
   const parts = [`${done}/${s.tasks.length} 완료`];
   if (running) parts.push(`${running} 진행`);
-  if (gates) parts.push(`${gates} 게이트`);
+  if (gates) parts.push(`게이트 결정 대기 ${gates}개`);
   if (failed) parts.push(`${failed} 실패`);
   if (a.questions.length) parts.push(`${a.questions.length} 질문`);
   return parts.join(" · ");

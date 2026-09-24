@@ -16,7 +16,7 @@ test("fanoutSummary / allSettled", () => {
   const v = (status: "running" | "waiting" | "done" | "failed" | "cleaned") => ({ tabId: "t", label: "A", provider: "claude" as const, status });
   assert.equal(fanoutSummary([v("done"), v("running"), v("waiting")]), "1/3 완료 · 1 응답 필요");
   assert.equal(fanoutSummary([v("done"), v("failed")]), "1/2 완료 · 1 실패");
-  assert.equal(fanoutSummary([v("cleaned"), v("cleaned")]), "정리됨");
+  assert.equal(fanoutSummary([v("cleaned"), v("cleaned")]), "비교 종료");
   assert.equal(allSettled([v("done"), v("failed")]), true);
   assert.equal(allSettled([v("done"), v("waiting")]), false);
 });

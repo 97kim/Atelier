@@ -71,7 +71,7 @@ export function ProviderSwitchModal({
         <div className="flex items-start justify-between border-b border-line px-6 py-5">
           <div>
             <h2 className="text-[17px] font-semibold">코딩 에이전트 전환</h2>
-            <p className="mt-1 text-muted">이 세션을 다른 CLI 로 이어서 진행합니다.</p>
+            <p className="mt-1 text-muted">작업을 이어갈 CLI를 바꿉니다. 이전 대화의 요약을 함께 전달할 수 있습니다.</p>
           </div>
           <button onClick={onClose} className="rounded-md border border-line p-1.5 text-muted hover:text-fg">
             <Icon name="x" size={14} />
@@ -108,7 +108,7 @@ export function ProviderSwitchModal({
                         <span className="font-medium">{LABEL[p]}</span>
                         {isCurrent && <span className="label rounded bg-line px-1.5 py-0.5">현재</span>}
                         {!isCurrent && s?.installed && <span className="label rounded bg-ok-bg px-1.5 py-0.5 text-ok">준비됨</span>}
-                        {s && !s.installed && <span className="label rounded bg-err-bg px-1.5 py-0.5 text-err">미설치</span>}
+                        {s && !s.installed && <span className="label rounded bg-err-bg px-1.5 py-0.5 text-err" title={s.error}>미설치</span>}
                       </span>
                       <span className="mono mt-0.5 block truncate text-muted" title={s?.path ?? ""}>
                         {s?.version ?? (s ? "" : "확인 중…")}
@@ -130,7 +130,7 @@ export function ProviderSwitchModal({
               <div className="flex items-center justify-between border-b border-line px-4 py-3">
                 <div>
                   <div className="font-medium">모델</div>
-                  <div className="text-muted">전환 후 새 턴에 사용</div>
+                  <div className="text-muted">전환 후 보낼 메시지부터 사용합니다.</div>
                 </div>
                 <select
                   value={model}
@@ -150,7 +150,7 @@ export function ProviderSwitchModal({
                 <div>
                   <div className="font-medium">대화 요약을 첫 메시지로 전달</div>
                   <div className="text-muted">
-                    새 CLI 는 이전 세션을 직접 이어받지 못하므로 요약을 만들어 함께 보냅니다
+                    전환할 AI는 이전 대화를 직접 볼 수 없어, 요약을 다음 메시지와 함께 전달합니다.
                   </div>
                 </div>
                 <Toggle value={preserve} onChange={setPreserve} />
@@ -158,9 +158,9 @@ export function ProviderSwitchModal({
               {preserve && (
                 <div className="flex items-center justify-between border-t border-line px-4 py-3">
                   <div>
-                    <div className="font-medium">떠나는 쪽이 인계서를 직접 쓰게 한다</div>
+                    <div className="font-medium">현재 AI가 작업 내용을 요약</div>
                     <div className="text-muted">
-                      무엇이 중요했는지 아는 쪽이 씁니다. 턴 하나를 더 돌리므로 잠시 걸립니다
+                      현재 AI에 요약을 요청합니다. 응답을 한 번 더 생성하므로 시간과 사용량이 추가됩니다.
                     </div>
                   </div>
                   <Toggle value={askSummary} onChange={setAskSummary} />
@@ -173,7 +173,7 @@ export function ProviderSwitchModal({
             <div className="rounded-lg border border-accent/30 bg-accent-tint px-4 py-3">
               <div className="mb-2 flex items-center gap-2 font-medium">
                 <Icon name="file" size={13} className="text-accent" />
-                {askSummary ? "대비책 요약 준비됨" : "요약 준비됨"}
+                {askSummary ? "요약 요청이 실패하면 사용할 대화 기록 요약" : "요약 준비됨"}
               </div>
               <div className="flex gap-8">
                 {[
@@ -194,7 +194,7 @@ export function ProviderSwitchModal({
           {running && (
             <div className="flex items-center gap-2 rounded-md bg-warn-bg px-3 py-2 text-warn">
               <Icon name="info" size={13} />
-              실행 중인 턴을 중단하고 전환합니다. 언제든 다시 되돌릴 수 있습니다.
+              진행 중인 작업을 중단하고 전환합니다. 중단 전에 변경한 파일은 그대로 남습니다.
             </div>
           )}
         </div>

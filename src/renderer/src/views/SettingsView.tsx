@@ -116,7 +116,7 @@ export function SettingsView({
       <header className="drag flex h-[84px] shrink-0 items-center px-6 pt-7">
         <div>
           <div className="text-[15px] font-semibold">설정</div>
-          <div className="text-[11px] text-muted">이 PC 의 Atelier 구성</div>
+          <div className="text-[11px] text-muted">이 Mac에서 사용할 도구와 앱 동작을 설정합니다.</div>
         </div>
       </header>
 
@@ -126,7 +126,7 @@ export function SettingsView({
           {(
             [
               { id: "general", label: "일반", icon: "settings" },
-              { id: "cli", label: "CLI 탐지", icon: "terminal" },
+              { id: "cli", label: "CLI 찾기", icon: "terminal" },
               { id: "mcp", label: "MCP 서버", icon: "list" },
               { id: "snippets", label: "스니펫", icon: "copy" },
               { id: "schedules", label: "예약", icon: "clock" },
@@ -162,23 +162,23 @@ export function SettingsView({
               <>
             <div className="mb-5 flex items-start justify-between gap-6">
               <div>
-                <h1 className="text-[20px] font-semibold">CLI 탐지</h1>
-                <p className="mt-1 text-muted">이 PC 에 설치된 코딩 에이전트 CLI 를 찾고 실행 경로를 정합니다.</p>
+                <h1 className="text-[20px] font-semibold">CLI 찾기</h1>
+                <p className="mt-1 text-muted">이 Mac에 설치된 Claude Code와 Codex CLI를 찾습니다. 사용할 버전과 실행 파일 경로를 바꿀 수 있습니다.</p>
               </div>
               <button
                 onClick={() => void rescan()}
                 className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-primary px-3.5 py-2 font-medium text-on-primary hover:bg-primary-hover"
               >
                 <Icon name="refresh" size={13} />
-                다시 탐지
+                다시 찾기
               </button>
             </div>
 
             <div className="mb-4 flex items-center gap-3 rounded-lg border border-line bg-panel px-4 py-3">
               <span className={`h-2 w-2 rounded-full ${scannedAt === null ? "bg-muted animate-pulse" : "bg-ok"}`} />
-              <span className="font-medium">{scannedAt === null ? "탐지 중" : "탐지 완료"}</span>
+              <span className="font-medium">{scannedAt === null ? "찾는 중" : "찾기 완료"}</span>
               <span className="text-muted">
-                {detected}개 발견{pathIssues > 0 ? ` · 셸 PATH 에서 찾음 ${pathIssues}개` : ""}
+                {detected}개 연결 가능{pathIssues > 0 ? ` · 셸 PATH에서 발견 ${pathIssues}개` : ""}
               </span>
               <span className="mono ml-auto text-[10px] text-muted">
                 {scannedAt !== null && `${(scannedAt / 1000).toFixed(1)}s`}
@@ -215,19 +215,19 @@ export function SettingsView({
                         <div key={m.dir} className="mb-2 rounded-md border border-line bg-panel-2/60 px-3 py-2" data-path-note>
                           <div className="flex items-center gap-2 font-medium">
                             <Icon name="info" size={12} className="shrink-0 text-muted" />
-                            {LABEL[m.provider][0]} 는 로그인 셸 PATH 에서 찾음
+                            {LABEL[m.provider][0]} 실행 파일을 셸 PATH에서 찾았습니다
                           </div>
                           <div className="mono mt-1 break-all text-[11px] text-muted" title={m.dir}>
                             {m.dir}
                           </div>
                           <div className="mt-0.5 text-[11px] text-muted">
-                            이 디렉토리는 앱 자체 PATH 에는 없지만, 앱은 셸 PATH 를 항상 합쳐 쓰므로 실행에는 문제가 없습니다.
+                            앱은 셸 PATH도 함께 사용하므로 이 위치의 도구를 실행할 수 있습니다.
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="mb-2 rounded-md border border-ok/30 bg-ok-bg px-3 py-2 text-ok">
-                        앱 PATH 와 셸 PATH 가 일치합니다.
+                      <div className={`mb-2 rounded-md border px-3 py-2 ${detected > 0 ? "border-ok/30 bg-ok-bg text-ok" : "border-line text-muted"}`}>
+                        {detected > 0 ? "발견한 CLI의 경로를 앱에서도 확인했습니다." : "CLI를 찾은 뒤 실행 경로를 확인할 수 있습니다."}
                       </div>
                     )}
                     <dl className="mono mt-3 grid grid-cols-[110px_1fr] gap-y-1.5 text-[10.5px]">
@@ -241,7 +241,7 @@ export function SettingsView({
                       <dd className="truncate text-right text-muted" title={diag.shellPathDirs.join(":")}>
                         {diag.shellPathDirs.length}개 디렉토리
                       </dd>
-                      <dt className="label">탐지 방식</dt>
+                      <dt className="label">찾는 방식</dt>
                       <dd className="truncate text-right text-muted">로그인 셸 PATH 순회 + --version 확인</dd>
                     </dl>
                   </>
@@ -256,7 +256,7 @@ export function SettingsView({
                   실행 파일 직접 지정
                 </div>
                 <p className="mb-3 text-[11px] text-muted">
-                  mise / asdf / nvm 등으로 관리해 자동 탐지가 다른 버전을 잡을 때 씁니다.
+                  원하는 버전이 자동으로 선택되지 않았다면 실행 파일의 전체 경로를 입력하세요.
                 </p>
                 <div className="flex gap-2">
                   <select
@@ -314,14 +314,14 @@ export function SettingsView({
 // ===== 일반 =====
 
 const LINK_MODE_OPTIONS: { value: LinkOpenMode; label: string; hint: string }[] = [
-  { value: "ask", label: "클릭할 때마다 묻기", hint: "링크 옆에 팝업으로 고른다. 팝업의 '기억' 을 켜면 여기 값이 바뀐다." },
-  { value: "app", label: "인앱 브라우저", hint: "오른쪽 패널의 브라우저 탭으로 연다." },
-  { value: "external", label: "기본 브라우저", hint: "macOS 기본 브라우저로 연다." },
+  { value: "ask", label: "클릭할 때마다 묻기", hint: "링크를 누를 때 열 위치를 고릅니다. 선택창에서 '기억'을 켜면 다음부터 같은 방식으로 엽니다." },
+  { value: "app", label: "인앱 브라우저", hint: "오른쪽 패널의 브라우저 탭에서 엽니다." },
+  { value: "external", label: "기본 브라우저", hint: "macOS 기본 브라우저에서 엽니다." },
 ];
 
 const WARM_OPTIONS: { value: WarmTarget; label: string; hint: string }[] = [
-  { value: "active", label: "보고 있는 탭", hint: "탭을 열거나 옮겨 갈 때마다 미리 깨워 둡니다. 첫 답이 바로 옵니다." },
-  { value: "off", label: "끄기", hint: "메시지를 보낼 때 시작합니다. 첫 답이 몇 초 늦는 대신 메모리를 덜 씁니다." },
+  { value: "active", label: "보고 있는 탭", hint: "탭을 열거나 이동하면 Claude·Codex를 미리 실행해 첫 응답의 준비 시간을 줄입니다." },
+  { value: "off", label: "끄기", hint: "메시지를 보낼 때 실행합니다. 대기 중 메모리 사용은 줄지만 첫 응답을 준비하는 시간이 필요합니다." },
 ];
 
 /** 링크 열기 방식(renderer localStorage) · 예열 · 유휴 시간(main settings.json). 바꾸면 바로 저장·적용된다. */
@@ -332,9 +332,9 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; hint: string }[] = [
 ];
 
 const NOTIFY_OPTIONS: { value: NotifyOnDone; label: string; hint: string }[] = [
-  { value: "always", label: "항상", hint: "응답이 끝날 때마다 macOS 알림. 클릭하면 그 탭으로 갑니다." },
-  { value: "unfocused", label: "안 보고 있을 때만", hint: "창이 포커스 밖이거나 다른 탭을 보고 있을 때만." },
-  { value: "off", label: "끄기", hint: "응답 완료 알림을 띄우지 않습니다(권한 대기 알림은 유지)." },
+  { value: "always", label: "항상", hint: "응답이 끝나면 macOS 알림을 보냅니다. 알림을 누르면 해당 탭으로 이동합니다." },
+  { value: "unfocused", label: "안 보고 있을 때만", hint: "다른 앱이나 다른 채팅 탭을 보고 있을 때 알립니다." },
+  { value: "off", label: "끄기", hint: "응답 완료는 알리지 않습니다. 작업 승인 요청은 계속 알립니다." },
 ];
 
 function GeneralSection() {
@@ -371,7 +371,7 @@ function GeneralSection() {
     if (settings && Math.round(n) === settings[key]) return;
     void save({ [key]: Math.round(n) });
   };
-  const saveIdle = () => saveNumber("sessionIdleMinutes", idleDraft, SESSION_IDLE_MINUTES_MIN, SESSION_IDLE_MINUTES_MAX, "유휴 시간(분)");
+  const saveIdle = () => saveNumber("sessionIdleMinutes", idleDraft, SESSION_IDLE_MINUTES_MIN, SESSION_IDLE_MINUTES_MAX, "대기 시간(분)");
   const saveConcurrent = () => saveNumber("maxConcurrent", concurrentDraft, MAX_CONCURRENT_MIN, MAX_CONCURRENT_MAX, "동시에 작업할 채팅 수");
   const blurOnEnter = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") e.currentTarget.blur();
@@ -404,7 +404,7 @@ function GeneralSection() {
       key: "cli",
       name: "atelier 명령",
       path: cli?.path ?? "~/.local/bin/atelier",
-      state: !cli ? "" : !cli.installed ? "설치되지 않음" : !cli.current ? "다른 앱 위치를 가리킴" : !cli.onPath ? "설치됨 · 터미널 PATH 에 ~/.local/bin 이 없음" : "설치됨",
+      state: !cli ? "" : !cli.installed ? "설치되지 않음" : !cli.current ? "다른 앱 위치를 가리킴" : !cli.onPath ? "설치됨 · 셸 PATH에 ~/.local/bin을 추가해야 합니다" : "설치됨",
       tone: !cli || !cli.installed ? "text-muted" : cli.current && cli.onPath ? "text-ok" : "text-warn",
       dot: !cli || !cli.installed ? "bg-muted-2/50" : cli.current && cli.onPath ? "bg-ok" : "bg-warn",
       button: cli?.installed ? "다시 설치" : "설치",
@@ -416,7 +416,7 @@ function GeneralSection() {
         key: `skill-${s.agent}`,
         name: `${s.label} 스킬`,
         path: s.path,
-        state: !s.available ? "이 PC 에 없음" : !s.installed ? "설치되지 않음" : s.current ? "설치됨" : "구버전 — 업데이트 필요",
+        state: !s.available ? "이 Mac에서 찾지 못함" : !s.installed ? "설치되지 않음" : s.current ? "설치됨" : "구버전 — 업데이트 필요",
         tone: !s.available || !s.installed ? "text-muted" : s.current ? "text-ok" : "text-warn",
         dot: !s.available || !s.installed ? "bg-muted-2/50" : s.current ? "bg-ok" : "bg-warn",
         button: !s.installed ? "설치" : s.current ? "다시 설치" : "업데이트",
@@ -433,7 +433,7 @@ function GeneralSection() {
     <>
       <div className="mb-5">
         <h1 className="text-[20px] font-semibold">일반</h1>
-        <p className="mt-1 text-muted">화면 테마, 링크를 어디서 열지, Claude·Codex 를 언제 깨우고 재울지 정합니다.</p>
+        <p className="mt-1 text-muted">화면과 알림, 브라우저, Claude·Codex의 실행 방식을 설정합니다.</p>
       </div>
 
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="theme">
@@ -441,7 +441,7 @@ function GeneralSection() {
           <Icon name="sparkles" size={14} className="text-accent" />
           화면 테마
         </div>
-        <p className="mb-3 text-[12px] leading-5 text-muted">인앱 브라우저 탭의 웹 페이지는 그 사이트의 색을 그대로 씁니다.</p>
+        <p className="mb-3 text-[12px] leading-5 text-muted">인앱 브라우저에 표시되는 웹사이트에는 적용되지 않습니다.</p>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
           {THEME_OPTIONS.map((o) => (
             <label key={o.value} className={radioCls(settings?.theme === o.value)}>
@@ -471,7 +471,7 @@ function GeneralSection() {
           <Icon name="alert" size={14} className="text-accent" />
           응답 완료 알림
         </div>
-        <p className="mb-3 text-[12px] leading-5 text-muted">턴이 끝나면 macOS 알림으로 알립니다. 권한 승인 대기는 창이 포커스 밖일 때 항상 알립니다.</p>
+        <p className="mb-3 text-[12px] leading-5 text-muted">응답이 끝났을 때 알림을 받을지 정합니다. 다른 앱을 보고 있을 때 작업 승인이 필요하면 이 설정과 관계없이 알립니다.</p>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
           {NOTIFY_OPTIONS.map((o) => (
             <label key={o.value} className={radioCls(settings?.notifyOnDone === o.value)}>
@@ -491,8 +491,8 @@ function GeneralSection() {
           명령줄 도구와 에이전트 스킬
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">
-          `atelier` 명령으로 터미널이나 에이전트가 이 앱의 워크스페이스·탭을 다룹니다. 스킬을 설치하면 Claude Code 와 Codex 가 `atelier skills get atelier-cli` 로 이 앱
-          버전의 사용법을 읽습니다.
+          <code>atelier</code> 명령을 설치하면 터미널에서 워크스페이스와 탭을 열고 관리할 수 있습니다.
+          스킬도 설치하면 Claude Code와 Codex에 말로 요청해 Atelier를 조작할 수 있습니다.
         </p>
         <div className="divide-y divide-line rounded-md border border-line" data-install-list>
           {installRows().map((row) => (
@@ -530,13 +530,12 @@ function GeneralSection() {
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="keep-browser-login">
         <div className="mb-1 flex items-center gap-2 font-medium">
           <Icon name="shield" size={14} className="text-accent" />
-          앱 안 브라우저 로그인 유지
+          인앱 브라우저 로그인 유지
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">
-          로그인 세션은 대개 만료가 없는 쿠키라 앱을 끄면 사라집니다. 켜 두면 끌 때 받아 적고 켤 때 되돌려 놓아,
-          껐다 켜도 로그인이 풀리지 않습니다(크롬의 "이전 세션 계속하기" 와 같습니다).
+          앱을 종료할 때 로그인에 쓰이는 쿠키를 저장하고, 다시 열 때 복원합니다. 사이트의 보안 정책이나 로그인 만료에 따라 다시 로그인해야 할 수 있습니다.
           <br />
-          로그인 증표를 앱 데이터 디렉토리에 평문으로 두는 일입니다(소유자만 읽는 권한). 끄면 적어 둔 것을 바로 지웁니다.
+          저장한 쿠키는 이 Mac의 앱 데이터 폴더에 암호화 없이 보관되며, 현재 사용자만 읽을 수 있습니다. 끄면 복원을 위해 저장한 쿠키 파일을 삭제합니다.
         </p>
         <label className="flex cursor-pointer items-center gap-2 text-[12.5px]">
           <input
@@ -546,7 +545,7 @@ function GeneralSection() {
             onChange={(e) => void save({ keepBrowserLogin: e.target.checked })}
             data-keep-browser-login
           />
-          <span>껐다 켜도 로그인 유지</span>
+          <span>다음 실행을 위해 로그인 정보 저장</span>
         </label>
       </div>
 
@@ -556,7 +555,7 @@ function GeneralSection() {
           링크 열기 방식
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">
-          채팅 본문의 http(s) 링크를 클릭했을 때. ⌘클릭은 항상 기본 브라우저, ⌥클릭은 항상 앱 안, ⇧클릭은 다시 묻는다.
+          채팅에 있는 웹 링크를 어디에서 열지 정합니다. ⌘클릭은 기본 브라우저, ⌥클릭은 인앱 브라우저로 엽니다. ⇧클릭하면 다시 선택할 수 있습니다.
         </p>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
           {LINK_MODE_OPTIONS.map((o) => (
@@ -584,10 +583,10 @@ function GeneralSection() {
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="warm">
         <div className="mb-1 flex items-center gap-2 font-medium">
           <Icon name="sparkles" size={14} className="text-accent" />
-          미리 깨워 두기
+          탭을 열 때 미리 준비
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">
-          탭마다 Claude 나 Codex 가 하나씩 붙어 있고, 처음 깨우는 데 몇 초가 걸립니다. 메시지를 보내기 전에 미리 깨워 두면 첫 답을 기다리는 시간이 줄어듭니다.
+          메시지를 보내기 전에 Claude·Codex를 실행해 둡니다. 첫 응답의 준비 시간을 줄이는 대신 대기 중에도 메모리를 사용합니다.
         </p>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
           {WARM_OPTIONS.map((o) => (
@@ -613,10 +612,10 @@ function GeneralSection() {
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="idle">
         <div className="mb-1 flex items-center gap-2 font-medium">
           <Icon name="clock" size={14} className="text-accent" />
-          쉬면 재우기
+          사용하지 않을 때 메모리 정리
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">
-          대화가 이만큼 끊기면 그 탭의 Claude·Codex 를 재워 메모리를 돌려줍니다. 다음 메시지를 보내면 다시 깨우니 잃는 건 없습니다. 바꾸면 지금 쉬고 있는 탭에도 바로 적용됩니다.
+          작업 없이 아래 시간만큼 대기한 탭의 Claude·Codex를 종료해 메모리를 줄입니다. 대화 기록은 유지되며, 다음 메시지를 보내면 다시 실행합니다. 변경한 시간은 현재 대기 중인 탭에도 적용됩니다.
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -647,7 +646,7 @@ function GeneralSection() {
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">
           Claude·Codex 채팅에 함께 적용됩니다. 권한 승인을 기다리는 채팅도 하나로 셉니다. 넘치는 메시지는 자리가 나면 순서대로 시작합니다.
-          줄여도 이미 하는 작업은 그대로 두고 새로 시작하는 것만 막습니다. 늘리면 기다리던 작업이 바로 시작합니다. 메모리는 "미리 깨워 두기"와 "쉬면 재우기"가 담당하고, 이 값은 한꺼번에 일하는 수만 정합니다.
+          수를 줄여도 진행 중인 작업은 계속됩니다. 수를 늘리면 대기 중인 작업이 시작될 수 있습니다.
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -725,7 +724,7 @@ function McpSection({ workspacePath }: { workspacePath: string | null }) {
         <div>
           <h1 className="text-[20px] font-semibold">MCP 서버</h1>
           <p className="mt-1 text-muted">
-            Claude Code 가 이 워크스페이스에서 붙이는 MCP 서버와 연결 상태입니다. 설정은 터미널의{" "}
+            Claude Code가 이 작업 경로에서 사용할 MCP 서버의 연결 상태입니다. 설정은 터미널의{" "}
             <code>claude mcp</code> 명령이나 <code>.mcp.json</code> 으로 바꿉니다.
           </p>
         </div>
@@ -740,7 +739,7 @@ function McpSection({ workspacePath }: { workspacePath: string | null }) {
       </div>
 
       {!workspacePath ? (
-        <p className="text-muted">작업 디렉토리가 있는 세션을 먼저 여세요(활성 세션의 작업 디렉토리 기준으로 확인합니다).</p>
+        <p className="text-muted">작업 경로를 선택한 채팅 탭을 먼저 여세요. 해당 작업 경로에서 사용할 수 있는 MCP 서버를 확인합니다.</p>
       ) : (
         <>
           <div className="mb-4 flex items-center gap-3 rounded-lg border border-line bg-panel px-4 py-3">
@@ -853,7 +852,7 @@ function ProviderCard({
             loading ? "bg-panel-2 text-muted" : installed ? "bg-ok-bg text-ok" : "bg-err-bg text-err"
           }`}
         >
-          {loading ? "탐지 중" : installed ? "발견됨" : "미설치"}
+          {loading ? "찾는 중" : installed ? "연결 가능" : "미설치"}
         </span>
       </div>
 
@@ -871,12 +870,12 @@ function ProviderCard({
 
       <div className="mt-3 flex items-center justify-between text-[11px] text-muted">
         <span>
-          {status?.source === "override" ? "사용자 지정 경로" : "자동 탐지"}
+          {status?.source === "override" ? "사용자 지정 경로" : "자동으로 찾기"}
           {candidates.length > 1 && ` · 후보 ${candidates.length}개`}
         </span>
         {status?.source === "override" && (
           <button onClick={onReset} className="underline-offset-2 hover:underline">
-            자동 탐지로 되돌리기
+            자동으로 찾도록 변경
           </button>
         )}
       </div>
@@ -1068,7 +1067,7 @@ function LspCard() {
         언어 서버
       </div>
       <p className="mb-3 text-muted">
-        에디터의 자동완성·오류 진단·hover·정의로 이동(F12)에 쓴다. 저장소 루트마다 서버 하나를 띄우고, 열린 문서가 없는 채로 3분이 지나거나 앱을 끄면 끝난다.
+        코드 자동완성, 오류 표시, 마우스를 올렸을 때의 설명, 정의로 이동(F12)에 필요한 도구입니다. 파일을 편집할 때 자동으로 실행됩니다.
       </p>
       <div className="flex flex-col gap-3">
         {(statuses ?? []).map((st) => (
@@ -1085,7 +1084,7 @@ function LspServerRow({ status, onChanged }: { status: LspStatusDto; onChanged: 
   useEffect(() => setPath(status.override ?? ""), [status.override]);
   const save = async (p: string | null) => {
     const r = await window.workbench.lsp.setPath(status.serverId, p);
-    setMsg(r.ok ? { ok: true, text: p ? "경로를 저장했습니다. 다음에 여는 파일부터 적용됩니다." : "자동 탐지로 돌아갑니다." } : { ok: false, text: r.error });
+    setMsg(r.ok ? { ok: true, text: p ? "경로를 저장했습니다. 언어 서버가 새로 시작될 때 적용됩니다. 바로 적용하려면 Atelier를 다시 시작하세요." : "실행 파일을 자동으로 찾도록 저장했습니다. 언어 서버가 새로 시작될 때 적용됩니다. 바로 적용하려면 Atelier를 다시 시작하세요." } : { ok: false, text: r.error });
     onChanged();
   };
   return (
@@ -1093,7 +1092,7 @@ function LspServerRow({ status, onChanged }: { status: LspStatusDto; onChanged: 
       <div className="mb-1.5 flex items-center gap-2 font-medium">
         {status.label}
         <span className={`label ml-auto rounded px-1.5 py-0.5 ${status.installed ? "bg-ok-bg text-ok" : "bg-warn-bg text-warn"}`}>
-          {status.installed ? `연결 가능 · ${status.version ?? "버전 미상"}` : "설치 안 됨"}
+          {status.installed ? `연결 가능 · ${status.version ?? "버전 미상"}` : "미설치"}
         </span>
       </div>
       {!status.installed && (
@@ -1103,7 +1102,7 @@ function LspServerRow({ status, onChanged }: { status: LspStatusDto; onChanged: 
       )}
       {status.path && !status.override && (
         <div className="mono mb-2 truncate text-[11px] text-muted" title={status.path}>
-          자동 탐지: {status.path}
+          자동으로 찾은 경로: {status.path}
         </div>
       )}
       {status.installed && status.serverId === "typescript" && (
@@ -1115,7 +1114,7 @@ function LspServerRow({ status, onChanged }: { status: LspStatusDto; onChanged: 
         <input
           value={path}
           onChange={(e) => setPath(e.target.value)}
-          placeholder="실행 파일 경로를 직접 지정 (비우면 PATH 에서 자동 탐지)"
+          placeholder="실행 파일 경로 (비우면 PATH에서 자동으로 찾습니다)"
           className="mono min-w-0 flex-1 rounded-md border border-line bg-inset px-2.5 py-1.5 text-[11.5px] text-fg outline-none placeholder:text-muted"
           style={{ userSelect: "text" }}
           data-lsp-path={status.serverId}
@@ -1125,7 +1124,7 @@ function LspServerRow({ status, onChanged }: { status: LspStatusDto; onChanged: 
         </button>
         {status.override && (
           <button onClick={() => void save(null)} className="rounded-md border border-line px-3 py-1.5 text-muted hover:bg-panel-2 hover:text-fg">
-            자동 탐지
+            자동으로 찾기
           </button>
         )}
       </div>

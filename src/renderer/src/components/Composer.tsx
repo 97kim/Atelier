@@ -430,7 +430,7 @@ export function Composer({
             disabled
               ? (disabledText ?? "작업 디렉토리를 먼저 선택하세요")
               : running
-                ? (runningHint ?? "다음 지시를 써 두면 이 턴이 끝난 뒤 자동으로 보냅니다…")
+                ? (runningHint ?? "다음 요청을 보내 두면 현재 작업이 끝난 뒤 자동으로 전달합니다…")
                 : "무엇이든 조사하거나, 고치거나, 실행하게 하세요…"
           }
           className="block w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[13.5px] leading-6 outline-none placeholder:text-muted disabled:opacity-50"
@@ -486,7 +486,7 @@ export function Composer({
                 <button
                   onClick={() => void submit()}
                   className="ml-2 flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-line px-3 text-fg hover:bg-panel-2"
-                  title="이 턴이 끝난 뒤 보낼 지시로 큐에 넣습니다 (Enter)"
+                  title="현재 작업이 끝난 뒤 보낼 메시지로 추가합니다 (Enter)"
                   data-queue-add
                 >
                   <Icon name="clock" size={12} />
