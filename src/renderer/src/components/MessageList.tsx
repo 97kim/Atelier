@@ -389,6 +389,18 @@ function Group({
         minute: "2-digit",
       })
     : null;
+  // 말풍선 아래에는 시각만 둔다. 며칠 전 대화를 다시 볼 때 날짜가 필요하므로 올려 두면 알려 준다.
+  const timeFull = ts
+    ? new Date(ts).toLocaleString("ko-KR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : undefined;
 
   // 내 메시지는 메신저처럼 오른쪽 말풍선. 아바타·이름 없이 시각만 아래에.
   if (isUser) {
@@ -402,7 +414,9 @@ function Group({
           ))}
         </div>
         {time && (
-          <span className="mono pr-1 text-[10px] text-muted">{time}</span>
+          <span className="mono cursor-default pr-1 text-[10px] text-muted" title={timeFull} data-user-time>
+            {time}
+          </span>
         )}
       </div>
     );
