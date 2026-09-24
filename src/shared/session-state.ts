@@ -210,6 +210,19 @@ function finalizeStreaming(blocks: Block[]): Block[] {
   return blocks.map((b) => (b.kind === "text" && b.streaming ? { ...b, streaming: false } : b));
 }
 
+/**
+ * 턴이 끝났는데 결과가 안 온 도구는 끝을 못 본 것이다. 그대로 두면 카드가 "실행 중" 으로 남아
+ * 경과 시간만 올라간다 — 중단했는데도 계속 도는 것처럼 보인다(실제로 그렇게 보였다).
+ *
+ * 결과를 지어내지 않는다. isError 로 적어 두고 무슨 일이 있었는지만 남긴다.
+ */
+function finalizeRunningTools(blocks: Block[], note: string): Block[] {
+  if (!blocks.some((b) => b.kind === "tool" && !b.partial && !b.result)) return blocks;
+  return blocks.map((b) =>
+    b.kind === "tool" && !b.partial && !b.result ? { ...b, result: { output: note, isError: true } } : b,
+  );
+}
+
 function upsert<T extends Block>(
   blocks: Block[],
   id: string,
@@ -398,7 +411,7 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
         lastTurn: hasUsage || !state.lastTurn ? event : state.lastTurn,
         sessionId: event.sessionId ?? state.sessionId,
         blocks: [
-          ...finalizeStreaming(state.blocks),
+          ...finalizeRunningTools(finalizeStreaming(state.blocks), "턴이 끝나 결과를 받지 못했습니다."),
           {
             kind: "turn",
             id: `turn-${event.ts}-${state.totals.turns + 1}`,
@@ -510,7 +523,9 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
         pendingPermission: event.fatal === false ? state.pendingPermission : null,
         permissionWaits: event.fatal === false ? state.permissionWaits : [],
         blocks: [
-          ...finalizeStreaming(state.blocks),
+          ...(event.fatal === false
+            ? finalizeStreaming(state.blocks)
+            : finalizeRunningTools(finalizeStreaming(state.blocks), "오류로 끝나 결과를 받지 못했습니다.")),
           { kind: "error", id: `err-${event.ts}-${state.eventCount}`, message: event.message },
         ],
       };

@@ -403,3 +403,30 @@ function perm2(s: ReturnType<typeof initialSessionState>, id: string): string | 
   const b = s.blocks.find((x) => x.kind === "tool" && x.id === id) as { permission?: string } | undefined;
   return b?.permission;
 }
+
+test("턴이 끝나면 결과 못 받은 도구도 끝난 것으로 적는다", () => {
+  // 중단했는데 도구 카드가 "실행 중" 으로 남아 경과 시간만 올라가던 자리다.
+  // 카드는 result 가 없으면 실행 중으로 그리므로, 턴이 닫힐 때 같이 닫아 줘야 한다.
+  const s = replaySession([
+    ev("tool_use", { toolUseId: "t1", name: "Bash", input: { command: "sleep 999" } }),
+    ev("tool_use", { toolUseId: "t2", name: "Read", input: { file_path: "/a" } }),
+    ev("tool_result", { toolUseId: "t2", output: "ok", isError: false }),
+    ev("turn_result", {
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0, durationMs: 1, numTurns: 1, modelUsage: {}, isError: true,
+    }),
+  ]);
+  const tool = (id: string) => s.blocks.find((b) => b.kind === "tool" && b.id === id) as { result?: { output: string; isError: boolean } };
+  assert.equal(tool("t1").result?.isError, true, "결과를 못 받은 도구는 오류로 닫힌다");
+  assert.match(tool("t1").result?.output ?? "", /결과를 받지 못했습니다/);
+  assert.deepEqual(tool("t2").result, { output: "ok", isError: false }, "이미 받은 결과는 그대로다");
+});
+
+test("치명적 오류로 끝나도 돌던 도구를 닫는다 — 경고는 건드리지 않는다", () => {
+  const running = () => ev("tool_use", { toolUseId: "t1", name: "Bash", input: {} });
+  const warn = replaySession([running(), ev("error", { message: "경고", fatal: false })]);
+  const fatal = replaySession([running(), ev("error", { message: "죽음", fatal: true })]);
+  const res = (s: ReturnType<typeof replaySession>) =>
+    (s.blocks.find((b) => b.kind === "tool") as { result?: unknown }).result;
+  assert.equal(res(warn), undefined, "경고는 턴이 끝난 것이 아니다 — 도구는 계속 돈다");
+  assert.ok(res(fatal), "치명적 오류면 닫는다");
+});
