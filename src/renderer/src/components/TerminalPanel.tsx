@@ -7,15 +7,22 @@
 // 첫 칸(active)과 포커스가 다를 수 있어서 active 를 기준으로 하면 엉뚱한 칸이 닫힌다.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { TERMINAL_CLEAR_MARK, type TerminalInfoDto } from "@shared/ipc";
 import { Icon } from "./Icon";
 import { onThemeChange } from "../theme";
 import { formatTerminalAttachment } from "@shared/attachments";
+import { findFileRefs } from "@shared/file-refs";
 import { loadTerminalLayout, removePane, saveTerminalLayout, selectPane, type SplitDir } from "../terminal-panes";
+import { cellRangeFor, createLocateCache, pickCandidate, type CellLike } from "../terminal-links";
+import { canDeliver, forgetTerminalGate, noteDelivered, onTerminalRun, peekTerminalRun, pendingTerminalRuns, pickShellTarget, promptEpoch, takeTerminalRun } from "../terminal-run";
+import { linkTargetFor, setLinkOpenMode } from "../link-open";
+import { useLocateFile, useOpenFile } from "./FileViewer";
+import { LinkChooser } from "./LinkChooser";
 
 const MIN_HEIGHT = 120;
 const DEFAULT_HEIGHT = 260;
@@ -66,6 +73,22 @@ export function TerminalPanel({
   const areaRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false);
   const prefix = `${tabId}:`;
+  /** pty 가 붙은 터미널들 — "터미널에서 실행" 요청은 대상이 여기 들어온 뒤에 보낸다. */
+  const [ready, setReady] = useState<Set<string>>(() => new Set());
+  const markReady = (id: string, ok: boolean) =>
+    setReady((prev) => {
+      if (prev.has(id) === ok) return prev;
+      const next = new Set(prev);
+      if (ok) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  /** 잠깐 보여 주는 안내(클립보드에 복사했다 등). */
+  const [notice, setNotice] = useState<string | null>(null);
+  const showNotice = (text: string) => {
+    setNotice(text);
+    setTimeout(() => setNotice((n) => (n === text ? null : n)), 4000);
+  };
 
   /** 단축키·첨부·찾기가 향하는 터미널: 포커스가 있던 것, 그것이 없어졌으면 첫 칸. */
   const target = focused && tabs.some((t) => t.id === focused) ? focused : active;
@@ -182,7 +205,10 @@ export function TerminalPanel({
   };
 
   const closeAll = () => {
-    for (const t of tabs) void window.workbench.terminal.close(t.id);
+    for (const t of tabs) {
+      void window.workbench.terminal.close(t.id);
+      forgetTerminalGate(t.id);
+    }
     setTabs([]);
     setActive(null);
     setSplit(null);
@@ -204,6 +230,7 @@ export function TerminalPanel({
       return;
     }
     void window.workbench.terminal.close(id);
+    forgetTerminalGate(id);
     const l = removePane({ active, split }, tabs.map((t) => t.id), id);
     setTabs((prev) => prev.filter((t) => t.id !== id));
     setActive(l.active);
@@ -215,6 +242,63 @@ export function TerminalPanel({
       setTimeout(() => terms.current.get(next)?.focus(), 0);
     }
   };
+
+  // "터미널에서 실행": 큐에 든 요청을 대상 셸이 준비된 뒤 한 번만 가져간다. 대상이 없으면 셸을 만들고, 숨겨져 있으면 보이게 해서
+  // pty 가 붙기를 기다린다(그 변화로 이 효과가 다시 돈다). 붙여넣기는 셸이 프롬프트에서 입력을 기다릴 때만 — xterm 의 bracketed paste
+  // 모드는 zsh·bash·fish 가 프롬프트에서만 켜고 vim·less·실행 중 프로그램에서는 꺼져 있어서 "지금 받아도 되는가" 의 판정으로 쓴다.
+  const [runTick, setRunTick] = useState(0);
+  useEffect(() => onTerminalRun(() => setRunTick((t) => t + 1)), []);
+  /** 프롬프트를 기다리는 중: 새 셸은 pty 가 붙은 뒤에도 잠깐 지나야 프롬프트(와 bracketed paste)가 뜬다. */
+  const runWait = useRef<{ id: string; until: number } | null>(null);
+  // 프롬프트 세대·전달 기록은 terminal-run.ts 에 산다(pty 수명을 따라야 해서 — 채팅 탭을 오가면 이 컴포넌트는 다시 마운트된다).
+  // 새 프롬프트가 오면 그 모듈이 onTerminalRun 리스너를 깨워 runTick 이 는다.
+  useEffect(() => {
+    if (!loaded) return;
+    const req = peekTerminalRun(tabId);
+    if (!req) return;
+    const id = pickShellTarget(tabs, focused);
+    if (!id) {
+      addTab();
+      return;
+    }
+    if (id !== active && id !== split?.id) {
+      selectTab(id);
+      return;
+    }
+    if (!ready.has(id)) return;
+    const term = terms.current.get(id);
+    if (!term) return;
+    const later = () => {
+      const t = setTimeout(() => setRunTick((x) => x + 1), 120);
+      return () => clearTimeout(t);
+    };
+    if (!canDeliver(id)) return; // 앞서 넣은 것이 아직 실행되지 않았다 — 새 프롬프트가 오면 다시 깬다
+    // 셸이 프롬프트에서 입력을 기다리나 — 일반 화면 + bracketed paste(zsh·bash·fish 는 프롬프트에서만 켠다). vim·less 는 alternate 화면이라 걸러지고,
+    // 실행 중인 프로그램·bracketed paste 없는 REPL 은 모드가 꺼져 있어 걸러진다. 확실하지 않으면 넣지 않고 복사한다.
+    const atPrompt = () => term.buffer.active.type === "normal" && term.modes.bracketedPasteMode;
+    if (!atPrompt()) {
+      // 새 셸은 pty 가 붙은 뒤에도 잠깐 지나야 프롬프트가 뜬다 — 2초까지 기다린다
+      const w = runWait.current && runWait.current.id === id ? runWait.current : { id, until: Date.now() + 2000 };
+      runWait.current = w;
+      if (Date.now() < w.until) return later();
+    }
+    runWait.current = null;
+    takeTerminalRun(tabId);
+    if (!atPrompt()) {
+      navigator.clipboard.writeText(req.command).then(
+        () => showNotice("셸이 입력을 받을 상태가 아니라 클립보드에 복사했습니다"),
+        () => showNotice("셸이 입력을 받을 상태가 아니고, 클립보드에도 복사하지 못했습니다"),
+      );
+      term.focus();
+      if (pendingTerminalRuns(tabId) > 0) return later();
+      return;
+    }
+    term.paste(req.command);
+    if (req.run) window.workbench.terminal.write(id, "\r");
+    noteDelivered(id, promptEpoch(id));
+    term.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, runTick, tabs, ready, focused, active, split, tabId]);
 
   // ⌘F: 패널 안 찾기. 대상은 target 터미널 하나이고, 다른 터미널로 포커스가 옮겨 가면 그쪽에서 다시 찾는다.
   const [find, setFind] = useState(false);
@@ -439,6 +523,7 @@ export function TerminalPanel({
                 }
               }}
               onFocus={() => setFocused(t.id)}
+              onReady={(ok) => markReady(t.id, ok)}
               onFindResults={(index, count) => setFindResult({ id: t.id, index, count })}
               onAttach={onAttach ? () => { const term = terms.current.get(t.id); if (term) onAttach(terminalAttachment(term, t.title)); } : undefined}
               onSplit={splitTerm}
@@ -473,6 +558,11 @@ export function TerminalPanel({
             style={split.dir === "row" ? { left: `calc(${ratio}% - 2px)` } : { top: `calc(${ratio}% - 2px)` }}
             data-terminal-split-resizer={split.dir}
           />
+        )}
+        {notice && (
+          <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full border border-line bg-panel px-3 py-1 text-[11px] text-muted shadow-sm" data-terminal-notice>
+            {notice}
+          </div>
         )}
         {find && (
           <div
@@ -565,6 +655,7 @@ function TerminalView({
   onFocusPane,
   onRegister,
   onFocus,
+  onReady,
   onFindResults,
   onAttach,
 }: {
@@ -580,12 +671,21 @@ function TerminalView({
   onRegister?: (term: Terminal | null, search: SearchAddon | null) => void;
   /** 이 터미널이 키 입력을 받게 됐다. */
   onFocus?: () => void;
+  /** pty 가 붙었다(true) / 떨어졌다(false). */
+  onReady?: (ok: boolean) => void;
   /** 찾기 결과가 바뀌었다(index 는 0부터, 결과가 없으면 count 0). */
   onFindResults?: (index: number, count: number) => void;
   onAttach?: () => void;
 }) {
-  const cbs = useRef({ onRegister, onAttach, onSplit, onFocusPane, onFocus, onFindResults });
-  cbs.current = { onRegister, onAttach, onSplit, onFocusPane, onFocus, onFindResults };
+  // 출력 속 링크: URL 은 답변 속 링크와 같은 규칙으로, 파일 경로는 실제로 있는 것만 에디터로. 이 컴포넌트는 ChatView 의 provider 안에 있다.
+  const { cwd: locateCwd, locate } = useLocateFile();
+  const openFile = useOpenFile();
+  const cbs = useRef({ onRegister, onAttach, onSplit, onFocusPane, onFocus, onReady, onFindResults, locateCwd, locate, openFile });
+  cbs.current = { onRegister, onAttach, onSplit, onFocusPane, onFocus, onReady, onFindResults, locateCwd, locate, openFile };
+  const locateCache = useRef(createLocateCache((ref) => cbs.current.locate(ref)));
+  const [chooser, setChooser] = useState<{ href: string; x: number; y: number } | null>(null);
+  /** 링크 클릭과 선택 드래그를 가르는 기준 — mousedown 자리에서 5px 넘게 움직였으면 클릭이 아니다. */
+  const down = useRef<{ x: number; y: number } | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -610,6 +710,7 @@ function TerminalView({
     );
     if (!r.ok) {
       setError(r.error ?? "셸을 시작하지 못했습니다.");
+      cbs.current.onReady?.(false);
       return;
     }
     if (r.existing && r.backlog && !attached.current) {
@@ -620,6 +721,7 @@ function TerminalView({
       });
     }
     attached.current = true;
+    cbs.current.onReady?.(true);
     term.focus();
   }, [termId, cwd]);
 
@@ -627,7 +729,24 @@ function TerminalView({
     const host = hostRef.current;
     if (!host) return;
     const theme = readTheme();
+    /** URL 을 눌렀다. 선택 중이거나 드래그였으면 무시. 어디서 열지는 답변 속 링크와 같은 규칙. */
+    /** 링크로 볼 클릭인가 — 왼쪽(또는 가운데) 버튼이고, 선택 중이 아니고, mousedown 자리에서 끌지 않았다. */
+    const isLinkClick = (e: MouseEvent) => {
+      if (e.button !== 0 && e.button !== 1) return false;
+      if (term.hasSelection()) return false;
+      const d = down.current;
+      return !(d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5);
+    };
+    const openLink = (e: MouseEvent, uri: string) => {
+      if (!isLinkClick(e)) return;
+      const where = linkTargetFor(uri, e);
+      if (where === "external") void window.workbench.browser.openExternal(uri);
+      else if (where === "app") cbs.current.openFile(uri);
+      else setChooser({ href: uri, x: e.clientX, y: e.clientY + 8 });
+    };
     const term = new Terminal({
+      // OSC 8 하이퍼링크(gh·cargo 등이 찍는 것)도 같은 경로로
+      linkHandler: { activate: (e, text) => openLink(e, text) },
       cursorBlink: true,
       // 셸 프롬프트(p10k 등)의 Nerd Font 기호가 네모로 깨지지 않게 Nerd Font 를 앞에 둔다. 없으면 앱 모노 폰트로.
       fontFamily: `"MesloLGS NF", "JetBrainsMono Nerd Font Mono", "Hack Nerd Font Mono", "Symbols Nerd Font Mono", ${theme.fontMono}`,
@@ -649,6 +768,51 @@ function TerminalView({
     term.loadAddon(fit);
     const search = new SearchAddon();
     term.loadAddon(search);
+    term.loadAddon(new WebLinksAddon((e, uri) => openLink(e, uri)));
+    // 파일 경로("src/a.ts:42") → 에디터 그 줄. 존재하는 것만 링크가 된다(캐시, 못 찾은 건 잠깐 뒤 다시). 좌표는 셀 단위로 되짚는다.
+    let disposed = false;
+    const fileLinks = term.registerLinkProvider({
+      provideLinks(y, cb) {
+        const cwd = cbs.current.locateCwd;
+        const buf = term.buffer.active;
+        const line = buf.getLine(y - 1);
+        if (!cwd || !line) return cb(undefined);
+        const text = line.translateToString(true);
+        // 화면 폭에 감긴 경로는 조각만 보여서 엉뚱한 파일이 된다 — 이 줄이 이어진 줄이면 첫 칸에서 시작하는 참조를, 다음 줄이 이어지면 끝에 닿는 참조를 뺀다.
+        const nextWrapped = buf.getLine(y)?.isWrapped === true;
+        const refs = findFileRefs(text).filter((r) => !(line.isWrapped && r.start === 0) && !(nextWrapped && r.end >= text.length));
+        if (refs.length === 0) return cb(undefined);
+        const cells: CellLike[] = [];
+        for (let x = 0; x < line.length; x++) {
+          const c = line.getCell(x);
+          if (c) cells.push({ chars: c.getChars(), width: c.getWidth() });
+        }
+        void Promise.all(refs.map((r) => locateCache.current(cwd, r.path).then((found) => ({ r, found })))).then((rs) => {
+          // 기다리는 사이 출력·resize·화면 전환으로 줄이 바뀌었으면 좌표가 틀리다 — 버린다(다음 hover 때 다시 만든다).
+          const now = term.buffer.active.getLine(y - 1);
+          if (disposed || term.buffer.active !== buf || !now || now.translateToString(true) !== text) return cb(undefined);
+          const links: ILink[] = [];
+          for (const { r, found } of rs) {
+            const target = pickCandidate(found, r.path);
+            const range = cellRangeFor(cells, r.start, r.end);
+            if (!target || !range) continue;
+            links.push({
+              range: { start: { x: range.x1, y }, end: { x: range.x2, y } },
+              text: r.text,
+              activate: (e) => {
+                if (!isLinkClick(e)) return;
+                cbs.current.openFile(target, r.line ? { line: r.line, endLine: r.endLine } : null);
+              },
+            });
+          }
+          cb(links.length > 0 ? links : undefined);
+        });
+      },
+    });
+    const onDown = (e: MouseEvent) => {
+      down.current = { x: e.clientX, y: e.clientY };
+    };
+    host.addEventListener("mousedown", onDown);
     term.open(host);
     termRef.current = term;
     fitRef.current = fit;
@@ -708,7 +872,9 @@ function TerminalView({
       setExit(null); // 같은 id 에 새 프로세스가 붙었다
     });
     const offExit = window.workbench.terminal.onExit((id, code) => {
-      if (id === termId) setExit(code);
+      if (id !== termId) return;
+      setExit(code);
+      cbs.current.onReady?.(false);
     });
     const onInput = term.onData((data) =>
       window.workbench.terminal.write(termId, data),
@@ -737,6 +903,10 @@ function TerminalView({
       onParsed.dispose();
       onScroll.dispose();
       onResults.dispose();
+      disposed = true;
+      fileLinks.dispose();
+      host.removeEventListener("mousedown", onDown);
+      cbs.current.onReady?.(false);
       term.textarea?.removeEventListener("focus", onFocusIn);
       cbs.current.onRegister?.(null, null);
       term.dispose();
@@ -785,6 +955,21 @@ function TerminalView({
           새 출력
           <Icon name="chevronDown" size={10} />
         </button>
+      )}
+      {chooser && (
+        <LinkChooser
+          href={chooser.href}
+          x={chooser.x}
+          y={chooser.y}
+          onDecide={(where, remember) => {
+            if (remember) setLinkOpenMode(where);
+            const href = chooser.href;
+            setChooser(null);
+            if (where === "app") openFile(href);
+            else void window.workbench.browser.openExternal(href);
+          }}
+          onClose={() => setChooser(null)}
+        />
       )}
       {(exit !== null || error) && (
         <button

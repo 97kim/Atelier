@@ -30,6 +30,7 @@ import { EditorPane } from "../components/EditorPane";
 import { isBrowserTab, openBrowserTab, openEditorFile, setEditorPaneVisible, setLastPane, useEditorTabs } from "../editor-tabs";
 import { appendComposerDraft, loadComposerDraft } from "../composer-draft";
 import { loadTerminalOpen, saveTerminalOpen } from "../terminal-panes";
+import { RunInTerminalContext, requestTerminalRun } from "../terminal-run";
 import { Icon } from "../components/Icon";
 import { ProviderLogo } from "../components/ProviderLogo";
 import { MessageList } from "../components/MessageList";
@@ -150,6 +151,15 @@ export function ChatView({
   const [terminalOpen, setTerminalOpen] = useState(() => loadTerminalOpen(tabId));
   const [terminalMounted, setTerminalMounted] = useState(terminalOpen);
   useEffect(() => saveTerminalOpen(tabId, terminalOpen), [tabId, terminalOpen]);
+  // 도구 카드·코드 블록의 "터미널에서 실행": 패널을 열고 요청을 큐에 둔다. 패널이 마운트되고 셸이 붙으면 가져간다.
+  const runInTerminal = useCallback(
+    (command: string, run: boolean) => {
+      setTerminalMounted(true);
+      setTerminalOpen(true);
+      requestTerminalRun(tabId, { command, run });
+    },
+    [tabId],
+  );
   const toggleTerminal = useCallback(() => {
     setTerminalMounted(true);
     setTerminalOpen((o) => !o);
@@ -414,6 +424,7 @@ export function ChatView({
   return (
     <OpenFileContext.Provider value={openFile}>
     <LocateFileContext.Provider value={locateFile}>
+    <RunInTerminalContext.Provider value={cwd ? runInTerminal : null}>
       <div className="relative flex h-full flex-col">
         {/* 타이틀바 줄: 세션 제목·경로·모델과 버튼. 제목 중심 56px = 사이드바 로고 줄. 탭 스트립은 이 아래. */}
         <header className="drag flex h-[68px] shrink-0 items-center gap-3 overflow-hidden px-6 pt-4">
@@ -966,6 +977,7 @@ export function ChatView({
         )}
 
       </div>
+    </RunInTerminalContext.Provider>
     </LocateFileContext.Provider>
     </OpenFileContext.Provider>
   );

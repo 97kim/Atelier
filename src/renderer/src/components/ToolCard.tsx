@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import type { ToolBlock } from "@shared/session-state";
 import { DiffView } from "./DiffView";
 import { useOpenFile } from "./FileViewer";
 import { FileChangeList, questionsOf } from "./PermissionPrompt";
 import { Icon, type IconName } from "./Icon";
+import { RunInTerminalContext, normalizeCommand } from "../terminal-run";
 
 const OUTPUT_PREVIEW_LINES = 12;
 
@@ -118,7 +119,10 @@ export function ToolCard({ block }: { block: ToolBlock }) {
   const [open, setOpen] = useState(() => isExpandedByDefault(block.name));
   const input = asInput(block.input);
   const openFile = useOpenFile();
+  const runInTerminal = useContext(RunInTerminalContext);
   const filePath = block.partial ? null : filePathOf(block.name, input);
+  // Bash 명령은 이 탭의 터미널에 넣을 수 있다(Enter 는 사용자가, ⌥클릭이면 바로 실행). 아직 입력이 만들어지는 중이면 없다.
+  const bashCommand = block.name === "Bash" && !block.partial && runInTerminal ? normalizeCommand(str(input.command)) : "";
   // Read 의 offset/limit(1부터 세는 시작 줄·줄 수)이면 그 범위로 에디터를 연다
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && /^\d+$/.test(v) ? Number(v) : null);
   const readAt = (() => {
@@ -207,6 +211,20 @@ export function ToolCard({ block }: { block: ToolBlock }) {
           </span>
         ) : (
           <span className="mono min-w-0 flex-1 truncate text-muted">{summary(block.name, input)}</span>
+        )}
+        {bashCommand && (
+          <span
+            role="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              runInTerminal!(bashCommand, e.altKey);
+            }}
+            title="터미널에 넣습니다. Enter 는 직접 치세요 (⌥클릭: 바로 실행)"
+            className="shrink-0 rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+            data-run-in-terminal
+          >
+            <Icon name="terminal" size={11} />
+          </span>
         )}
         <span className={`label flex shrink-0 items-center gap-1.5 ${tone}`}>
           <span

@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { Children, isValidElement, memo, useContext, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -6,6 +6,9 @@ import type { Element, ElementContent, Root, Text } from "hast";
 import { findFileRefs, localFileHref, parseFileRef, type FileRef as FileRefInfo } from "@shared/file-refs";
 import { useLocateFile, useOpenFile } from "./FileViewer";
 import { Icon } from "./Icon";
+import { LinkChooser } from "./LinkChooser";
+import { linkTargetFor, setLinkOpenMode } from "../link-open";
+import { RunInTerminalContext, isShellLanguage, normalizeCommand } from "../terminal-run";
 
 // ===== 답변 속 파일 참조("ProductByPoController.kt:63") → 에디터로 열기 =====
 // rehype 단계에서 모양이 파일 참조인 텍스트·인라인 코드에 data-file-* 를 달아 두고, FileRef 가 렌더될 때 main 의 file:locate 로
@@ -188,25 +191,8 @@ function MdCode(props: React.HTMLAttributes<HTMLElement> & RefAttrs & { node?: u
   return <FileRef {...ref} as="code" className={rest.className}>{rest.children}</FileRef>;
 }
 
-/** 링크 열기 방식. "ask" 면 클릭할 때마다 고른다. localStorage 에 기억. */
-export type LinkOpenMode = "ask" | "app" | "external";
-const LINK_MODE_KEY = "workbench.linkOpenMode";
-export function getLinkOpenMode(): LinkOpenMode {
-  try {
-    const v = localStorage.getItem(LINK_MODE_KEY);
-    return v === "app" || v === "external" ? v : "ask";
-  } catch {
-    return "ask";
-  }
-}
-export function setLinkOpenMode(mode: LinkOpenMode): void {
-  try {
-    if (mode === "ask") localStorage.removeItem(LINK_MODE_KEY);
-    else localStorage.setItem(LINK_MODE_KEY, mode);
-  } catch {
-    /* 저장 못 해도 동작엔 지장 없음 */
-  }
-}
+// 링크 열기 방식은 link-open.ts 에 산다(터미널 속 URL 도 같은 규칙). 설정 화면이 여기서 가져가므로 이름을 남긴다.
+export { getLinkOpenMode, setLinkOpenMode, type LinkOpenMode } from "../link-open";
 
 /**
  * 링크: 클릭하면 "앱 안 브라우저 / 기본 브라우저" 선택 팝업(기억 가능). ⌘/Ctrl·가운데 클릭은 바로 기본 브라우저,
@@ -229,7 +215,6 @@ function MdLink(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { node?: 
 function MdWebLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   const openFile = useOpenFile();
   const [chooser, setChooser] = useState<{ x: number; y: number } | null>(null);
-  const [remember, setRemember] = useState(false);
   const anchor = useRef<HTMLAnchorElement>(null);
 
   const openIn = (where: "app" | "external") => {
@@ -237,44 +222,15 @@ function MdWebLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLA
     if (where === "app") openFile(href);
     else void window.workbench.browser.openExternal(href);
   };
-  const decide = (where: "app" | "external") => {
-    if (remember) setLinkOpenMode(where);
-    setChooser(null);
-    openIn(where);
-  };
   const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
     if (!href) return;
     e.preventDefault();
     e.stopPropagation();
-    const web = /^https?:\/\//i.test(href);
-    if (!web || e.metaKey || e.ctrlKey || e.button === 1) return openIn("external");
-    if (e.altKey) return openIn("app");
-    const mode = e.shiftKey ? "ask" : getLinkOpenMode();
-    if (mode !== "ask") return openIn(mode);
+    const where = linkTargetFor(href, e);
+    if (where !== "ask") return openIn(where);
     const r = anchor.current?.getBoundingClientRect();
-    setRemember(false);
     setChooser({ x: e.clientX || r?.left || 0, y: (r?.bottom ?? e.clientY) + 4 });
   };
-
-  useEffect(() => {
-    if (!chooser) return;
-    const close = (ev: Event) => {
-      if (ev instanceof KeyboardEvent && ev.key !== "Escape") return;
-      setChooser(null);
-    };
-    // 팝업 안 클릭은 stopPropagation 으로 막히므로 window 의 mousedown 은 바깥 클릭이다
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("keydown", close);
-    };
-  }, [chooser]);
-
-  // 화면 오른쪽·아래로 넘치지 않게 위치를 조금 당긴다
-  const style = chooser
-    ? { left: Math.min(chooser.x, window.innerWidth - 300), top: Math.min(chooser.y, window.innerHeight - 130) }
-    : undefined;
 
   return (
     <>
@@ -289,33 +245,53 @@ function MdWebLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLA
         {children}
       </a>
       {chooser && href && (
-        <div
-          role="menu"
-          className="fixed z-50 w-[288px] rounded-lg border border-line bg-panel p-1.5 shadow-xl"
-          style={style}
-          onMouseDown={(e) => e.stopPropagation()}
-          data-link-chooser
-        >
-          <div className="mono truncate px-2 pb-1 pt-0.5 text-[10px] text-muted" title={href}>
-            {href}
-          </div>
-          <button role="menuitem" onClick={() => decide("app")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-panel-2" data-link-open-app>
-            <Icon name="globe" size={12} className="text-accent" />
-            <span className="flex-1">인앱 브라우저에서 열기</span>
-            <span className="mono text-[10px] text-muted">⌥클릭</span>
-          </button>
-          <button role="menuitem" onClick={() => decide("external")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-panel-2" data-link-open-external>
-            <Icon name="externalLink" size={12} className="text-muted" />
-            <span className="flex-1">기본 브라우저에서 열기</span>
-            <span className="mono text-[10px] text-muted">⌘클릭</span>
-          </button>
-          <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-line px-2 pb-0.5 pt-1.5 text-[11px] text-muted">
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} data-link-remember />
-            다음부터 묻지 않기 <span className="mono text-[10px] text-muted-2">(⇧클릭으로 다시 선택)</span>
-          </label>
-        </div>
+        <LinkChooser
+          href={href}
+          x={chooser.x}
+          y={chooser.y}
+          onDecide={(where, remember) => {
+            if (remember) setLinkOpenMode(where);
+            setChooser(null);
+            openIn(where);
+          }}
+          onClose={() => setChooser(null)}
+        />
       )}
     </>
+  );
+}
+
+/**
+ * 코드 블록. 셸 명령(bash·sh·zsh·shell)이면 "터미널에서 실행" 을 띄운다 — 지금은 복사해서 붙여야 한다.
+ * 넣기만 하고 Enter 는 사용자가 친다(⌥클릭이면 바로 실행). 터미널을 열 수 없는 탭(작업 경로 없음)에서는 버튼이 없다.
+ */
+function MdPre(props: React.HTMLAttributes<HTMLPreElement> & { node?: unknown }) {
+  const { node: _node, children, ...rest } = props;
+  const run = useContext(RunInTerminalContext);
+  const ref = useRef<HTMLPreElement>(null);
+  const lang = Children.toArray(children)
+    .map((c) => (isValidElement<{ className?: string }>(c) ? c.props.className : undefined))
+    .find(Boolean);
+  if (!run || !isShellLanguage(lang)) return <pre {...rest}>{children}</pre>;
+  const send = (e: MouseEvent<HTMLButtonElement>) => {
+    const cmd = normalizeCommand(ref.current?.querySelector("code")?.textContent ?? "");
+    if (cmd) run(cmd, e.altKey);
+  };
+  return (
+    <div className="group relative" data-shell-block>
+      <pre ref={ref} {...rest}>
+        {children}
+      </pre>
+      <button
+        onClick={send}
+        className="absolute right-2 top-2 flex items-center gap-1 rounded-md border border-line bg-panel px-1.5 py-0.5 text-[10.5px] text-muted opacity-0 shadow-sm hover:text-fg group-hover:opacity-100 focus:opacity-100"
+        title="터미널에 넣습니다. Enter 는 직접 치세요 (⌥클릭: 바로 실행)"
+        data-run-in-terminal
+      >
+        <Icon name="terminal" size={11} />
+        터미널에서 실행
+      </button>
+    </div>
   );
 }
 
@@ -325,7 +301,7 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight, rehypeFileRefs]}
-        components={{ a: MdLink, span: MdSpan, code: MdCode }}
+        components={{ a: MdLink, span: MdSpan, code: MdCode, pre: MdPre }}
         // 기본 정리는 file: 을 지운다. 로컬 파일 링크는 MdLink 가 에디터로만 보내고 이동은 하지 않으므로 그 스킴만 남긴다.
         urlTransform={(url) => (/^file:/i.test(url) ? url : defaultUrlTransform(url))}
       >

@@ -1760,6 +1760,11 @@
   resolved "https://registry.yarnpkg.com/@xterm/addon-search/-/addon-search-0.16.0.tgz#ddadcbc6e556e45fc4b153f8a0efdf2aa1456b82"
   integrity sha512-9OeuBFu0/uZJPu+9AHKY6g/w0Czyb/Ut0A5t79I4ULoU4IfU5BEpPFVGQxP4zTTMdfZEYkVIRYbHBX1xWwjeSA==
 
+"@xterm/addon-web-links@0.12.0":
+  version "0.12.0"
+  resolved "https://registry.yarnpkg.com/@xterm/addon-web-links/-/addon-web-links-0.12.0.tgz#bc34ae46f4c12012256d451ac2b9be791c0b6bfa"
+  integrity sha512-4Smom3RPyVp7ZMYOYDoC/9eGJJJqYhnPLGGqJ6wOBfB8VxPViJNSKdgRYb8NpaM6YSelEKbA2SStD7lGyqaobw==
+
 "@xterm/xterm@6.0.0":
   version "6.0.0"
   resolved "https://registry.yarnpkg.com/@xterm/xterm/-/xterm-6.0.0.tgz#93637b0f2ee3a70718b5746a27c9c506af16745b"
