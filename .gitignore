@@ -50,6 +50,7 @@ yarn-error.log*
 
 # e2e 가 만들어 쓰는 것들 — 스크립트만 추적한다
 e2e/userdata/
+e2e/userdata-*/
 e2e/repo/
 e2e/claude-home/
 e2e/*.png
