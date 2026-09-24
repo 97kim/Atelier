@@ -389,7 +389,19 @@ function Group({
         minute: "2-digit",
       })
     : null;
-  // 말풍선 아래에는 시각만 둔다. 며칠 전 대화를 다시 볼 때 날짜가 필요하므로 올려 두면 알려 준다.
+  // 말풍선 아래에는 시각만 둔다. 며칠 전 대화를 다시 볼 때 날짜가 필요해서,
+  // 올려 두면 그 자리에서 날짜로 바뀐다(기본 툴팁은 1초를 기다려야 떠서 그것만으로는 부족하다).
+  // 말풍선 아래 오른쪽 끝에 홀로 있는 줄이라, 길어져도 왼쪽으로 늘어날 뿐 다른 것을 밀지 않는다.
+  const dated = ts
+    ? new Date(ts).toLocaleString("ko-KR", {
+        month: "long",
+        day: "numeric",
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  // 연도·초까지 필요하면 조금 머물러 기본 툴팁으로 본다.
   const timeFull = ts
     ? new Date(ts).toLocaleString("ko-KR", {
         year: "numeric",
@@ -414,8 +426,11 @@ function Group({
           ))}
         </div>
         {time && (
-          <span className="mono cursor-default pr-1 text-[10px] text-muted" title={timeFull} data-user-time>
-            {time}
+          <span className="group mono cursor-default pr-1 text-[10px] text-muted" title={timeFull} data-user-time>
+            <span className="group-hover:hidden">{time}</span>
+            <span className="hidden group-hover:inline" data-user-date>
+              {dated}
+            </span>
           </span>
         )}
       </div>
