@@ -516,7 +516,8 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
           <textarea
             value={draft.prompt}
             onChange={(e) => set({ prompt: e.target.value })}
-            rows={4}
+            // 예약 프롬프트는 사람 없이 혼자 도는 지시라 길게 쓰게 된다. 기본 8줄, 긴 걸 고칠 땐 내용만큼(최대 20줄).
+            rows={Math.min(20, Math.max(8, draft.prompt.split("\n").length + 1))}
             placeholder="보낼 말 — 어제 커밋을 훑고 빠진 테스트가 있으면 알려 줘."
             className="mt-3 w-full resize-y rounded-md border border-line bg-inset px-3 py-2 text-[13px] outline-none focus:border-accent/50"
             data-f-prompt
