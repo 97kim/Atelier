@@ -10,7 +10,7 @@ import type { ProviderRateLimitDto, RateLimitWindowDto } from "@shared/ipc";
 type SDKMessage = import("@anthropic-ai/claude-agent-sdk").SDKMessage;
 
 interface StreamBlock {
-  kind: "text" | "tool_use" | "other";
+  kind: "text" | "tool_use" | "thinking" | "other";
   blockId: string;
   toolUseId?: string;
   name?: string;
@@ -35,6 +35,16 @@ export class ClaudeEventMapper {
   private lastContextTokens: number | null = null;
   private readonly blocks = new Map<number, StreamBlock>();
   private counter = 0;
+  /** 텍스트로 이미 내보낸 진행 설명(thinking 블록) id. 스트림과 완성 메시지에서 두 번 내지 않게 블록 단위로 본다. */
+  private readonly emittedNotes = new Set<string>();
+
+  /**
+   * progressNotes: thinking 블록에 담겨 오는 도구 사이 진행 설명을 채팅 텍스트로 남긴다. Claude Code 는 기본으로
+   * thinking 을 display "updates" 로 요청해, 한두 문장을 넘는 진행 설명이 text 대신 thinking 블록으로 온다(Opus 5.5·Fable 5.1).
+   * 그대로 두면 "생각 중" 꼬리로만 잠깐 보이고 기록에 남지 않는다. 사용자가 showThinkingSummaries 를 켜면 같은 블록에
+   * 추론 요약이 담기므로 그때는 끈다(호출자가 판단).
+   */
+  constructor(private readonly opts: { progressNotes?: boolean } = {}) {}
 
   map(msg: SDKMessage, ts: number): ChatEvent[] {
     switch (msg.type) {
@@ -106,6 +116,10 @@ export class ClaudeEventMapper {
           this.blocks.set(index, { kind: "text", blockId, json: "" });
           return [];
         }
+        if (cb.type === "thinking") {
+          this.blocks.set(index, { kind: "thinking", blockId, json: "" });
+          return [];
+        }
         if (cb.type === "tool_use") {
           const toolUseId = cb.id ?? blockId;
           this.blocks.set(index, {
@@ -162,11 +176,15 @@ export class ClaudeEventMapper {
             return [{ type: "tool_use", ts, toolUseId: block.toolUseId!, name: block.name!, input: preview, partial: true, preview: true }];
           }
         }
-        if (delta.type === "thinking_delta" && delta.thinking) return [{ type: "thinking_delta", ts, text: delta.thinking }];
+        if (delta.type === "thinking_delta" && delta.thinking) {
+          if (block.kind === "thinking") block.json += delta.thinking;
+          return [{ type: "thinking_delta", ts, text: delta.thinking }];
+        }
         return [];
       }
       case "content_block_stop": {
         const block = this.blocks.get(event.index as number);
+        if (block?.kind === "thinking") return this.noteEvent(block.blockId, block.json, ts);
         if (!block || block.kind !== "tool_use") return [];
         this.emittedTools.add(block.toolUseId!);
         if (this.emittedTools.size > EMITTED_TOOLS_MAX) this.emittedTools.delete(this.emittedTools.values().next().value as string);
@@ -218,6 +236,9 @@ export class ClaudeEventMapper {
       if (b.type === "text" && typeof b.text === "string") {
         if (streamed) return; // 글자는 delta 로 이미 흘렀다
         events.push({ type: "assistant_text", ts, blockId, text: b.text });
+      } else if (b.type === "thinking") {
+        // 스트림이 끊겨 블록 끝을 못 봤어도 여기서 메운다(블록 단위로 이미 냈는지 본다)
+        events.push(...this.noteEvent(blockId, (b as { thinking?: unknown }).thinking, ts));
       } else if (b.type === "tool_use") {
         const toolUseId = b.id ?? blockId;
         if (this.emittedTools.has(toolUseId)) return; // 스트림으로 이미 완성해 냈다
@@ -232,6 +253,14 @@ export class ClaudeEventMapper {
       }
     });
     return events;
+  }
+
+  /** 진행 설명 하나를 채팅 텍스트로. 꺼져 있거나 비었거나 이미 냈으면 없다. */
+  private noteEvent(blockId: string, text: unknown, ts: number): ChatEvent[] {
+    if (!this.opts.progressNotes || typeof text !== "string" || !text.trim() || this.emittedNotes.has(blockId)) return [];
+    this.emittedNotes.add(blockId);
+    if (this.emittedNotes.size > EMITTED_TOOLS_MAX) this.emittedNotes.delete(this.emittedNotes.values().next().value as string);
+    return [{ type: "assistant_text", ts, blockId, text: text.trim() }];
   }
 
   private mapUser(

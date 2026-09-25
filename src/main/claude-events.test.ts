@@ -497,3 +497,29 @@ test("스트림으로 흐른 글자는 완성 메시지에서 다시 내지 않�
   );
   assert.deepEqual(after, []);
 });
+
+test("progressNotes: 글이 있는 thinking 블록은 끝날 때 채팅 텍스트로 한 번 남기고, 완성 메시지에서 다시 내지 않는다", () => {
+  const mapper = new ClaudeEventMapper({ progressNotes: true });
+  const st = (event: Record<string, unknown>) => mapper.map(m({ type: "stream_event", event, parent_tool_use_id: null, uuid: "u", session_id: "s" }), 1);
+  st({ type: "message_start", message: { id: "msg1" } });
+  st({ type: "content_block_start", index: 0, content_block: { type: "thinking" } });
+  st({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "파일을 확인했어요. " } });
+  st({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "이제 고칩니다.\n" } });
+  assert.deepEqual(st({ type: "content_block_stop", index: 0 }), [{ type: "assistant_text", ts: 1, blockId: "msg1:0", text: "파일을 확인했어요. 이제 고칩니다." }]);
+  // 빈 thinking(추론을 숨긴 블록)은 남기지 않는다
+  st({ type: "content_block_start", index: 1, content_block: { type: "thinking" } });
+  assert.deepEqual(st({ type: "content_block_stop", index: 1 }), []);
+  const done = mapper.map(m({ type: "assistant", parent_tool_use_id: null, message: { id: "msg1", content: [{ type: "thinking", thinking: "파일을 확인했어요. 이제 고칩니다." }, { type: "thinking", thinking: "" }] } }), 2);
+  assert.deepEqual(done, [], "스트림으로 이미 낸 것은 다시 내지 않는다");
+});
+
+test("progressNotes: 스트림이 끊겨 블록 끝을 못 봤으면 완성 메시지에서 메우고, 꺼져 있으면 아무것도 남기지 않는다", () => {
+  const on = new ClaudeEventMapper({ progressNotes: true });
+  on.map(m({ type: "stream_event", event: { type: "message_start", message: { id: "msg2" } }, parent_tool_use_id: null, uuid: "u", session_id: "s" }), 1);
+  const msg = m({ type: "assistant", parent_tool_use_id: null, message: { id: "msg2", content: [{ type: "thinking", thinking: "원인을 찾았어요." }, { type: "tool_use", id: "t1", name: "Read", input: {} }] } });
+  const ev = on.map(msg, 2);
+  assert.deepEqual(ev[0], { type: "assistant_text", ts: 2, blockId: "msg2:0", text: "원인을 찾았어요." });
+  const off = new ClaudeEventMapper();
+  const ev2 = off.map(m({ type: "assistant", parent_tool_use_id: null, message: { id: "msg3", content: [{ type: "thinking", thinking: "추론 요약" }] } }), 3);
+  assert.deepEqual(ev2, [], "showThinkingSummaries 일 때(기본 꺼짐)는 추론 요약을 채팅에 남기지 않는다");
+});

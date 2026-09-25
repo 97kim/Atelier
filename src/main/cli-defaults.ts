@@ -26,3 +26,38 @@ export function codexTopLevelModel(toml: string): string | null {
   }
   return null;
 }
+
+/** macOS 관리형 설정. 사용자·프로젝트 설정보다 앞선다. */
+export const CLAUDE_MANAGED_SETTINGS = "/Library/Application Support/ClaudeCode/managed-settings.json";
+
+/**
+ * Claude Code 의 showThinkingSummaries 가 켜져 있나. 켜져 있으면 CLI 가 thinking 블록에 추론 요약을 담아 보내고,
+ * 꺼져 있으면(기본) 도구 사이 진행 설명만 담는다(display "updates"). 우선순위는 CLI 와 같다: 사용자 < 프로젝트 < 로컬 < 관리형.
+ * 사용자 설정 폴더는 CLI 처럼 CLAUDE_CONFIG_DIR 을 따른다.
+ */
+export function claudeShowsThinkingSummaries(env: Record<string, string | undefined>, home: string, cwd: string | null, managed = CLAUDE_MANAGED_SETTINGS): boolean {
+  const configDir = env.CLAUDE_CONFIG_DIR?.trim() || join(home, ".claude");
+  const files = [join(configDir, "settings.json")];
+  if (cwd) files.push(join(cwd, ".claude", "settings.json"), join(cwd, ".claude", "settings.local.json"));
+  files.push(managed);
+  let on = false;
+  for (const f of files) {
+    try {
+      const v = (JSON.parse(fs.readFileSync(f, "utf8")) as { showThinkingSummaries?: unknown }).showThinkingSummaries;
+      if (typeof v === "boolean") on = v;
+    } catch {
+      /* 없거나 못 읽는 파일은 건너뛴다 */
+    }
+  }
+  return on;
+}
+
+/**
+ * thinking 블록을 도구 사이 진행 설명으로 믿어도 되나. CLI 는 Anthropic API 에 직접 붙을 때만 진행 설명 모드(display "updates")를 켠다 —
+ * Bedrock·Vertex·Foundry 경로에서는 켜지 않으니 알 수 없는 쪽으로 보고 끈다. showThinkingSummaries 가 켜져 있으면 추론 요약이 섞이니 끈다.
+ */
+export function claudeProgressNotes(env: Record<string, string | undefined>, home: string, cwd: string | null, managed = CLAUDE_MANAGED_SETTINGS): boolean {
+  const on = (k: string) => !!env[k] && env[k] !== "0" && env[k]!.toLowerCase() !== "false";
+  if (on("CLAUDE_CODE_USE_BEDROCK") || on("CLAUDE_CODE_USE_VERTEX") || on("CLAUDE_CODE_USE_FOUNDRY")) return false;
+  return !claudeShowsThinkingSummaries(env, home, cwd, managed);
+}

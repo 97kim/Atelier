@@ -14,6 +14,8 @@ import { parseLiveTasks, parseTaskFinished, type LiveBackgroundTask, type TaskFi
 import { buildClaudeUserMessage, type StoredChatImage } from "./chat-attachments";
 import { ClaudeEventMapper, parseClaudeRateLimit } from "./claude-events";
 import { importClaudeSdk } from "./esm";
+import { claudeProgressNotes } from "./cli-defaults";
+import { homedir } from "node:os";
 
 type SdkOptions = import("@anthropic-ai/claude-agent-sdk").Options;
 type SDKUserMessage = import("@anthropic-ai/claude-agent-sdk").SDKUserMessage;
@@ -151,6 +153,8 @@ interface TurnCtx {
 interface LiveSession {
   key: string;
   cwd: string;
+  /** thinking 블록의 진행 설명을 채팅 텍스트로 남길지. 세션을 열 때 CLI 에 넘기는 환경·설정으로 한 번 정한다(CLI 도 시작할 때 읽는다). */
+  progressNotes: boolean;
   /** CLI 가 알려 준 세션 id(init/result). 새 탭이면 첫 init 때 채워진다. */
   sessionId: string | null;
   mode: PermissionMode;
@@ -276,6 +280,7 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
   const s: LiveSession = {
     key: req.sessionKey,
     cwd: req.cwd,
+    progressNotes: claudeProgressNotes(runtime.env, homedir(), req.cwd),
     sessionId: req.sessionId,
     mode: POLICY_TO_MODE[req.policy],
     model: req.model,
@@ -309,10 +314,10 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
       preset: "claude_code",
       // 앱 화면은 툴카드가 접혀 있어 터미널보다 맥락이 덜 보인다 — 도구 사이사이에 짧은 설명을 두게 한다
       append: [
-        "이 대화는 Atelier 앱 채팅 화면에 표시된다. 도구 호출은 접힌 카드로만 보이므로, 사용자가 흐름을 따라올 수 있게 다음을 지켜라.",
-        "- 도구를 부르기 전에 무엇을 왜 하려는지 한 문장으로 말하라.",
-        "- IMPORTANT: 도구 결과를 받은 뒤 다음 도구를 부르기 전에는 예외 없이 먼저 한두 문장을 써라 — 방금 무엇을 알아냈고(원인을 찾았으면 원인), 그래서 다음에 무엇을 할지. 텍스트 없이 도구 호출만 연달아 하는 것은 금지다.",
-        "- 이 설명은 짧게. 같은 말을 형식적으로 반복하지 말고, 최종 답에서 과정을 다시 길게 요약하지 마라.",
+        "이 대화는 Atelier 앱 채팅 화면에 표시된다. 도구 호출은 접힌 카드로만 보여서, 사용자는 네가 쓰는 글로만 흐름을 따라온다.",
+        "- 도구를 부르기 전에 무엇을 왜 하려는지 한 문장으로 말한다.",
+        "- 도구 결과를 받으면 다음 도구를 부르기 전에 한두 문장을 쓴다 — 방금 무엇을 알아냈고(원인을 찾았으면 원인), 그래서 다음에 무엇을 할지.",
+        "- 이 설명은 짧게, 새로 알게 된 것만. 최종 답은 결과와 결론을 말하고, 과정은 위 설명이 이미 전했으니 되풀이하지 않는다.",
       ].join("\n"),
     },
     permissionMode: s.mode,
@@ -444,7 +449,7 @@ function handleMessage(s: LiveSession, message: SDKMessage) {
     // 잘린다(첫 result 10분 뒤 지연 소진 → 19분 59초에 후속 턴 시작 → 20분에 종료).
     s.idleDeferred = false;
     if (live.get(s.key) === s && !s.dead) armIdle(s);
-    if (!s.ambientMapper) s.ambientMapper = new ClaudeEventMapper();
+    if (!s.ambientMapper) s.ambientMapper = new ClaudeEventMapper({ progressNotes: s.progressNotes });
     for (const e of s.ambientMapper.map(message, Date.now())) onEvent(e);
     if (message.type === "result") s.ambientMapper = null;
     return;
@@ -556,7 +561,7 @@ export async function runClaudeTurn(runtime: ClaudeRuntime, req: ClaudeTurnReque
   s.onStreamEnded = req.onStreamEnded;
   s.idleDeferred = false;
   const done = new Promise<void>((resolve, reject) => {
-    s.turn = { req, mapper: new ClaudeEventMapper(), resolve, reject, permissionSeq: 0 };
+    s.turn = { req, mapper: new ClaudeEventMapper({ progressNotes: s.progressNotes }), resolve, reject, permissionSeq: 0 };
   });
   // 중단: 프로세스는 살려 두고 이 턴만 끊는다. result 가 안 오면 프로세스를 내린다.
   let graceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -576,3 +581,4 @@ export async function runClaudeTurn(runtime: ClaudeRuntime, req: ClaudeTurnReque
     if (live.get(s.key) === s && !s.dead) armIdle(s);
   }
 }
+
