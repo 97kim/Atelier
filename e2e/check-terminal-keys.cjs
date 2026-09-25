@@ -112,12 +112,14 @@ const result = (n, ok, note) => { if (!ok) fails += 1; console.log(`RESULT (${n}
   await page.screenshot({ path: E2E + "/shot-terminal-keys.png" });
 
   // 마지막 터미널까지 ⌘W 로 닫으면 패널이 접히고 세션은 남는다
-  await focusTerm();
-  await shortcut("close-tab");
-  await page.waitForTimeout(600);
-  await focusTerm();
-  await shortcut("close-tab");
-  await page.waitForTimeout(800);
+  // 분할을 풀 때 남은 숨은 탭까지 있으니 탭 수만큼 닫는다
+  const tabCount = await ev(() => document.querySelectorAll("[data-terminal-tab]").length);
+  for (let i = 0; i < tabCount; i++) {
+    await focusTerm();
+    await shortcut("close-tab");
+    await page.waitForTimeout(600);
+  }
+  await page.waitForTimeout(300);
   result("마지막 ⌘W 는 패널을 접는다", await ev(() => document.querySelector("[data-terminal-panel]")?.hidden === true));
   result("그래도 채팅 세션은 남는다", openTabCount() === tabsBefore + 1, `(${openTabCount()})`);
 
