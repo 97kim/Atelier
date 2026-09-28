@@ -421,6 +421,20 @@ test("턴이 끝나면 결과 못 받은 도구도 끝난 것으로 적는다", 
   assert.deepEqual(tool("t2").result, { output: "ok", isError: false }, "이미 받은 결과는 그대로다");
 });
 
+test("입력을 만들던 중(partial)에 턴이 끝난 도구도 닫는다 — partial 은 남겨 덜 만든 입력으로 실행 버튼이 붙지 않게", () => {
+  // 중단했는데 카드가 "입력 생성 중" 으로 남던 자리다.
+  const s = replaySession([
+    ev("tool_use", { toolUseId: "t1", name: "Bash", input: { command: "grep -rn" }, partial: true, preview: true }),
+    ev("turn_result", {
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0, durationMs: 1, numTurns: 1, modelUsage: {}, isError: true,
+    }),
+  ]);
+  const tool = s.blocks.find((b) => b.kind === "tool" && b.id === "t1") as { partial: boolean; result?: { output: string; isError: boolean } };
+  assert.equal(tool.partial, true);
+  assert.equal(tool.result?.isError, true);
+  assert.match(tool.result?.output ?? "", /실행하지 않았습니다/);
+});
+
 test("치명적 오류로 끝나도 돌던 도구를 닫는다 — 경고는 건드리지 않는다", () => {
   const running = () => ev("tool_use", { toolUseId: "t1", name: "Bash", input: {} });
   const warn = replaySession([running(), ev("error", { message: "경고", fatal: false })]);

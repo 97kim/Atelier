@@ -133,7 +133,8 @@ export function ToolCard({ block }: { block: ToolBlock }) {
     const line = Math.max(1, offset ?? 1);
     return { line, endLine: limit !== null && limit > 0 ? line + limit - 1 : undefined };
   })();
-  const state = block.partial
+  // 입력을 만들다 턴이 끝난 도구는 partial 인 채로 결과(오류)가 붙는다 — 그때는 "실패" 로
+  const state = block.partial && !block.result
     ? "입력 생성 중"
     : block.permission === "pending"
       ? block.name === "AskUserQuestion" ? "답변 대기" : "권한 대기"

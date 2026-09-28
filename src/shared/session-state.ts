@@ -215,11 +215,15 @@ function finalizeStreaming(blocks: Block[]): Block[] {
  * 경과 시간만 올라간다 — 중단했는데도 계속 도는 것처럼 보인다(실제로 그렇게 보였다).
  *
  * 결과를 지어내지 않는다. isError 로 적어 두고 무슨 일이 있었는지만 남긴다.
+ * 입력을 만들던 중(partial)에 끝난 도구는 실행되지 않았다 — partial 은 그대로 둬서 덜 만든 명령·경로로
+ * "터미널에서 실행"·파일 열기가 붙지 않게 한다.
  */
 function finalizeRunningTools(blocks: Block[], note: string): Block[] {
-  if (!blocks.some((b) => b.kind === "tool" && !b.partial && !b.result)) return blocks;
+  if (!blocks.some((b) => b.kind === "tool" && !b.result)) return blocks;
   return blocks.map((b) =>
-    b.kind === "tool" && !b.partial && !b.result ? { ...b, result: { output: note, isError: true } } : b,
+    b.kind === "tool" && !b.result
+      ? { ...b, result: { output: b.partial ? "입력을 다 만들기 전에 끝나 실행하지 않았습니다." : note, isError: true } }
+      : b,
   );
 }
 
