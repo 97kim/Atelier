@@ -231,6 +231,7 @@ export const IPC = {
   wtMerge: "worktree:merge",
   wtRemove: "worktree:remove",
   tabActivate: "tab:activate",
+  tabSetVisible: "tab:set-visible",
   tabRename: "tab:rename",
   tabReorder: "tab:reorder",
   workspaceReorder: "workspace:reorder",
@@ -666,6 +667,8 @@ export interface WorkspaceApi {
   /** 세션을 목록에서 지우고 대화 기록 파일도 삭제한다. 격리 세션의 worktree 가 dirty 면 지우지 않고 오류를 돌려준다. */
   deleteTab(tabId: string): Promise<{ ok: true } | { ok: false; error: string }>;
   activateTab(tabId: string): Promise<void>;
+  /** 화면에 보이는 채팅 탭(분할이면 둘, 설정·사용량 화면이면 없음). 완료·오류 표시와 완료 알림이 "보고 있는 탭" 을 이걸로 판단한다. */
+  setVisibleTabs(tabIds: string[]): void;
   renameTab(tabId: string, title: string): Promise<void>;
   reorderTabs(openTabIds: string[]): Promise<void>;
   /** 사이드바에서 끌어 옮긴 워크스페이스 순서. */

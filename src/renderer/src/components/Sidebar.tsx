@@ -58,6 +58,7 @@ export function Sidebar({
   onSwitchWorkspace,
   onSearch,
   onExportTab,
+  onSplitTab,
   onJumpAttention,
   onNewWorktreeIn,
   onReorderTabs,
@@ -79,6 +80,8 @@ export function Sidebar({
   onJumpAttention: () => void;
   /** 세션을 마크다운 파일로 내보내기(저장 다이얼로그). */
   onExportTab: (tabId: string) => void;
+  /** 채팅 화면을 좌우로 나눠 이 탭을 오른쪽 칸에 연다. */
+  onSplitTab: (tabId: string) => void;
   onNewTabIn: (workspaceId: string) => void;
   /** 격리 세션: 브랜치 + git worktree 를 만들어 그 경로에서 새 세션을 연다. */
   onNewWorktreeIn: (workspaceId: string) => void;
@@ -745,6 +748,15 @@ export function Sidebar({
         >
           {menuTab && (
             <>
+              {menuTab.open && menuTab.id !== model.activeTabId && (
+                <MenuItem
+                  label="오른쪽에 나란히 열기"
+                  onPick={() => {
+                    setMenu(null);
+                    onSplitTab(menuTab.id);
+                  }}
+                />
+              )}
               <MenuItem
                 label={menuTab.open ? "닫기" : "열기"}
                 onPick={() => {

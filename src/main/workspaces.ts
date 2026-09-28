@@ -224,6 +224,26 @@ export class WorkspaceService {
     this.attentionHooks?.viewed(tabId);
   }
 
+  /**
+   * 화면에 보이는 채팅 탭. 분할 화면이면 활성 탭 말고 하나가 더 보인다 — "보고 있는 탭" 판정(완료·오류 표시, 완료 알림)이
+   * 활성 탭 하나만 보면 오른쪽 칸의 탭에 보고 있는데도 완료 점이 붙는다. 렌더러가 알려 주고, 새로 보이게 된 탭은 표시를 지운다.
+   */
+  private visible = new Set<string>();
+  setVisibleTabs(tabIds: string[]) {
+    const next = new Set(tabIds.filter((id) => this.model.tabs.some((t) => t.id === id)));
+    for (const id of next) if (!this.visible.has(id)) this.attentionHooks?.viewed(id);
+    this.visible = next;
+  }
+
+  /** 지금 화면에 보이는 탭인가. 렌더러가 알려 준 목록만 본다 — 설정·사용량 화면이면 비어 있어 채팅을 읽은 것으로 치지 않는다. */
+  isVisible(tabId: string): boolean {
+    return this.visible.has(tabId);
+  }
+
+  visibleTabIds(): string[] {
+    return [...this.visible];
+  }
+
   activateNth(n: number) {
     const id = nthOpenTab(this.model, n);
     if (id) this.activateTab(id);

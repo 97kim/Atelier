@@ -65,6 +65,7 @@ const api: WorkbenchApi = {
     reopenTab: (tabId: string) => ipcRenderer.invoke(IPC.tabReopen, tabId),
     deleteTab: (tabId: string) => ipcRenderer.invoke(IPC.tabDelete, tabId),
     activateTab: (tabId: string) => ipcRenderer.invoke(IPC.tabActivate, tabId),
+    setVisibleTabs: (tabIds: string[]) => ipcRenderer.send(IPC.tabSetVisible, tabIds),
     renameTab: (tabId: string, title: string) =>
       ipcRenderer.invoke(IPC.tabRename, tabId, title),
     reorderTabs: (openTabIds: string[]) =>

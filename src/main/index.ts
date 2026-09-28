@@ -1234,7 +1234,7 @@ function bootstrap() {
   );
   attention = new AttentionTracker({
     isViewing: (tabId) =>
-      workspaces.state().model.activeTabId === tabId &&
+      workspaces.isVisible(tabId) &&
       BrowserWindow.getAllWindows().some((w) => w.isFocused()),
     onChange: (map) => {
       workspaces.onAttention();
@@ -1278,7 +1278,7 @@ function bootstrap() {
       } else if (event.type === "turn_result") {
         // 응답 완료 알림: 설정에 따라 항상 / 창이 포커스 밖이거나 다른 탭을 볼 때 / 끔
         const focused = BrowserWindow.getAllWindows().some((w) => w.isFocused());
-        const isActive = workspaces.state().model.activeTabId === tabId;
+        const isActive = workspaces.isVisible(tabId);
         // 오케스트레이션 워커 탭의 턴은 알리지 않는다 — Run 의 완료·응답 필요는 Run 단위로 따로 알린다
         const supervised = orchestrator?.isSupervisedTab(tabId) ?? false;
         if (!supervised && shouldNotifyDone(appSettings().notifyOnDone, focused, isActive)) {
@@ -2242,6 +2242,9 @@ function registerIpc() {
     workspaces.deleteTab(tabId);
     return { ok: true };
   });
+  ipcMain.on(IPC.tabSetVisible, (_e, tabIds: unknown) => {
+    if (Array.isArray(tabIds)) workspaces.setVisibleTabs(tabIds.filter((x): x is string => typeof x === "string"));
+  });
   ipcMain.handle(IPC.tabActivate, (_e, tabId: string) => {
     const r = workspaces.activateTab(tabId);
     if (typeof tabId === "string") void sessions.warm(tabId); // 보고 있는 탭은 첫 메시지 전에 프로세스를 띄워 둔다
@@ -2475,8 +2478,7 @@ function createWindow(): BrowserWindow {
   });
   // 창에 포커스가 돌아오면 보고 있던 탭의 완료/오류 표시를 지운다.
   win.on("focus", () => {
-    const active = workspaces?.state().model.activeTabId;
-    if (active) attention?.viewed(active);
+    for (const id of workspaces?.visibleTabIds() ?? []) attention?.viewed(id);
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);

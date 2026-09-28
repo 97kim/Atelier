@@ -77,7 +77,16 @@ export function ChatView({
   onOpenMcp,
   onOpenSettings,
   onIsolate,
+  focused = true,
+  onUnsplit,
+  showTabStrip = true,
 }: {
+  /** 분할 화면에서 이 칸이 포커스된 칸인가. 창 전체 단축키(⌘J 등)는 포커스된 칸만 받는다. */
+  focused?: boolean;
+  /** 분할 화면이면 이 칸을 분할에서 뺀다(탭은 열린 채로). */
+  onUnsplit?: () => void;
+  /** 탭 줄. 분할이면 왼쪽 칸에만 — 같은 줄이 두 번 보이지 않게. */
+  showTabStrip?: boolean;
   tab: TabMeta;
   workspace: Workspace;
   /** 같은 디렉토리에서 다른 세션이 작업 중일 때 "격리 세션으로": 워크스페이스 저장소에 worktree 를 만들어 새 세션을 연다. */
@@ -168,9 +177,9 @@ export function ChatView({
   useEffect(
     () =>
       window.workbench.app.onShortcut((name) => {
-        if (name === "toggle-terminal") toggleTerminal();
+        if (name === "toggle-terminal" && focused) toggleTerminal();
       }),
-    [toggleTerminal],
+    [toggleTerminal, focused],
   );
   const attachTerminal = async () => {
     setAttachError(null);
@@ -635,6 +644,16 @@ export function ChatView({
               채팅으로 돌아가기
             </button>
           ) : null}
+          {onUnsplit && (
+            <button
+              onClick={onUnsplit}
+              className="no-drag flex shrink-0 items-center rounded-md border border-line bg-panel p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
+              title="이 칸을 분할에서 빼기 (탭은 열려 있습니다)"
+              data-unsplit
+            >
+              <Icon name="x" size={12} />
+            </button>
+          )}
           <div className="relative flex shrink-0" ref={moreAnchor}>
             <button
               onClick={() => setMoreOpen((o) => !o)}
@@ -706,7 +725,7 @@ export function ChatView({
             onFocusCapture={() => setLastPane(tabId, "chat")}
             data-chat-column
           >
-            <TabBar
+            {showTabStrip && <TabBar
               ws={ws}
               onActivate={onActivateTab}
               onClose={onCloseTab}
@@ -714,7 +733,7 @@ export function ChatView({
               onRename={(id) =>
                 id === tabId ? startRename() : onActivateTab(id)
               }
-            />
+            />}
 
             <div className="min-h-0 flex-1">
               <MessageList

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { inFocusedPane } from "../pane-focus";
 import type { PermissionAnswer, PermissionRequestEvent } from "@shared/chat-events";
 import { DiffView, UnifiedDiff } from "./DiffView";
 
@@ -31,23 +32,43 @@ export function PermissionPrompt({
   onAnswer: (answer: PermissionAnswer) => void;
 }) {
   const isQuestion = request.tool === "AskUserQuestion";
+  const root = useRef<HTMLDivElement>(null);
+  const allowBtn = useRef<HTMLButtonElement>(null);
+  // "허용" 에 포커스를 준다 — 단, 분할 화면의 다른 칸이면 주지 않는다. 옆 칸에서 쓰던 중에 누른 Enter 가 이 버튼을 누르게 된다.
+  useEffect(() => {
+    if (inFocusedPane(root.current)) allowBtn.current?.focus();
+  }, []);
   // Enter = 허용, Esc = 거부. 텍스트 입력 중이면 무시. 질문은 Enter 로 빈 답을 보내면 안 되므로 Esc(건너뛰기)만.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT")) return;
-      if (e.key === "Enter" && !isQuestion) onAnswer({ behavior: "allow" });
-      if (e.key === "Escape") onAnswer({ behavior: "deny" });
+      // 분할 화면이면 포커스된 칸의 승인 창만 — 안 그러면 양쪽 승인 창이 키 한 번에 같이 승인된다.
+      if (!inFocusedPane(root.current)) return;
+      // 처리한 키는 기본 동작을 막는다 — 포커스가 남아 있는 다른 버튼(옆 칸의 "허용" 등)이 같이 눌리지 않게.
+      if (e.key === "Enter" && !isQuestion) {
+        e.preventDefault();
+        onAnswer({ behavior: "allow" });
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onAnswer({ behavior: "deny" });
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onAnswer, isQuestion]);
 
-  if (isQuestion) return <QuestionPrompt request={request} onAnswer={onAnswer} />;
+  if (isQuestion)
+    return (
+      <div ref={root}>
+        <QuestionPrompt request={request} onAnswer={onAnswer} />
+      </div>
+    );
 
   const { tool, input } = request;
   return (
-    <div className="mx-6 mb-2 rounded-xl border border-warn/50 bg-panel p-4 shadow-2xl">
+    <div ref={root} className="mx-6 mb-2 rounded-xl border border-warn/50 bg-panel p-4 shadow-2xl">
       <div className="mb-1 flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-warn" />
         <span className="font-medium">{request.title ?? `${tool} 실행을 허용할까요?`}</span>
@@ -58,7 +79,7 @@ export function PermissionPrompt({
       </div>
       <div className="flex gap-2">
         <button
-          autoFocus
+          ref={allowBtn}
           onClick={() => onAnswer({ behavior: "allow" })}
           className="rounded-md bg-primary px-3.5 py-1.5 font-medium text-on-primary hover:bg-primary-hover"
         >

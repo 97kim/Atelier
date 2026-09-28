@@ -71,6 +71,7 @@ export function TerminalPanel({
   const [split, setSplit] = useState<{ dir: SplitDir; id: string } | null>(null);
   const [ratio, setRatio] = useState(50);
   const areaRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false);
   const prefix = `${tabId}:`;
   /** pty 가 붙은 터미널들 — "터미널에서 실행" 요청은 대상이 여기 들어온 뒤에 보낸다. */
@@ -372,7 +373,11 @@ export function TerminalPanel({
     find: openFind,
   };
   useEffect(() => {
-    const onCmd = (e: Event) => commands.current[(e as CustomEvent<TerminalCommand>).detail]?.();
+    // 분할 화면엔 터미널 패널이 둘일 수 있다 — 포커스가 이 패널 안에 있을 때만 받는다(App 은 포커스가 어떤 터미널 패널 안일 때 보낸다).
+    const onCmd = (e: Event) => {
+      if (!panelRef.current?.contains(document.activeElement)) return;
+      commands.current[(e as CustomEvent<TerminalCommand>).detail]?.();
+    };
     window.addEventListener("atelier:terminal-command", onCmd);
     return () => window.removeEventListener("atelier:terminal-command", onCmd);
   }, []);
@@ -408,6 +413,7 @@ export function TerminalPanel({
   return (
     <div
       className="no-drag relative shrink-0 border-t border-line bg-inset"
+      ref={panelRef}
       style={{ height }}
       hidden={!open}
       data-terminal-panel

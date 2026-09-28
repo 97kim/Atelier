@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppInfoDto, ShortcutName } from "@shared/ipc";
 import { activeWorkspace, tabCwd } from "@shared/workspace-model";
 import { Icon } from "./components/Icon";
@@ -13,6 +13,7 @@ import { isBrowserTab } from "./editor-tabs";
 import { forgetEditorTabs, getEditorTabs, getLastPane, openBrowserTab, openEditorFile, pruneEditorTabs, reopenClosedEditorTab, setEditorMaximized } from "./editor-tabs";
 import { clearComposerDraft, pruneComposerDrafts } from "./composer-draft";
 import { pruneTerminalState } from "./terminal-panes";
+import { closePane, loadSplit, openSplit, pruneSplit, saveSplit, syncActive, type SplitState } from "./split-view";
 import { nextAttentionTab } from "@shared/attention-nav";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { ChatView } from "./views/ChatView";
@@ -54,6 +55,93 @@ export function App() {
   const activeWs = activeTab
     ? (model.workspaces.find((w) => w.id === activeTab.workspaceId) ?? null)
     : null;
+
+  // ===== 채팅 화면 분할 =====
+  // 좌우 두 칸에 각각 다른 탭. 활성 탭 = 포커스된 칸의 탭. 규칙은 split-view.ts 에 모여 있다.
+  const [split, setSplit] = useState<SplitState | null>(null);
+  const [splitRatio, setSplitRatio] = useState(50);
+  const splitLoaded = useRef(false);
+  const splitArea = useRef<HTMLDivElement>(null);
+  /**
+   * 분할을 푼 직후 남길 탭. 활성화는 main 을 거쳐 비동기로 돌아오므로, 그동안 활성 탭(빠진 칸)을 그리면
+   * 남을 칸이 사라졌다 다시 마운트된다(입력 중이던 글·스크롤이 날아간다). 모델이 따라오면 비운다.
+   */
+  const [solo, setSolo] = useState<string | null>(null);
+  useEffect(() => {
+    if (solo && (model.activeTabId === solo || !model.openTabIds.includes(solo))) setSolo(null);
+  }, [solo, model.activeTabId, model.openTabIds]);
+  useEffect(() => {
+    if (splitLoaded.current || model.tabs.length === 0) return; // 모델을 받기 전(빈 모델)에 판단하면 저장된 분할을 버린다
+    const r = loadSplit(model.openTabIds, model.activeTabId);
+    splitLoaded.current = true;
+    setSplit(r.state);
+    setSplitRatio(r.ratio);
+  }, [model.tabs.length, model.openTabIds, model.activeTabId]);
+  useEffect(() => {
+    if (!splitLoaded.current) return;
+    // 닫기·삭제를 먼저 본다 — 탭을 닫으면 모델이 이웃 탭을 활성화하는데, 그걸 칸 교체로 받으면 남은 칸 대신 제3의 탭이 들어온다.
+    const pruned = pruneSplit(split, model.openTabIds);
+    if (!pruned.state) {
+      if (split) {
+        setSplit(null);
+        if (pruned.keep && pruned.keep !== model.activeTabId) {
+          setSolo(pruned.keep);
+          void api.activateTab(pruned.keep);
+        }
+      }
+      return;
+    }
+    const next = syncActive(pruned.state, model.activeTabId);
+    if (next !== split) setSplit(next);
+  }, [split, model.openTabIds, model.activeTabId, api]);
+  useEffect(() => {
+    if (splitLoaded.current) saveSplit(split, splitRatio);
+  }, [split, splitRatio]);
+  // main 이 "보고 있는 탭" 을 알게 한다 — 분할이면 둘 다(완료·오류 표시와 완료 알림이 이걸로 판단한다).
+  useEffect(() => {
+    const single = solo ?? model.activeTabId;
+    const ids = view !== "chat" ? [] : split ? [split.left, split.right] : single ? [single] : [];
+    api.setVisibleTabs(ids);
+  }, [view, split, solo, model.activeTabId, api]);
+  // 키보드로 칸을 바꾸면(⌃Tab, ⌘1~9, 응답 필요 이동) DOM 포커스는 이전 칸에 남는다. 거기가 승인 창의 "허용" 버튼이면
+  // 다음 Enter 가 엉뚱한 칸을 승인한다 — 포커스가 포커스되지 않은 칸 안에 남아 있으면 풀어 준다.
+  useEffect(() => {
+    if (!split) return;
+    const el = document.activeElement as HTMLElement | null;
+    const pane = el?.closest?.("[data-chat-pane]");
+    if (pane && pane.getAttribute("data-focused") !== "true") el?.blur();
+  }, [split]);
+  const openSplitTab = (tabId: string) => {
+    const next = openSplit(split, model.activeTabId, tabId);
+    if (!next) return;
+    setView("chat");
+    setSplit(next);
+    if (model.activeTabId !== tabId) void api.activateTab(tabId);
+  };
+  const unsplitPane = (pane: 0 | 1) => {
+    if (!split) return;
+    const keep = closePane(split, pane);
+    setSplit(null);
+    if (model.activeTabId !== keep) {
+      setSolo(keep);
+      void api.activateTab(keep);
+    }
+  };
+  const onSplitDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const area = splitArea.current;
+    if (!area) return;
+    const move = (ev: MouseEvent) => {
+      const r = area.getBoundingClientRect();
+      setSplitRatio(Math.min(80, Math.max(20, ((ev.clientX - r.left) / r.width) * 100)));
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
 
   const newTab = useCallback(async () => {
     const wsId = activeWorkspace(model)?.id;
@@ -271,6 +359,7 @@ export function App() {
         onJumpAttention={() => jumpAttention(1)}
         onNewWorktreeIn={(wsId) => void newWorktreeIn(wsId)}
         onExportTab={(id) => void window.workbench.chat.exportMarkdown(id)}
+        onSplitTab={openSplitTab}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -278,24 +367,66 @@ export function App() {
           <>
             <div className="min-h-0 flex-1">
               {activeTab && activeWs ? (
-                <ChatView
-                  key={activeTab.id}
-                  tab={activeTab}
-                  workspace={activeWs}
-                  ws={ws}
-                  onActivateTab={(id) => void api.activateTab(id)}
-                  onCloseTab={(id) => void closeTab(id)}
-                  onNewTab={() => void newTab()}
-                  onOpenMcp={() => {
-                    setSettingsSection("mcp");
-                    setView("settings");
-                  }}
-                  onOpenSettings={(section) => {
-                    setSettingsSection(section ?? "cli");
-                    setView("settings");
-                  }}
-                  onIsolate={() => void newWorktreeIn(activeWs.id)}
-                />
+                <div ref={splitArea} className="flex h-full min-h-0" data-chat-split={split ? "on" : "off"}>
+                  {/* 칸들은 같은 부모 아래 탭 id 로 key 를 준 형제로, DOM 순서는 id 순으로 고정하고 좌우는 CSS order 로만 바꾼다 —
+                      자리를 옮기면 인앱 브라우저(webview)가 페이지를 다시 읽고, 부모가 바뀌면 ChatView 가 다시 마운트된다. */}
+                  {(split ? [split.left, split.right] : [solo ?? activeTab.id])
+                    .slice()
+                    .sort()
+                    .map((id) => {
+                      const t = model.tabs.find((x) => x.id === id);
+                      const w = t ? model.workspaces.find((x) => x.id === t.workspaceId) : null;
+                      if (!t || !w) return null;
+                      const pane: 0 | 1 = split && id === split.right ? 1 : 0;
+                      const focused = !split || split.focused === pane;
+                      const activateThis = () => {
+                        if (model.activeTabId !== id) void api.activateTab(id);
+                      };
+                      return (
+                        <div
+                          key={id}
+                          className={`relative flex min-h-0 min-w-0 flex-col ${split && pane === 1 ? "flex-1" : split ? "" : "flex-1"}`}
+                          style={{ order: pane * 2, ...(split && pane === 0 ? { width: `${splitRatio}%`, flexShrink: 0 } : {}) }}
+                          onMouseDownCapture={split ? activateThis : undefined}
+                          onFocusCapture={split ? activateThis : undefined}
+                          data-chat-pane={pane === 0 ? "left" : "right"}
+                          data-focused={focused ? "true" : "false"}
+                        >
+                          {split && focused && <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 bg-accent/60" />}
+                          <ChatView
+                            tab={t}
+                            workspace={w}
+                            ws={ws}
+                            focused={focused}
+                            showTabStrip={!split || pane === 0}
+                            onUnsplit={split ? () => unsplitPane(pane) : undefined}
+                            onActivateTab={(tid) => void api.activateTab(tid)}
+                            onCloseTab={(tid) => void closeTab(tid)}
+                            onNewTab={() => void newTab()}
+                            onOpenMcp={() => {
+                              setSettingsSection("mcp");
+                              setView("settings");
+                            }}
+                            onOpenSettings={(section) => {
+                              setSettingsSection(section ?? "cli");
+                              setView("settings");
+                            }}
+                            onIsolate={() => void newWorktreeIn(w.id)}
+                          />
+                        </div>
+                      );
+                    })}
+                  {split && (
+                    <div
+                      onMouseDown={onSplitDrag}
+                      onDoubleClick={() => setSplitRatio(50)}
+                      className="w-1 shrink-0 cursor-col-resize bg-line/60 hover:bg-accent/40"
+                      style={{ order: 1 }}
+                      title="끌어서 너비 조절 · 두 번 누르면 반반"
+                      data-chat-split-resizer
+                    />
+                  )}
+                </div>
               ) : (
                 <EmptyState
                   hasWorkspace={model.workspaces.length > 0}
