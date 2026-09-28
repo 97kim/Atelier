@@ -14,6 +14,7 @@ import {
   createTab,
   createWorkspace,
   tabCwd,
+  inheritedCwd,
   updateWorkspace,
   nthOpenTab,
   removeWorkspace,
@@ -161,14 +162,14 @@ export class WorkspaceService {
       ? this.model.workspaces.find((w) => w.id === workspaceId)
       : activeWorkspace(this.model);
     if (!ws) return null;
-    // 새 탭은 활성 탭의 provider/정책을 이어받고, 같은 워크스페이스면 작업 경로도 이어받는다.
+    // 새 탭은 활성 탭의 provider/정책을 이어받는다. 작업 경로는 inheritedCwd 가 정한다(다른 워크스페이스면 그쪽 최근 경로).
     const active = this.model.tabs.find((t) => t.id === this.model.activeTabId);
     const now = Date.now();
     const { model, tab } = createTab(this.model, ws.id, now, randomUUID(), {
       provider: active?.provider,
       model: active?.model,
       policy: active?.policy,
-      cwd: extra?.cwd ?? (active && active.workspaceId === ws.id ? (tabCwd(this.model, active) ?? undefined) : undefined),
+      cwd: extra?.cwd ?? inheritedCwd(this.model, ws.id, this.model.activeTabId),
     });
     // 격리 세션이면 worktree 정보와 브랜치 이름 제목을 함께 저장한다.
     // worktree 없이 경로만 준 경우(예약처럼 활성 탭을 따라가면 안 되는 경우)도 있다.

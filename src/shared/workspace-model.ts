@@ -138,6 +138,23 @@ export function tabCwd(m: WorkbenchModel, tab: TabMeta): string | null {
   return ws?.path || null;
 }
 
+/**
+ * 새 탭이 이어받을 작업 경로. 같은 워크스페이스의 탭에서 만들면 그 탭의 경로를 쓴다.
+ * 다른 워크스페이스에서 만들면(사이드바에서 A 의 + 를 B 탭을 보며 누른 경우) 활성 탭 경로는 남의 것이라 쓰지 않는다 —
+ * 그 워크스페이스에 기본 경로가 있으면 그걸 따르게 비워 두고(undefined), 없으면 그 워크스페이스에서 가장 최근에 쓴
+ * 탭의 경로를 쓴다. worktree 격리 탭의 경로는 임시 사본이라 건너뛴다.
+ */
+export function inheritedCwd(m: WorkbenchModel, workspaceId: string, activeTabId: string | null): string | undefined {
+  const active = activeTabId ? m.tabs.find((t) => t.id === activeTabId) : undefined;
+  if (active && active.workspaceId === workspaceId) return tabCwd(m, active) ?? undefined;
+  const ws = m.workspaces.find((w) => w.id === workspaceId);
+  if (ws?.path) return undefined;
+  const recent = m.tabs
+    .filter((t) => t.workspaceId === workspaceId && t.cwd && !t.worktree)
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  return recent?.cwd ?? undefined;
+}
+
 /** 워크스페이스와 그 탭을 모두 제거한다. 제거된 탭 id 를 함께 돌려줘 스레드 파일을 지울 수 있게 한다. */
 export function removeWorkspace(
   m: WorkbenchModel,

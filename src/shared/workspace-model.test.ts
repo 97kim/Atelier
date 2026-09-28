@@ -9,6 +9,7 @@ import {
   createTab,
   createWorkspace,
   tabCwd,
+  inheritedCwd,
   updateWorkspace,
   emptyModel,
   MAX_RECENT_TABS,
@@ -248,4 +249,25 @@ test("reorderWorkspaces: 끌어 옮긴 순서대로, 빠진 것은 뒤에", () =
   // 빈 요청이면 그대로
   m = reorderWorkspaces(m, []);
   assert.deepEqual(ids(), ["wb", "wc", "wa"]);
+});
+
+test("inheritedCwd: 같은 워크스페이스면 활성 탭 경로, 다른 워크스페이스면 그쪽 기본 경로나 최근 탭 경로", () => {
+  let m = emptyModel();
+  m = createWorkspace(m, "A", T0, "wa").model;
+  m = createWorkspace(m, "B", T0 + 1, "wb").model;
+  m = createTab(m, "wa", T0 + 10, "a1", { cwd: "/repo/a-old" }).model;
+  m = createTab(m, "wa", T0 + 20, "a2", { cwd: "/repo/a" }).model;
+  m = updateTab(m, "a2", { worktree: undefined }, T0 + 30);
+  m = createTab(m, "wa", T0 + 40, "a3", { cwd: "/wt/a-branch" }).model;
+  m = updateTab(m, "a3", { worktree: { path: "/wt/a-branch", repo: "/repo/a", branch: "x", base: "main" } as never }, T0 + 50);
+  m = createTab(m, "wb", T0 + 60, "b1", { cwd: "/repo/b" }).model;
+
+  assert.equal(inheritedCwd(m, "wb", "b1"), "/repo/b", "같은 워크스페이스면 활성 탭 경로");
+  assert.equal(inheritedCwd(m, "wa", "b1"), "/repo/a", "B 탭에서 A 새 탭: A 의 최근 탭 경로(worktree 탭은 건너뜀)");
+  assert.equal(inheritedCwd(m, "wa", null), "/repo/a", "활성 탭이 없어도 같다");
+  m = createWorkspace(m, "C", T0 + 70, "wc").model;
+  assert.equal(inheritedCwd(m, "wc", "b1"), undefined, "쓴 탭이 없으면 비운다");
+  const withPath = addWorkspace(m, "/repo/d", T0 + 80, "wd");
+  m = createTab(withPath.model, "wd", T0 + 90, "d1", { cwd: "/elsewhere" }).model;
+  assert.equal(inheritedCwd(m, "wd", "b1"), undefined, "기본 경로가 있으면 그걸 따르게 비운다");
 });
