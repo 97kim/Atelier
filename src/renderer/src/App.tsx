@@ -128,6 +128,35 @@ export function App() {
       void api.activateTab(keep);
     }
   };
+  // ⌘⌥← / ⌘⌥→: 왼쪽·오른쪽 칸으로(터미널 분할과 같은 손놀림). 그 칸 입력창에 포커스를 주면 onFocusCapture 가 칸을 활성화한다.
+  // 입력창·에디터는 자기 keydown 에서 전파를 막을 수 있어 캡처로 받는다. 터미널은 자기 칸 이동이 먼저라 버블에서,
+  // 터미널이 옮겼으면(defaultPrevented) 받지 않는다.
+  useEffect(() => {
+    if (!split || view !== "chat") return;
+    const move = (e: KeyboardEvent) => {
+      if (!e.metaKey || !e.altKey || e.shiftKey || e.ctrlKey) return;
+      if (e.code !== "ArrowLeft" && e.code !== "ArrowRight") return;
+      e.preventDefault();
+      const pane: 0 | 1 = e.code === "ArrowLeft" ? 0 : 1;
+      if (split.focused === pane) return;
+      const input = document.querySelector<HTMLTextAreaElement>(`[data-chat-pane='${pane === 0 ? "left" : "right"}'] [data-composer] textarea`);
+      input?.focus();
+      if (document.activeElement !== input) void api.activateTab(pane === 0 ? split.left : split.right);
+    };
+    const inTerminal = (e: KeyboardEvent) => e.target instanceof Element && !!e.target.closest(".xterm");
+    const onCapture = (e: KeyboardEvent) => {
+      if (!inTerminal(e)) move(e);
+    };
+    const onBubble = (e: KeyboardEvent) => {
+      if (inTerminal(e) && !e.defaultPrevented) move(e);
+    };
+    window.addEventListener("keydown", onCapture, true);
+    window.addEventListener("keydown", onBubble);
+    return () => {
+      window.removeEventListener("keydown", onCapture, true);
+      window.removeEventListener("keydown", onBubble);
+    };
+  }, [split, view, api]);
   const onSplitDrag = (e: React.MouseEvent) => {
     e.preventDefault();
     const area = splitArea.current;

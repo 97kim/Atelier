@@ -6,7 +6,7 @@
 // 대화 검색 대신 터미널 닫기·화면 지우기·터미널 안 찾기. 대상은 마지막으로 포커스가 있던 터미널(focused)이다. 나뉜 화면에서는
 // 첫 칸(active)과 포커스가 다를 수 있어서 active 를 기준으로 하면 엉뚱한 칸이 닫힌다.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Terminal, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -23,6 +23,7 @@ import { canDeliver, forgetTerminalGate, noteDelivered, onTerminalRun, peekTermi
 import { linkTargetFor, setLinkOpenMode } from "../link-open";
 import { useLocateFile, useOpenFile } from "./FileViewer";
 import { LinkChooser } from "./LinkChooser";
+import { PaneSplitContext } from "../pane-focus";
 
 const MIN_HEIGHT = 120;
 const DEFAULT_HEIGHT = 260;
@@ -188,7 +189,8 @@ export function TerminalPanel({
     if (!second && !first) return false;
     const id = second ? split.id : active;
     const term = id ? terms.current.get(id) : null;
-    if (!term) return false;
+    // 이미 그 칸이면 옮긴 게 아니다 — false 여야 채팅 화면 분할의 옆 칸으로 넘어간다
+    if (!term || term.element?.contains(document.activeElement)) return false;
     term.focus();
     return true;
   };
@@ -686,8 +688,9 @@ function TerminalView({
   // 출력 속 링크: URL 은 답변 속 링크와 같은 규칙으로, 파일 경로는 실제로 있는 것만 에디터로. 이 컴포넌트는 ChatView 의 provider 안에 있다.
   const { cwd: locateCwd, locate } = useLocateFile();
   const openFile = useOpenFile();
-  const cbs = useRef({ onRegister, onAttach, onSplit, onFocusPane, onFocus, onReady, onFindResults, locateCwd, locate, openFile });
-  cbs.current = { onRegister, onAttach, onSplit, onFocusPane, onFocus, onReady, onFindResults, locateCwd, locate, openFile };
+  const chatSplit = useContext(PaneSplitContext);
+  const cbs = useRef({ onRegister, onAttach, onSplit, onFocusPane, onFocus, onReady, onFindResults, locateCwd, locate, openFile, chatSplit });
+  cbs.current = { onRegister, onAttach, onSplit, onFocusPane, onFocus, onReady, onFindResults, locateCwd, locate, openFile, chatSplit };
   const locateCache = useRef(createLocateCache((ref) => cbs.current.locate(ref)));
   const [chooser, setChooser] = useState<{ href: string; x: number; y: number } | null>(null);
   /** 링크 클릭과 선택 드래그를 가르는 기준 — mousedown 자리에서 5px 넘게 움직였으면 클릭이 아니다. */
@@ -841,9 +844,14 @@ function TerminalView({
         cbs.current.onSplit?.(e.shiftKey ? "col" : "row");
         return false;
       }
-      // ⌘⌥방향키: 옆 칸으로. 나뉘지 않았거나 그 방향에 칸이 없으면 셸에 그대로 넘긴다.
+      // ⌘⌥방향키: 옆 칸으로. 옮겼으면 preventDefault 로 표시해 채팅 칸 전환(App)이 받지 않게 한다.
+      // 그 방향에 칸이 없을 때 채팅 화면이 나뉘어 있고 좌우면 셸에 넘기지 않고 App 이 옆 채팅 칸으로 옮기게 두고, 아니면 셸에 넘긴다.
       if (e.type === "keydown" && e.metaKey && e.altKey && ARROW_DIR[e.code]) {
-        return !cbs.current.onFocusPane?.(ARROW_DIR[e.code]);
+        if (cbs.current.onFocusPane?.(ARROW_DIR[e.code])) {
+          e.preventDefault();
+          return false;
+        }
+        return !(cbs.current.chatSplit && (e.code === "ArrowLeft" || e.code === "ArrowRight"));
       }
       // ⌘← / ⌘→: 줄 처음 / 끝. Mac 텍스트 필드와 같은 손놀림. iTerm 기본값처럼 ^A/^E 를 보낸다 —
       // Home/End 시퀀스는 zsh 기본 키맵에 없지만 ^A/^E 는 zsh·bash·fish·REPL 이 다 안다.
