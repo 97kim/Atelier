@@ -36,6 +36,35 @@ export function removePane(l: PaneLayout, ids: string[], id: string): PaneLayout
 
 const LAYOUT_PREFIX = "terminal.layout.";
 const OPEN_PREFIX = "terminal.open.";
+const DOCK_KEY = "terminal.dock";
+const WIDTH_KEY = "terminal.width";
+export const TERMINAL_DOCK_EVENT = "atelier:terminal-dock";
+
+/** 터미널 패널 자리 — 채팅 아래(기본) 또는 오른쪽. 탭마다가 아니라 앱 전체에서 하나. */
+export type TerminalDock = "bottom" | "right";
+
+export function loadTerminalDock(): TerminalDock {
+  return kvGet(DOCK_KEY) === "right" ? "right" : "bottom";
+}
+
+/** 저장하고 알린다 — 분할 화면의 다른 칸도 같은 자리로 따라온다. */
+export function saveTerminalDock(dock: TerminalDock): void {
+  kvSet(DOCK_KEY, dock === "right" ? "right" : null);
+  window.dispatchEvent(new Event(TERMINAL_DOCK_EVENT));
+}
+
+export const TERMINAL_MIN_WIDTH = 280;
+const DEFAULT_WIDTH = 520;
+
+/** 오른쪽에 둘 때의 폭. 창이 좁으면 격자가 알아서 줄이므로 여기선 아래쪽만 자른다. */
+export function loadTerminalWidth(): number {
+  const w = Number(kvGet(WIDTH_KEY));
+  return Number.isFinite(w) && w > 0 ? Math.max(TERMINAL_MIN_WIDTH, Math.round(w)) : DEFAULT_WIDTH;
+}
+
+export function saveTerminalWidth(width: number): void {
+  kvSet(WIDTH_KEY, String(Math.round(width)));
+}
 
 export function loadTerminalOpen(tabId: string): boolean {
   return kvGet(OPEN_PREFIX + tabId) === "1";

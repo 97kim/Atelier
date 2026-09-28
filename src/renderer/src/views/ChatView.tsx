@@ -29,7 +29,7 @@ import { LocateFileContext, OpenFileContext, type LocateFile, type OpenFile } fr
 import { EditorPane } from "../components/EditorPane";
 import { isBrowserTab, openBrowserTab, openEditorFile, setEditorPaneVisible, setLastPane, useEditorTabs } from "../editor-tabs";
 import { appendComposerDraft, loadComposerDraft } from "../composer-draft";
-import { loadTerminalOpen, saveTerminalOpen } from "../terminal-panes";
+import { loadTerminalDock, loadTerminalOpen, loadTerminalWidth, saveTerminalDock, saveTerminalOpen, saveTerminalWidth, TERMINAL_DOCK_EVENT, type TerminalDock } from "../terminal-panes";
 import { RunInTerminalContext, requestTerminalRun } from "../terminal-run";
 import { Icon } from "../components/Icon";
 import { ProviderLogo } from "../components/ProviderLogo";
@@ -161,6 +161,15 @@ export function ChatView({
   const [terminalOpen, setTerminalOpen] = useState(() => loadTerminalOpen(tabId));
   const [terminalMounted, setTerminalMounted] = useState(terminalOpen);
   useEffect(() => saveTerminalOpen(tabId, terminalOpen), [tabId, terminalOpen]);
+  // 터미널 자리(아래/오른쪽)와 오른쪽 폭. 앱 전체에서 하나 — 다른 칸이 바꾸면 따라온다.
+  const [terminalDock, setTerminalDock] = useState(loadTerminalDock);
+  const [terminalWidth, setTerminalWidth] = useState(loadTerminalWidth);
+  useEffect(() => {
+    const sync = () => setTerminalDock(loadTerminalDock());
+    window.addEventListener(TERMINAL_DOCK_EVENT, sync);
+    return () => window.removeEventListener(TERMINAL_DOCK_EVENT, sync);
+  }, []);
+  useEffect(() => saveTerminalWidth(terminalWidth), [terminalWidth]);
   // 도구 카드·코드 블록의 "터미널에서 실행": 패널을 열고 요청을 큐에 둔다. 패널이 마운트되고 셸이 붙으면 가져간다.
   const runInTerminal = useCallback(
     (command: string, run: boolean) => {
@@ -170,6 +179,14 @@ export function ChatView({
     },
     [tabId],
   );
+  const terminalAnchor = useRef<HTMLDivElement>(null);
+  const [terminalMenuOpen, setTerminalMenuOpen] = useState(false);
+  const openTerminalAt = (d: TerminalDock) => {
+    setTerminalDock(d);
+    saveTerminalDock(d);
+    setTerminalMounted(true);
+    setTerminalOpen(true);
+  };
   const toggleTerminal = useCallback(() => {
     setTerminalMounted(true);
     setTerminalOpen((o) => !o);
@@ -380,6 +397,7 @@ export function ChatView({
     await window.workbench.workspaces.renameTab(tabId, draftTitle);
   }, [draftTitle, tab.title, tabId]);
   const cwd = config?.cwd ?? workspace.path;
+  const terminalRight = terminalDock === "right" && terminalMounted && terminalOpen && !!cwd;
   // 답변 속 파일 참조 → 실제 경로. Markdown 의 FileRef 가 부른다(결과 캐시는 FileRef 쪽).
   const locateFile = useMemo<LocateFile>(
     () => ({ cwd: cwd || null, locate: (ref) => (cwd ? window.workbench.files.locate(cwd, ref) : Promise.resolve([])) }),
@@ -603,15 +621,16 @@ export function ChatView({
             </button>
             {verifyOpen && <VerifyPopover tabId={tabId} anchor={verifyAnchor.current} toggle={verifyToggle.current} saved={savedVerify} onSave={saveVerify} onRun={(cmds) => void runVerify(cmds)} onClose={closeVerify} />}
           </div>
+          <div className="relative flex shrink-0" ref={terminalAnchor}>
           <button
-            onClick={toggleTerminal}
+            onClick={() => (terminalOpen ? setTerminalOpen(false) : setTerminalMenuOpen((o) => !o))}
             disabled={!cwd}
             className={`no-drag flex min-h-[31px] shrink-0 items-center gap-2 rounded-md border py-1.5 disabled:opacity-40 px-1.5 @min-[800px]/chathead:px-3 ${
               terminalOpen
                 ? "border-accent/40 bg-accent-tint text-accent hover:bg-accent/15"
                 : "border-line bg-panel hover:bg-panel-2"
             }`}
-            title="터미널 패널 (⌘J)"
+            title={terminalOpen ? "터미널 닫기 (⌘J)" : "터미널 열기 — 하단·우측 중 고릅니다 (⌘J 는 마지막 위치로)"}
             data-terminal-toggle={terminalOpen ? "open" : "closed"}
           >
             <span
@@ -625,6 +644,20 @@ export function ChatView({
             </span>
             <span className="hidden @min-[800px]/chathead:inline">터미널</span>
           </button>
+          {terminalMenuOpen && (
+            <HeaderMenu
+              anchor={terminalAnchor.current}
+              onClose={() => setTerminalMenuOpen(false)}
+              items={(["bottom", "right"] as const).map((d) => ({
+                key: `terminal-${d}`,
+                label: `${d === "bottom" ? "하단에 열기" : "우측에 열기"}${d === terminalDock ? " · ⌘J" : ""}`,
+                icon: d === "bottom" ? "panelBottom" : "panelRight",
+                hint: d === "bottom" ? "채팅 아래에 엽니다. 위쪽 가장자리를 끌어 높이를 바꿉니다" : "채팅 오른쪽에 세로로 엽니다. 왼쪽 가장자리를 끌어 폭을 바꿉니다",
+                onSelect: () => openTerminalAt(d),
+              }))}
+            />
+          )}
+          </div>
           {terminalControlled && config?.terminalExternal ? (
             <span
               className="no-drag flex shrink-0 items-center gap-2 rounded-md border border-accent/40 bg-accent-tint px-3 py-1.5 text-accent"
@@ -723,12 +756,21 @@ export function ChatView({
         <div className="flex min-h-0 flex-1">
           {/* 채팅 칼럼은 340px 아래로 눌리지 않는다 — 공간이 모자라면 에디터 패널이 먼저 줄어든다(아래 flex-basis/shrink).
               최대화 때는 숨기기만 한다 — 언마운트하면 스크롤 위치·입력 중이던 글이 날아간다. */}
+          {/* 격자 세 칸: a = 탭 줄·메시지, t = 터미널, b = 배너·입력창. 터미널이 아래면 a/t/b 로 쌓고, 오른쪽이면
+              a·b 옆에 t 가 세로로 걸친다. 터미널은 자리를 바꿔도 같은 부모에 남는다 — 부모가 바뀌면 xterm 이 새로 만들어진다.
+              오른쪽 열은 minmax(0, 폭) 이라 창이 좁으면 채팅(340px)보다 터미널이 먼저 줄어든다. */}
           <div
-            className={`flex min-w-[340px] flex-1 flex-col ${editorMaximized ? "hidden" : ""}`}
+            className={`grid min-w-[340px] flex-1 ${editorMaximized ? "hidden" : ""}`}
+            style={
+              terminalRight
+                ? { gridTemplateAreas: '"a t" "b t"', gridTemplateColumns: `minmax(340px, 1fr) minmax(0, ${terminalWidth}px)`, gridTemplateRows: "minmax(0, 1fr) auto" }
+                : { gridTemplateAreas: '"a" "t" "b"', gridTemplateColumns: "minmax(0, 1fr)", gridTemplateRows: "minmax(0, 1fr) auto auto" }
+            }
             onMouseDownCapture={() => setLastPane(tabId, "chat")}
             onFocusCapture={() => setLastPane(tabId, "chat")}
             data-chat-column
           >
+            <div className="flex min-h-0 min-w-0 flex-col" style={{ gridArea: "a" }}>
             {showTabStrip && <TabBar
               ws={ws}
               onActivate={onActivateTab}
@@ -755,6 +797,7 @@ export function ChatView({
                 sessionId={config?.sessionId ?? null}
               />
             </div>
+            </div>
 
             {terminalMounted && cwd && (
               <TerminalPanel
@@ -763,8 +806,12 @@ export function ChatView({
                 open={terminalOpen}
                 onClose={() => setTerminalOpen(false)}
                 onAttach={attachToChat}
+                dock={terminalDock}
+                onWidth={setTerminalWidth}
               />
             )}
+
+            <div className="flex min-w-0 flex-col" style={{ gridArea: "b" }}>
 
             {state.pendingPermission && (
               <PermissionPrompt
@@ -924,6 +971,7 @@ export function ChatView({
               onAbort={() => void window.workbench.chat.abort(tabId)}
               onClear={() => void onClear()}
             />
+            </div>
           </div>
 
           {editorShown && (

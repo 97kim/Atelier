@@ -17,7 +17,7 @@ import { Icon } from "./Icon";
 import { onThemeChange } from "../theme";
 import { formatTerminalAttachment } from "@shared/attachments";
 import { findFileRefs } from "@shared/file-refs";
-import { loadTerminalLayout, removePane, saveTerminalLayout, selectPane, type SplitDir } from "../terminal-panes";
+import { loadTerminalLayout, removePane, saveTerminalLayout, selectPane, TERMINAL_MIN_WIDTH, type SplitDir, type TerminalDock } from "../terminal-panes";
 import { cellRangeFor, createLocateCache, pickCandidate, type CellLike } from "../terminal-links";
 import { canDeliver, forgetTerminalGate, noteDelivered, onTerminalRun, peekTerminalRun, pendingTerminalRuns, pickShellTarget, promptEpoch, takeTerminalRun } from "../terminal-run";
 import { linkTargetFor, setLinkOpenMode } from "../link-open";
@@ -49,11 +49,16 @@ export function TerminalPanel({
   open,
   onClose,
   onAttach,
+  dock = "bottom",
+  onWidth,
 }: {
   tabId: string;
   cwd: string;
   open: boolean;
   onClose: () => void;
+  /** 채팅 아래(높이 조절) 또는 오른쪽(폭 조절). 오른쪽 폭은 ChatView 가 격자 열로 정한다. */
+  dock?: TerminalDock;
+  onWidth?: (width: number) => void;
   /** "채팅에 첨부": 포커스가 있던 터미널의 선택 영역(없으면 최근 출력 40줄)을 입력창에 잇는다. */
   onAttach?: (block: string) => void;
 }) {
@@ -384,9 +389,25 @@ export function TerminalPanel({
     return () => window.removeEventListener("atelier:terminal-command", onCmd);
   }, []);
 
-  // 드래그로 높이 조절 (패널 상단 가장자리).
+  // 오른쪽에 있을 때: 채팅 칼럼(격자)에서 채팅 몫 340px 을 남기는 데까지.
+  const maxWidth = () => Math.max(TERMINAL_MIN_WIDTH, (panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0) - 340);
+
+  // 드래그로 높이 조절 (패널 상단 가장자리). 오른쪽에 있으면 왼쪽 가장자리로 폭 조절.
   const onDragStart = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (dock === "right") {
+      const startX = e.clientX;
+      const startW = panelRef.current?.getBoundingClientRect().width ?? 0;
+      const max = maxWidth();
+      const moveX = (ev: MouseEvent) => onWidth?.(Math.min(max, Math.max(TERMINAL_MIN_WIDTH, startW + (startX - ev.clientX))));
+      const upX = () => {
+        window.removeEventListener("mousemove", moveX);
+        window.removeEventListener("mouseup", upX);
+      };
+      window.addEventListener("mousemove", moveX);
+      window.addEventListener("mouseup", upX);
+      return;
+    }
     const startY = e.clientY;
     const startH = height;
     const max = maxHeight();
@@ -407,6 +428,11 @@ export function TerminalPanel({
     const panel = (e.currentTarget as HTMLElement).parentElement;
     const above = panel?.previousElementSibling as HTMLElement | null;
     if (!panel || !above) return;
+    if (dock === "right") {
+      const half = (above.getBoundingClientRect().width + panel.getBoundingClientRect().width) / 2;
+      onWidth?.(Math.min(maxWidth(), Math.max(TERMINAL_MIN_WIDTH, Math.round(half))));
+      return;
+    }
     const max = maxHeight();
     const half = (above.getBoundingClientRect().height + panel.getBoundingClientRect().height) / 2;
     setHeight(Math.min(max, Math.max(MIN_HEIGHT, Math.round(half))));
@@ -414,17 +440,18 @@ export function TerminalPanel({
 
   return (
     <div
-      className="no-drag relative shrink-0 border-t border-line bg-inset"
+      className={`no-drag relative min-h-0 min-w-0 shrink-0 border-line bg-inset ${dock === "right" ? "border-l" : "border-t"}`}
       ref={panelRef}
-      style={{ height }}
+      style={dock === "right" ? { gridArea: "t" } : { gridArea: "t", height }}
       hidden={!open}
       data-terminal-panel
+      data-terminal-dock={dock}
     >
       <div
         onMouseDown={onDragStart}
         onDoubleClick={onSplitEven}
-        title="끌어서 높이 조절 · 두 번 누르면 반반"
-        className="absolute -top-1 left-0 right-0 z-10 h-2 cursor-row-resize"
+        title={dock === "right" ? "끌어서 폭 조절 · 두 번 누르면 반반" : "끌어서 높이 조절 · 두 번 누르면 반반"}
+        className={`absolute z-10 ${dock === "right" ? "-left-1 bottom-0 top-0 w-2 cursor-col-resize" : "-top-1 left-0 right-0 h-2 cursor-row-resize"}`}
         data-terminal-resizer
       />
       <div className="flex h-8 items-center gap-1 px-2">
@@ -487,6 +514,22 @@ export function TerminalPanel({
               채팅에 첨부
             </button>
           )}
+          <button
+            onClick={() => splitTerm("row")}
+            className={`rounded p-1 hover:bg-panel-2 hover:text-fg ${split?.dir === "row" ? "text-accent" : "text-muted"}`}
+            title="좌우로 나누기 (⌘D)"
+            data-terminal-split="row"
+          >
+            <Icon name="splitRow" size={12} />
+          </button>
+          <button
+            onClick={() => splitTerm("col")}
+            className={`rounded p-1 hover:bg-panel-2 hover:text-fg ${split?.dir === "col" ? "text-accent" : "text-muted"}`}
+            title="위아래로 나누기 (⌘⇧D)"
+            data-terminal-split="col"
+          >
+            <Icon name="splitCol" size={12} />
+          </button>
           <button
             onClick={openFind}
             className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
