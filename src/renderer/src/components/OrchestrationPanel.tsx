@@ -1,4 +1,5 @@
 // 오케스트레이션 패널(오버레이): Run 목록 · Task/워커 · 인박스. 사람이 여기서 워커 질문에 답하고, 후속 지시를 보내고, 워커를 정리한다.
+import { usePaneFocusRef } from "../pane-focus";
 // 화면을 연 것만으로 코디네이터 Delivery 를 ack 하지 않는다(코디네이터 탭의 check 가 소비한다).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -99,8 +100,10 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
       unsubscribe();
     };
   }, [load]);
+  const paneFocus = usePaneFocusRef();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!paneFocus.current) return; // 분할 화면의 다른 칸이 연 모달이면 그쪽 몫
       if (e.key !== "Escape") return;
       e.stopPropagation();
       onClose();

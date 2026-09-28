@@ -1,7 +1,8 @@
 // 채팅 오른쪽 패널. 컨텍스트 / 파일 탐색기를 탭으로 전환하고, 접거나 왼쪽 가장자리를 끌어 너비를 바꾼다.
 // 너비·접힘·탭은 localStorage 에 남겨 다음 실행에도 유지한다.
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { PaneSplitContext } from "../pane-focus";
 import { FileTree } from "./FileTree";
 import { Icon } from "./Icon";
 
@@ -51,9 +52,15 @@ export function RightPanel({
       /* 저장 실패는 무시 */
     }
   }, [saved]);
-  const setTab = (tab: RightPanelTab) =>
-    setSaved((s) => ({ ...s, tab, collapsed: false }));
-  const toggle = () => setSaved((s) => ({ ...s, collapsed: !s.collapsed }));
+  // 분할 화면이면 칸이 좁아 기본으로 접는다. 칸에서 펼치고 접은 건 저장하지 않는다 — 한 칸일 때의 설정을 바꾸지 않게.
+  const split = useContext(PaneSplitContext);
+  const [splitCollapsed, setSplitCollapsed] = useState(true);
+  const collapsed = split ? splitCollapsed : saved.collapsed;
+  const setTab = (tab: RightPanelTab) => {
+    if (split) setSplitCollapsed(false);
+    setSaved((s) => ({ ...s, tab, collapsed: split ? s.collapsed : false }));
+  };
+  const toggle = () => (split ? setSplitCollapsed((c) => !c) : setSaved((s) => ({ ...s, collapsed: !s.collapsed })));
 
   // 왼쪽 가장자리 드래그로 너비 조절. 왼쪽으로 끌면 넓어진다.
   const onDragStart = useCallback(
@@ -81,7 +88,7 @@ export function RightPanel({
     [saved.width],
   );
 
-  if (saved.collapsed) {
+  if (collapsed) {
     return (
       <aside
         className="mb-3 mr-3 flex w-10 shrink-0 flex-col items-center gap-1 bg-panel py-2"

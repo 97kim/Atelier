@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { inFocusedPane } from "../pane-focus";
+import { usePaneFocusRef } from "../pane-focus";
 import type { PermissionAnswer, PermissionRequestEvent } from "@shared/chat-events";
 import { DiffView, UnifiedDiff } from "./DiffView";
 
@@ -33,10 +33,11 @@ export function PermissionPrompt({
 }) {
   const isQuestion = request.tool === "AskUserQuestion";
   const root = useRef<HTMLDivElement>(null);
+  const paneFocus = usePaneFocusRef();
   const allowBtn = useRef<HTMLButtonElement>(null);
   // "허용" 에 포커스를 준다 — 단, 분할 화면의 다른 칸이면 주지 않는다. 옆 칸에서 쓰던 중에 누른 Enter 가 이 버튼을 누르게 된다.
   useEffect(() => {
-    if (inFocusedPane(root.current)) allowBtn.current?.focus();
+    if (paneFocus.current) allowBtn.current?.focus();
   }, []);
   // Enter = 허용, Esc = 거부. 텍스트 입력 중이면 무시. 질문은 Enter 로 빈 답을 보내면 안 되므로 Esc(건너뛰기)만.
   useEffect(() => {
@@ -44,7 +45,7 @@ export function PermissionPrompt({
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT")) return;
       // 분할 화면이면 포커스된 칸의 승인 창만 — 안 그러면 양쪽 승인 창이 키 한 번에 같이 승인된다.
-      if (!inFocusedPane(root.current)) return;
+      if (!paneFocus.current) return;
       // 처리한 키는 기본 동작을 막는다 — 포커스가 남아 있는 다른 버튼(옆 칸의 "허용" 등)이 같이 눌리지 않게.
       if (e.key === "Enter" && !isQuestion) {
         e.preventDefault();

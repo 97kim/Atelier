@@ -14,6 +14,7 @@ import { forgetEditorTabs, getEditorTabs, getLastPane, openBrowserTab, openEdito
 import { clearComposerDraft, pruneComposerDrafts } from "./composer-draft";
 import { pruneTerminalState } from "./terminal-panes";
 import { closePane, loadSplit, openSplit, pruneSplit, saveSplit, syncActive, type SplitState } from "./split-view";
+import { PaneFocusContext, PaneSplitContext } from "./pane-focus";
 import { nextAttentionTab } from "@shared/attention-nav";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { ChatView } from "./views/ChatView";
@@ -393,6 +394,8 @@ export function App() {
                           data-focused={focused ? "true" : "false"}
                         >
                           {split && focused && <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 bg-accent/60" />}
+                          <PaneFocusContext.Provider value={focused}>
+                          <PaneSplitContext.Provider value={!!split}>
                           <ChatView
                             tab={t}
                             workspace={w}
@@ -413,6 +416,8 @@ export function App() {
                             }}
                             onIsolate={() => void newWorktreeIn(w.id)}
                           />
+                          </PaneSplitContext.Provider>
+                          </PaneFocusContext.Provider>
                         </div>
                       );
                     })}

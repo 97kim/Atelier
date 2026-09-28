@@ -1,4 +1,5 @@
 // `/model` 을 앱에서 처리하는 피커. 고르면 이 세션의 모델을 바꾼다(다음 턴부터 적용, 세션은 그대로).
+import { usePaneFocusRef } from "../pane-focus";
 import { useEffect, useState } from "react";
 import type { Provider } from "@shared/ipc";
 import { modelOptions, useModels } from "../models";
@@ -32,8 +33,10 @@ export function ModelPickerModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const paneFocus = usePaneFocusRef();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!paneFocus.current) return; // 분할 화면의 다른 칸이 연 모달이면 그쪽 몫
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);

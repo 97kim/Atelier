@@ -1,5 +1,5 @@
 // 에디터 패널의 브라우저 탭. Electron <webview>(main 의 will-attach-webview 가 preload 없음·node 없음·http(s) 만으로 제한) 위에
-import { inFocusedPane } from "../pane-focus";
+import { usePaneFocusRef } from "../pane-focus";
 // 주소창·뒤로/앞으로/새로고침·외부 브라우저 열기를 둔다. 탭 키(초기 URL 또는 browser:<n>)는 고정이고 이동은 이 안에서만 일어난다.
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
@@ -108,11 +108,12 @@ export function BrowserPane({
     setPicking(false);
     void view.current?.executeJavaScript(PICKER_STOP_SCRIPT).catch(() => {});
   };
+  const paneFocus = usePaneFocusRef();
   // 앱 쪽에 포커스가 있을 때의 esc 도 취소로(페이지 안 esc 는 주입 스크립트가 처리)
   useEffect(() => {
     if (!picking) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || !paneFocus.current) return;
       e.stopPropagation();
       stopPick();
     };
@@ -268,7 +269,7 @@ export function BrowserPane({
     if (!visible) return;
     const onCmd = (e: Event) => {
       // 분할 화면이면 포커스된 칸의 브라우저만 받는다.
-      if (!inFocusedPane(view.current)) return;
+      if (!paneFocus.current) return;
       const what = (e as CustomEvent<string>).detail;
       if (what === "find") {
         setFind((f) => ({ ...f, open: true }));

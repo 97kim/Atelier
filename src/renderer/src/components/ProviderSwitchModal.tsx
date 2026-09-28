@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePaneFocusRef } from "../pane-focus";
 import type { Handoff } from "@shared/handoff";
 import { PROVIDERS, type CliStatusDto, type Provider } from "@shared/ipc";
 import { Icon } from "./Icon";
@@ -39,8 +40,10 @@ export function ProviderSwitchModal({
     loadHandoff().then(setHandoff).catch(console.error);
   }, [loadHandoff]);
 
+  const paneFocus = usePaneFocusRef();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!paneFocus.current) return; // 분할 화면의 다른 칸이 연 모달이면 그쪽 몫
       if (e.key === "Escape") onClose();
       // 네이티브 <select> 에서 항목을 고르는 Enter 는 확인이 아니다
       const inField = e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;

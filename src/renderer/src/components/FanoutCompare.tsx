@@ -1,4 +1,5 @@
 // 팬아웃 비교 오버레이 — 왼쪽은 모든 세션이 건드린 파일의 합집합, 오른쪽은 세션별 열(그 파일의 diff). 열 머리에서 "채택".
+import { usePaneFocusRef } from "../pane-focus";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FanoutCompareDto } from "@shared/ipc";
@@ -25,8 +26,10 @@ export function FanoutCompare({ tabId, fanoutId, adoptedTabId, onClose }: { tabI
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   };
   useEffect(load, [tabId, fanoutId]);
+  const paneFocus = usePaneFocusRef();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!paneFocus.current) return; // 분할 화면의 다른 칸이 연 모달이면 그쪽 몫
       if (e.key !== "Escape") return;
       e.stopPropagation();
       e.preventDefault();

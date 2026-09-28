@@ -1,4 +1,5 @@
 // 팬아웃 시작 창 — 지시 하나 + 세션(제공자) 목록 + 정책. 각 세션은 별도의 git worktree에서 실행된다.
+import { usePaneFocusRef } from "../pane-focus";
 import { useEffect, useState } from "react";
 import type { PermissionPolicy } from "@shared/chat-events";
 import type { FanoutStartDto, Provider } from "@shared/ipc";
@@ -61,8 +62,10 @@ export function FanoutModal({
   const [policy, setPolicy] = useState<PermissionPolicy>("auto_edit");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const paneFocus = usePaneFocusRef();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!paneFocus.current) return; // 분할 화면의 다른 칸이 연 모달이면 그쪽 몫
       if (e.key !== "Escape") return;
       e.stopPropagation();
       onClose();

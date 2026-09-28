@@ -1,4 +1,5 @@
 // 변경 리뷰 오버레이: 커밋 전에 파일별 diff 를 훑고, 커밋 대상 체크·되돌리기·커밋을 한 화면에서 한다.
+import { usePaneFocusRef } from "../pane-focus";
 // 컨텍스트 패널 안에서 열리지만 채팅 전체를 덮어야 해서 body 에 포털로 그린다.
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -58,8 +59,10 @@ export function ChangeReview({
   }, [cwd, current, g.git, g.changes]);
 
   // Esc 로 닫기 (파일 뷰어와 같이 캡처 단계에서 먹는다)
+  const paneFocus = usePaneFocusRef();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!paneFocus.current) return; // 분할 화면의 다른 칸이 연 모달이면 그쪽 몫
       if (e.key !== "Escape") return;
       e.stopPropagation();
       e.preventDefault();
