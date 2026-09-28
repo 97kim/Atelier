@@ -40,9 +40,7 @@ export interface PricingEntry extends ModelPrice {
 export const DEFAULT_PRICING: PricingEntry[] = [
   // 공식 가격표(platform.claude.com/docs/en/about-claude/pricing, 2026-09-28 확인). 캐시 쓰기는 5분 캐시 기준.
   { match: "fable-5-1", label: "Claude Fable 5.1", input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 },
-  { match: "mythos-5-1", label: "Claude Mythos 5.1", input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 },
   { match: "fable-5", label: "Claude Fable 5", input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
-  { match: "mythos-5", label: "Claude Mythos 5", input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
   // opus-5-5 는 opus-5 보다 먼저 — 포함 검사라 뒤에 두면 Opus 5 로 잡힌다
   { match: "opus-5-5", label: "Claude Opus 5.5", input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
   { match: "opus-5", label: "Claude Opus 5", input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
