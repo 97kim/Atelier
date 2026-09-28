@@ -495,8 +495,9 @@ export function ChatView({
                 className={`h-1.5 w-1.5 rounded-full ${statusDot(state.status)}`}
               />
               <span className="shrink-0">{workspace.name}</span>
-              <span className="shrink-0">·</span>
-              {cwd ? (
+              {/* 불러오기 전엔 세션 설정이 없어 워크스페이스 경로가 보인다. 이때 바꾸면 이어 갈 대화가 새로 시작되므로 숨긴다 */}
+              {loaded && <span className="shrink-0">·</span>}
+              {!loaded ? null : cwd ? (
                 <button
                   onClick={() => void pickCwd()}
                   disabled={running}

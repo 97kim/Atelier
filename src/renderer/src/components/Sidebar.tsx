@@ -398,12 +398,9 @@ export function Sidebar({
       <div className="flex items-center gap-2.5 px-4 pb-3 pt-11">
         <Logo size={22} className="text-fg" />
         <span className="text-[14px] font-semibold tracking-wide">Atelier</span>
-        <span className="label ml-auto rounded bg-panel-2 px-1.5 py-0.5">
-          LOCAL
-        </span>
         <button
           onClick={onToggleRail}
-          className="no-drag -mr-1 rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
+          className="no-drag -mr-1 ml-auto rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
           title="사이드바 접기 (⌘B)"
           data-sidebar-toggle
         >
