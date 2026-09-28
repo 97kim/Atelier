@@ -38,14 +38,22 @@ export interface PricingEntry extends ModelPrice {
 
 /** 앱 기본 가격표. userData/pricing.json 으로 덮어쓸 수 있다. 순서가 우선순위다. */
 export const DEFAULT_PRICING: PricingEntry[] = [
-  { match: "fable-5-1", label: "Claude Fable 5.1", input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
+  // 공식 가격표(platform.claude.com/docs/en/about-claude/pricing, 2026-09-28 확인). 캐시 쓰기는 5분 캐시 기준.
+  { match: "fable-5-1", label: "Claude Fable 5.1", input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 },
+  { match: "mythos-5-1", label: "Claude Mythos 5.1", input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 },
   { match: "fable-5", label: "Claude Fable 5", input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
+  { match: "mythos-5", label: "Claude Mythos 5", input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
   // opus-5-5 는 opus-5 보다 먼저 — 포함 검사라 뒤에 두면 Opus 5 로 잡힌다
   { match: "opus-5-5", label: "Claude Opus 5.5", input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
   { match: "opus-5", label: "Claude Opus 5", input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
-  { match: "sonnet-5", label: "Claude Sonnet 5", input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+  { match: "sonnet-5", label: "Claude Sonnet 5", input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
   { match: "haiku-4-5", label: "Claude Haiku 4.5", input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
-  { match: "opus-4", label: "Claude Opus 4.x", input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 },
+  // Opus 4.5 부터 값이 내렸다. 4.x 한 줄로 묶으면 4.5~4.8 이 세 배로 셈해진다.
+  { match: "opus-4-8", label: "Claude Opus 4.8", input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  { match: "opus-4-7", label: "Claude Opus 4.7", input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  { match: "opus-4-6", label: "Claude Opus 4.6", input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  { match: "opus-4-5", label: "Claude Opus 4.5", input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  { match: "opus-4", label: "Claude Opus 4 / 4.1", input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 },
   { match: "sonnet-4", label: "Claude Sonnet 4.x", input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
   { match: "haiku-3-5", label: "Claude Haiku 3.5", input: 0.8, output: 4, cacheRead: 0.08, cacheWrite: 1 },
   { match: "gpt-5.5", label: "GPT-5.5", input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 0, estimated: true },

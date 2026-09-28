@@ -120,3 +120,12 @@ test("pctChange / usageCsv", () => {
   assert.match(lines[1], /"\/a,""b"""/);
   assert.match(lines[1], /0\.002250$/);
 });
+
+test("가격표: 공식 가격표와 같고, 버전이 겹치는 id 는 더 구체적인 쪽이 먼저 잡힌다", () => {
+  const p = (id: string) => resolvePrice(id);
+  assert.deepEqual([p("claude-opus-5-5")?.label, p("claude-opus-5-5")?.input, p("claude-opus-5-5")?.cacheRead], ["Claude Opus 5.5", 4, 0.2]);
+  assert.equal(p("claude-opus-5")?.label, "Claude Opus 5");
+  assert.deepEqual([p("claude-fable-5-1")?.cacheRead, p("claude-fable-5")?.cacheRead], [0.25, 1], "Fable 5.1 캐시 읽기는 0.025x");
+  assert.deepEqual([p("claude-sonnet-5")?.input, p("claude-sonnet-5")?.output], [2, 10], "Sonnet 5 는 $2/$10 이 정가로 굳었다");
+  assert.deepEqual([p("claude-opus-4-8")?.input, p("claude-opus-4-5")?.input, p("claude-opus-4-1")?.input], [5, 5, 15], "Opus 4.5 부터 $5");
+});

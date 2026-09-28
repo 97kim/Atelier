@@ -70,6 +70,10 @@ interface LiveCodex {
   /** 스레드 start/resume 까지 끝나면 resolve. 예열 중 들어온 첫 턴이 이걸 기다린다. */
   ready: Promise<void>;
   threadId: string | null;
+  /** app-server 가 thread/start·resume 응답으로 알려 준 실제 모델. 고른 모델이 없을 때(기본값) 헤더·사용량에 쓴다. */
+  model: string | null;
+  /** 화면에 마지막으로 알린 모델. 바뀌면 세션 이벤트를 다시 보낸다(다시 연 탭도 헤더가 채워지게). */
+  announcedModel?: string;
   turn: TurnCtx | null;
   /** 진행 중인 fileChange 아이템의 변경 내용(itemId → changes). 승인 요청엔 diff 가 없어 item/started 에서 받아 둔 것을 카드에 보여 준다. */
   fileChanges: Map<string, FileChangeDto[]>;
@@ -124,7 +128,7 @@ function openSession(runtime: CodexRuntime, key: string, cwd: string, log?: (lin
 }
 
 async function openSessionNow(runtime: CodexRuntime, key: string, cwd: string, log?: (line: string) => void): Promise<LiveCodex> {
-  const s: LiveCodex = { key, cwd, server: null as unknown as CodexAppServer, ready: Promise.resolve(), threadId: null, turn: null, fileChanges: new Map(), dead: false, idleTimer: null, log };
+  const s: LiveCodex = { key, cwd, server: null as unknown as CodexAppServer, ready: Promise.resolve(), threadId: null, model: null, turn: null, fileChanges: new Map(), dead: false, idleTimer: null, log };
   const server = new CodexAppServer({
     log,
     onNotification: (method, params) => handleNotification(s, method, params),
@@ -254,8 +258,9 @@ async function openThread(s: LiveCodex, req: Pick<CodexTurnRequest, "sessionKey"
   if (req.sessionId) {
     try {
       // 기록은 앱이 갖고 있으니 지난 턴 내용은 받지 않는다(전체 히스토리 하이드레이션은 deprecated).
-      const r = await s.server.request<{ thread?: { id?: string } }>("thread/resume", { ...base, threadId: req.sessionId, excludeTurns: true });
+      const r = await s.server.request<{ thread?: { id?: string }; model?: string }>("thread/resume", { ...base, threadId: req.sessionId, excludeTurns: true });
       s.threadId = r.thread?.id ?? req.sessionId;
+      s.model = r.model || null;
       return;
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
@@ -269,8 +274,9 @@ async function openThread(s: LiveCodex, req: Pick<CodexTurnRequest, "sessionKey"
       req.onEvent?.({ type: "error", ts: Date.now(), fatal: false, message: `이전 Codex 스레드(${req.sessionId.slice(0, 8)}…)를 찾지 못해 새 스레드로 시작합니다. 화면의 대화는 남지만 Codex 는 이전 맥락을 모릅니다. (${detail})` });
     }
   }
-  const r = await s.server.request<{ thread?: { id?: string } }>("thread/start", base);
+  const r = await s.server.request<{ thread?: { id?: string }; model?: string }>("thread/start", base);
   s.threadId = r.thread?.id ?? null;
+  s.model = r.model || null;
   if (!s.threadId) throw new Error("Codex 스레드를 열지 못했습니다.");
 }
 
@@ -318,10 +324,15 @@ export async function runCodexTurn(runtime: CodexRuntime, req: CodexTurnRequest)
     s.idleTimer = null;
   }
   // 스레드 id 를 세션 id 로 알린다(새 스레드면 이때 처음 알게 된다).
-  if (s.threadId !== req.sessionId) req.onEvent({ type: "session", ts: Date.now(), sessionId: s.threadId, provider: "codex", model: req.model });
+  // 고른 모델이 없으면(CLI 기본값) app-server 가 알려 준 실제 모델을 쓴다 — 헤더에 모델이 안 보이고 사용량이 모델 없이 쌓이지 않게.
+  const model = req.model || s.model || undefined;
+  if (s.threadId !== req.sessionId || (model && model !== s.announcedModel)) {
+    req.onEvent({ type: "session", ts: Date.now(), sessionId: s.threadId, provider: "codex", model });
+    s.announcedModel = model;
+  }
 
   const done = new Promise<void>((resolve, reject) => {
-    s.turn = { req, turnId: null, ctx: { model: req.model, startedAt: Date.now(), lastUsage: null }, resolve, reject, permissionSeq: 0 };
+    s.turn = { req, turnId: null, ctx: { model, startedAt: Date.now(), lastUsage: null }, resolve, reject, permissionSeq: 0 };
   });
   const turn = s.turn!;
   let graceTimer: ReturnType<typeof setTimeout> | null = null;
