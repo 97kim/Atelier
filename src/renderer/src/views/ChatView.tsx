@@ -38,6 +38,7 @@ import { PermissionPrompt } from "../components/PermissionPrompt";
 import { HeaderMenu } from "../components/HeaderMenu";
 import { ProviderSwitchModal } from "../components/ProviderSwitchModal";
 import { ModelPickerModal } from "../components/ModelPickerModal";
+import { headerModelLabel } from "@shared/models";
 import { VerifyPopover } from "../components/VerifyPopover";
 import { FanoutModal } from "../components/FanoutModal";
 import { FanoutCompare } from "../components/FanoutCompare";
@@ -506,10 +507,10 @@ export function ChatView({
                   <span className="shrink-0">·</span>
                   <span
                     className="shrink-0"
-                    title={config?.model ? "이 세션에 설정한 모델 (/model 로 변경)" : "마지막 응답에 사용한 모델 · 기본 모델 사용 중 (/model로 변경)"}
+                    title={`${config?.model ? `이 세션에 설정한 모델: ${config.model}` : "기본 모델 사용 중"}${state.model ? ` · 마지막 응답: ${state.model}` : ""} (/model 로 변경)`}
                     data-header-model
                   >
-                    {config?.model || state.model}
+                    {headerModelLabel(config?.model, state.model)}
                   </span>
                 </>
               )}

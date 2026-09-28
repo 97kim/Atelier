@@ -40,6 +40,8 @@ export interface PricingEntry extends ModelPrice {
 export const DEFAULT_PRICING: PricingEntry[] = [
   { match: "fable-5-1", label: "Claude Fable 5.1", input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
   { match: "fable-5", label: "Claude Fable 5", input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
+  // opus-5-5 는 opus-5 보다 먼저 — 포함 검사라 뒤에 두면 Opus 5 로 잡힌다
+  { match: "opus-5-5", label: "Claude Opus 5.5", input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
   { match: "opus-5", label: "Claude Opus 5", input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
   { match: "sonnet-5", label: "Claude Sonnet 5", input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
   { match: "haiku-4-5", label: "Claude Haiku 4.5", input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },

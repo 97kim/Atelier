@@ -1,5 +1,6 @@
 // provider 별 모델 목록의 정적 폴백. 실제 목록은 main/models.ts 가 CLI 에 물어 온다(app.models). 빈 id 는 "CLI 기본 설정".
 import type { ModelOptionDto, Provider } from "./ipc";
+import { resolvePrice } from "./usage";
 
 export const STATIC_MODELS: Record<Provider, ModelOptionDto[]> = {
   claude: [
@@ -24,4 +25,21 @@ export function modelOptions(models: ModelOptionDto[], current: string | undefin
   const cur = current ?? "";
   const known = cur === "" || rest.some((m) => m.id === cur);
   return [head, ...rest, ...(known ? [] : [{ id: cur, label: `${cur} (직접 입력)` }])];
+}
+
+/**
+ * 헤더에 보일 모델 이름. 고른 값이 별칭(opus·sonnet·haiku·fable, [1m] 같은 꼬리 포함)이면 버전이 안 보이므로,
+ * CLI 가 알려 준 실제 모델 id(resolved)가 같은 계열일 때 "Opus 5.5" 처럼 버전을 붙인다. 모델을 막 바꿔 아직 응답이
+ * 없으면 resolved 는 옛 모델이라 계열이 달라 — 그때는 고른 값만 보여 준다(옛 버전을 잘못 붙이지 않게).
+ */
+export function headerModelLabel(chosen: string | null | undefined, resolved: string | null | undefined): string {
+  const pretty = (id: string) => resolvePrice(id)?.label.replace(/^Claude /, "") ?? id;
+  const pick = (chosen ?? "").trim();
+  const real = (resolved ?? "").trim();
+  if (!pick) return real ? pretty(real) : "";
+  if (!real) return pick;
+  const base = pick.replace(/\[[^\]]*\]$/, "").toLowerCase();
+  const tail = /\[1m\]$/i.test(pick) ? " (1M)" : "";
+  const same = real.toLowerCase() === base || real.toLowerCase().includes(base);
+  return same ? `${pretty(real)}${tail}` : pick;
 }
