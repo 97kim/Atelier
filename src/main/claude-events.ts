@@ -35,7 +35,7 @@ export class ClaudeEventMapper {
   private lastContextTokens: number | null = null;
   private readonly blocks = new Map<number, StreamBlock>();
   private counter = 0;
-  /** 텍스트로 이미 내보낸 진행 설명(thinking 블록) id. 스트림과 완성 메시지에서 두 번 내지 않게 블록 단위로 본다. */
+  /** 텍스트로 이미 내보낸 진행 설명(thinking 블록). 스트림과 완성 메시지에서 두 번 내지 않게 "메시지 id\n내용" 으로 본다. */
   private readonly emittedNotes = new Set<string>();
 
   /**
@@ -255,12 +255,19 @@ export class ClaudeEventMapper {
     return events;
   }
 
-  /** 진행 설명 하나를 채팅 텍스트로. 꺼져 있거나 비었거나 이미 냈으면 없다. */
+  /**
+   * 진행 설명 하나를 채팅 텍스트로. 꺼져 있거나 비었거나 이미 냈으면 없다.
+   * "이미 냈나" 는 블록 순번이 아니라 메시지 id + 내용으로 본다 — CLI 는 완성 메시지를 블록마다 따로 쪼개 보내서
+   * 스트림의 순번(msg:1)과 쪼갠 메시지 안의 순번(msg:0)이 다르다.
+   */
   private noteEvent(blockId: string, text: unknown, ts: number): ChatEvent[] {
-    if (!this.opts.progressNotes || typeof text !== "string" || !text.trim() || this.emittedNotes.has(blockId)) return [];
-    this.emittedNotes.add(blockId);
+    if (!this.opts.progressNotes || typeof text !== "string" || !text.trim()) return [];
+    const note = text.trim();
+    const key = `${blockId.slice(0, blockId.lastIndexOf(":"))}\n${note}`;
+    if (this.emittedNotes.has(key)) return [];
+    this.emittedNotes.add(key);
     if (this.emittedNotes.size > EMITTED_TOOLS_MAX) this.emittedNotes.delete(this.emittedNotes.values().next().value as string);
-    return [{ type: "assistant_text", ts, blockId, text: text.trim() }];
+    return [{ type: "assistant_text", ts, blockId, text: note }];
   }
 
   private mapUser(

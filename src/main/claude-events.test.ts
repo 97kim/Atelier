@@ -513,6 +513,20 @@ test("progressNotes: 글이 있는 thinking 블록은 끝날 때 채팅 텍스�
   assert.deepEqual(done, [], "스트림으로 이미 낸 것은 다시 내지 않는다");
 });
 
+test("progressNotes: CLI 가 완성 메시지를 블록마다 쪼개 보내도(순번이 0 으로 바뀌어도) 다시 내지 않는다", () => {
+  const mapper = new ClaudeEventMapper({ progressNotes: true });
+  const st = (event: Record<string, unknown>) => mapper.map(m({ type: "stream_event", event, parent_tool_use_id: null, uuid: "u", session_id: "s" }), 1);
+  const done = (content: unknown[]) => mapper.map(m({ type: "assistant", parent_tool_use_id: null, message: { id: "msg4", content } }), 2);
+  st({ type: "message_start", message: { id: "msg4" } });
+  st({ type: "content_block_start", index: 0, content_block: { type: "thinking" } });
+  st({ type: "content_block_stop", index: 0 });
+  assert.deepEqual(done([{ type: "thinking", thinking: "" }]), []);
+  st({ type: "content_block_start", index: 1, content_block: { type: "thinking" } });
+  st({ type: "content_block_delta", index: 1, delta: { type: "thinking_delta", thinking: "서버를 고칠게요." } });
+  assert.equal(st({ type: "content_block_stop", index: 1 }).length, 1);
+  assert.deepEqual(done([{ type: "thinking", thinking: "서버를 고칠게요." }]), [], "쪼갠 메시지(msg4:0)로 다시 와도 한 번만");
+});
+
 test("progressNotes: 스트림이 끊겨 블록 끝을 못 봤으면 완성 메시지에서 메우고, 꺼져 있으면 아무것도 남기지 않는다", () => {
   const on = new ClaudeEventMapper({ progressNotes: true });
   on.map(m({ type: "stream_event", event: { type: "message_start", message: { id: "msg2" } }, parent_tool_use_id: null, uuid: "u", session_id: "s" }), 1);
