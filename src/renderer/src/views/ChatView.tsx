@@ -437,9 +437,10 @@ export function ChatView({
     <RunInTerminalContext.Provider value={cwd ? runInTerminal : null}>
       <div className="relative flex h-full flex-col">
         {/* 타이틀바 줄: 세션 제목·경로·모델과 버튼. 제목 중심 56px = 사이드바 로고 줄. 탭 스트립은 이 아래. */}
-        <header className="drag flex h-[68px] shrink-0 items-center gap-3 overflow-hidden px-6 pt-4">
+        {/* 헤더 폭이 800px 보다 좁으면(분할 칸·좁은 창) 버튼 글자를 숨기고 아이콘만 남긴다 — 글자는 툴팁. 안 그러면 오른쪽 버튼이 잘린다. */}
+        <header className="@container/chathead drag flex h-[68px] shrink-0 items-center gap-3 overflow-hidden px-6 pt-4">
           {/* 제목·경로는 버튼에 밀려 사라지면 안 된다 — 최소 폭을 확보한다(버튼은 shrink-0 이라 제목만 줄어든다) */}
-          <div className="min-w-[220px] flex-1">
+          <div className="min-w-[140px] flex-1 @min-[800px]/chathead:min-w-[220px]">
             {editingTitle ? (
               <input
                 ref={titleInputRef}
@@ -557,7 +558,7 @@ export function ChatView({
           {editorTabs.files.length > 0 && (
             <button
               onClick={() => setEditorPaneVisible(tabId, !editorTabs.visible)}
-              className={`no-drag flex shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 ${
+              className={`no-drag flex min-h-[31px] shrink-0 items-center gap-2 rounded-md border py-1.5 px-2 @min-[800px]/chathead:px-3 ${
                 editorShown
                   ? "border-accent/40 bg-accent-tint text-accent"
                   : "border-line bg-panel hover:bg-panel-2"
@@ -566,35 +567,35 @@ export function ChatView({
               data-editor-toggle={editorShown ? "open" : "closed"}
             >
               {/* 옆의 "브라우저"(새 탭 열기) 버튼과 헷갈리지 않게 패널 아이콘 — 이 버튼은 패널을 접고 펴는 것 */}
-              <Icon name="panelRight" size={11} />
-              {paneLabel}
+              <Icon name="panelRight" size={11} className="size-[13px] @min-[800px]/chathead:size-[11px]" />
+              <span className="hidden @min-[920px]/chathead:inline">{paneLabel}</span>
             </button>
           )}
           <button
             onClick={() => openBrowserTab(tabId)}
-            className="no-drag flex shrink-0 items-center gap-2 rounded-md border border-line bg-panel px-3 py-1.5 hover:bg-panel-2"
+            className={`no-drag flex min-h-[31px] shrink-0 items-center gap-2 rounded-md border border-line bg-panel py-1.5 hover:bg-panel-2 px-2 @min-[800px]/chathead:px-3`}
             title="인앱 브라우저를 열어 개발 중인 화면이나 문서를 봅니다"
             data-browser-open
           >
-            <Icon name="globe" size={11} />
-            {browserTabCount > 0 ? "새 브라우저" : "브라우저"}
+            <Icon name="globe" size={11} className="size-[13px] @min-[800px]/chathead:size-[11px]" />
+            <span className="hidden @min-[800px]/chathead:inline">{browserTabCount > 0 ? "새 브라우저" : "브라우저"}</span>
           </button>
           <div className="relative flex shrink-0 items-stretch" ref={verifyAnchor}>
             <button
               onClick={onVerifyClick}
               disabled={!cwd || verifyRunning}
-              className="no-drag flex items-center gap-2 rounded-l-md border border-line bg-panel px-3 py-1.5 hover:bg-panel-2 disabled:opacity-40"
+              className={`no-drag flex min-h-[31px] items-center gap-2 rounded-l-md border border-line bg-panel py-1.5 hover:bg-panel-2 disabled:opacity-40 px-2 @min-[800px]/chathead:px-3`}
               title={savedVerify.length > 0 ? `저장한 검증 명령 실행: ${savedVerify.join(" → ")}` : "검증 명령(테스트·빌드)을 정해 두고 한 번에 실행합니다"}
               data-verify={verifyRunning ? "running" : savedVerify.length > 0 ? "ready" : "empty"}
             >
-              {verifyRunning ? <span className="spin inline-block h-3 w-3 rounded-full border-[1.5px] border-accent border-t-transparent" /> : <Icon name="check" size={11} />}
-              {verifyRunning ? "검증 중" : "검증"}
+              {verifyRunning ? <span className="spin inline-block h-3 w-3 rounded-full border-[1.5px] border-accent border-t-transparent" /> : <Icon name="check" size={11} className="size-[13px] @min-[800px]/chathead:size-[11px]" />}
+              <span className="hidden @min-[800px]/chathead:inline">{verifyRunning ? "검증 중" : "검증"}</span>
             </button>
             <button
               ref={verifyToggle}
               onClick={() => setVerifyOpen((o) => !o)}
               disabled={!cwd}
-              className={`no-drag flex items-center rounded-r-md border border-l-0 border-line px-1.5 py-1.5 hover:bg-panel-2 disabled:opacity-40 ${verifyOpen ? "bg-accent-tint text-accent" : "bg-panel text-muted"}`}
+              className={`no-drag flex min-h-[31px] items-center rounded-r-md border border-l-0 border-line px-1.5 py-1.5 hover:bg-panel-2 disabled:opacity-40 ${verifyOpen ? "bg-accent-tint text-accent" : "bg-panel text-muted"}`}
               title="검증 명령 편집"
               data-verify-edit
             >
@@ -605,7 +606,7 @@ export function ChatView({
           <button
             onClick={toggleTerminal}
             disabled={!cwd}
-            className={`no-drag flex shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 disabled:opacity-40 ${
+            className={`no-drag flex min-h-[31px] shrink-0 items-center gap-2 rounded-md border py-1.5 disabled:opacity-40 px-1.5 @min-[800px]/chathead:px-3 ${
               terminalOpen
                 ? "border-accent/40 bg-accent-tint text-accent hover:bg-accent/15"
                 : "border-line bg-panel hover:bg-panel-2"
@@ -622,7 +623,7 @@ export function ChatView({
             >
               <Icon name="terminal" size={11} />
             </span>
-            터미널
+            <span className="hidden @min-[800px]/chathead:inline">터미널</span>
           </button>
           {terminalControlled && config?.terminalExternal ? (
             <span
@@ -631,7 +632,8 @@ export function ChatView({
               data-external-terminal
             >
               <Icon name="terminal" size={12} />
-              터미널 CLI에 연결됨
+              <span className="@min-[800px]/chathead:hidden">CLI</span>
+              <span className="hidden @min-[800px]/chathead:inline">터미널 CLI에 연결됨</span>
             </span>
           ) : terminalControlled ? (
             <button
@@ -641,27 +643,18 @@ export function ChatView({
               data-detach-terminal
             >
               <Icon name="chat" size={12} />
-              채팅으로 돌아가기
+              <span className="@min-[800px]/chathead:hidden">채팅으로</span>
+              <span className="hidden @min-[800px]/chathead:inline">채팅으로 돌아가기</span>
             </button>
           ) : null}
-          {onUnsplit && (
-            <button
-              onClick={onUnsplit}
-              className="no-drag flex shrink-0 items-center rounded-md border border-line bg-panel p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
-              title="이 칸을 분할에서 빼기 (탭은 열려 있습니다)"
-              data-unsplit
-            >
-              <Icon name="x" size={12} />
-            </button>
-          )}
           <div className="relative flex shrink-0" ref={moreAnchor}>
             <button
               onClick={() => setMoreOpen((o) => !o)}
-              className={`no-drag flex items-center rounded-md border px-2 py-1.5 ${moreOpen ? "border-accent/40 bg-accent-tint text-accent" : "border-line bg-panel text-muted hover:bg-panel-2 hover:text-fg"}`}
+              className={`no-drag flex min-h-[31px] items-center rounded-md border px-2 py-1.5 ${moreOpen ? "border-accent/40 bg-accent-tint text-accent" : "border-line bg-panel text-muted hover:bg-panel-2 hover:text-fg"}`}
               title="팬아웃·교차 리뷰·오케스트레이션·터미널로 이어가기"
               data-header-more={moreOpen ? "open" : "closed"}
             >
-              <Icon name="more" size={13} />
+              <Icon name="more" size={14} strokeWidth={3} />
             </button>
             {moreOpen && (
               <HeaderMenu
@@ -708,12 +701,23 @@ export function ChatView({
           </div>
           <button
             onClick={() => setSwitching(true)}
-            className="no-drag flex shrink-0 items-center gap-2 rounded-md border border-line bg-panel px-3 py-1.5 hover:bg-panel-2"
+            className={`no-drag flex min-h-[31px] shrink-0 items-center rounded-md border border-line bg-panel py-1.5 hover:bg-panel-2 gap-1 px-1.5 @min-[800px]/chathead:gap-2 @min-[800px]/chathead:px-3`}
+            title={PROVIDER_LABEL[provider]}
           >
             <ProviderLogo provider={provider} size={20} />
-            {PROVIDER_LABEL[provider]}
+            <span className="hidden @min-[800px]/chathead:inline">{PROVIDER_LABEL[provider]}</span>
             <Icon name="chevronDown" size={12} className="text-muted" />
           </button>
+          {onUnsplit && (
+            <button
+              onClick={onUnsplit}
+              className="no-drag flex shrink-0 items-center rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
+              title="분할 해제 (이 칸을 빼고 옆 칸만 봅니다. 탭은 열려 있습니다)"
+              data-unsplit
+            >
+              <Icon name="x" size={13} />
+            </button>
+          )}
         </header>
 
         <div className="flex min-h-0 flex-1">
