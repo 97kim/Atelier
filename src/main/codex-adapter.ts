@@ -75,6 +75,11 @@ interface LiveCodex {
   /** 화면에 마지막으로 알린 모델. 바뀌면 세션 이벤트를 다시 보낸다(다시 연 탭도 헤더가 채워지게). */
   announcedModel?: string;
   turn: TurnCtx | null;
+  /**
+   * 지금 권한. 턴을 시작할 때 app-server 에 넘긴 값으로 정하고, 턴 도중 사용자가 바꾸면 applyCodexPolicy 가 갱신한다.
+   * app-server 는 턴 중에 정책을 바꿀 수 없어서, 풀어 주는 변경(묻기 → 편집 자동·전부 자동)은 승인 요청에 우리가 대신 답하는 것으로 적용한다.
+   */
+  policy: PermissionPolicy;
   /** 진행 중인 fileChange 아이템의 변경 내용(itemId → changes). 승인 요청엔 diff 가 없어 item/started 에서 받아 둔 것을 카드에 보여 준다. */
   fileChanges: Map<string, FileChangeDto[]>;
   dead: boolean;
@@ -128,7 +133,7 @@ function openSession(runtime: CodexRuntime, key: string, cwd: string, log?: (lin
 }
 
 async function openSessionNow(runtime: CodexRuntime, key: string, cwd: string, log?: (line: string) => void): Promise<LiveCodex> {
-  const s: LiveCodex = { key, cwd, server: null as unknown as CodexAppServer, ready: Promise.resolve(), threadId: null, model: null, turn: null, fileChanges: new Map(), dead: false, idleTimer: null, log };
+  const s: LiveCodex = { key, cwd, server: null as unknown as CodexAppServer, ready: Promise.resolve(), threadId: null, model: null, policy: "ask", turn: null, fileChanges: new Map(), dead: false, idleTimer: null, log };
   const server = new CodexAppServer({
     log,
     onNotification: (method, params) => handleNotification(s, method, params),
@@ -185,6 +190,8 @@ async function handleServerRequest(s: LiveCodex, method: string, params: Record<
   if (!t || !t.req.requestPermission) throw new Error("진행 중인 턴이 없어 승인할 수 없습니다.");
   const itemId = typeof params.itemId === "string" ? params.itemId : `req-${Date.now()}`;
   const ask = async (tool: string, title: string, input: Record<string, unknown>, description?: string) => {
+    // 턴 도중 권한을 풀었으면 사람에게 묻지 않고 허용한다(전부 자동은 모두, 편집 자동은 파일 변경만 — Claude 의 acceptEdits 와 같은 뜻).
+    if (s.policy === "full" || (s.policy === "auto_edit" && tool === "ApplyPatch")) return { behavior: "allow" as const };
     const requestId = `${itemId}#${++t.permissionSeq}`;
     const event: PermissionRequestEvent = {
       type: "permission_request",
@@ -331,6 +338,7 @@ export async function runCodexTurn(runtime: CodexRuntime, req: CodexTurnRequest)
     s.announcedModel = model;
   }
 
+  s.policy = req.policy;
   const done = new Promise<void>((resolve, reject) => {
     s.turn = { req, turnId: null, ctx: { model, startedAt: Date.now(), lastUsage: null }, resolve, reject, permissionSeq: 0 };
   });
@@ -400,4 +408,18 @@ export async function runCodexTurnExec(runtime: CodexRuntime, req: CodexTurnRequ
   if (typeof thread.id === "string" && thread.id && thread.id !== req.sessionId) {
     req.onEvent({ type: "session", ts: Date.now(), sessionId: thread.id, provider: "codex", model: req.model });
   }
+}
+
+/**
+ * 진행 중인 턴에 권한 변경을 반영한다. app-server 는 턴 도중 승인 정책·샌드박스를 바꿀 수 없다 —
+ * 풀어 주는 변경은 이후 승인 요청에 대신 답하는 것으로 바로 적용하고(샌드박스는 다음 턴부터), 조이는 변경은 다음 턴부터다
+ * (턴을 "묻지 않음" 으로 시작했으면 요청이 아예 오지 않는다).
+ */
+export function applyCodexPolicy(sessionKey: string, policy: PermissionPolicy): "applied" | "next-turn" | "none" {
+  const s = live.get(sessionKey);
+  if (!s || s.dead) return "none";
+  const rank: Record<PermissionPolicy, number> = { ask: 0, auto_edit: 1, full: 2 };
+  const loosening = rank[policy] >= rank[s.policy];
+  s.policy = policy;
+  return loosening ? "applied" : "next-turn";
 }

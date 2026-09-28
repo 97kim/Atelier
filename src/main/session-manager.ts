@@ -17,7 +17,7 @@ import type { LiveBackgroundTask, TaskFinishedNote } from "@shared/bg-tasks";
 import type { StoredChatImage } from "./chat-attachments";
 import type { BackgroundTasksSource } from "./claude-adapter";
 import { applyClaudePolicy, closeAllClaudeSessions, closeClaudeSession, interruptClaudeSession, runClaudeTurn, warmClaudeSession, type ClaudeRuntime } from "./claude-adapter";
-import { closeAllCodexSessions, closeCodexSession, runCodexTurn, warmCodexSession, type CodexRuntime } from "./codex-adapter";
+import { applyCodexPolicy, closeAllCodexSessions, closeCodexSession, runCodexTurn, warmCodexSession, type CodexRuntime } from "./codex-adapter";
 import { randomUUID } from "node:crypto";
 import {
   isUsageLimitText,
@@ -1441,12 +1441,16 @@ export class SessionManager {
    * 느슨해지는 방향만 즉시 먹는다 — 조이는 쪽은 프로세스가 우리에게 묻지 않으므로 다음 턴부터다.
    */
   private applyPolicyNow(tabId: string, s: Session, policy: PermissionPolicy): void {
-    if (s.provider !== "claude") return;
-    void applyClaudePolicy(tabId, policy)
-      .then((r) => {
-        if (r !== "none") this.deps.log?.(tabId, `[claude] 권한 ${policy} — ${r === "applied" ? "이번 턴부터" : "다음 턴부터"}`);
-      })
-      .catch(() => {});
+    if (s.provider === "claude") {
+      void applyClaudePolicy(tabId, policy)
+        .then((r) => {
+          if (r !== "none") this.deps.log?.(tabId, `[claude] 권한 ${policy} — ${r === "applied" ? "이번 턴부터" : "다음 턴부터"}`);
+        })
+        .catch(() => {});
+    } else {
+      const r = applyCodexPolicy(tabId, policy);
+      if (r !== "none") this.deps.log?.(tabId, `[codex] 권한 ${policy} — ${r === "applied" ? "이번 턴부터(샌드박스는 다음 턴부터)" : "다음 턴부터"}`);
+    }
     if (policy !== "full") return;
     // 이미 떠 있는 승인 창은 게이트가 지나쳐 버린 요청이라 따로 풀어 준다.
     for (const requestId of [...s.pending.keys()]) {
