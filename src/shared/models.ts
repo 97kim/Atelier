@@ -10,6 +10,7 @@ export const STATIC_MODELS: Record<Provider, ModelOptionDto[]> = {
     { id: "haiku", label: "Haiku" },
   ],
   codex: [
+    { id: "gpt-6.1-sol", label: "GPT-6.1 Sol" },
     { id: "gpt-6-astra", label: "GPT-6-Astra" },
     { id: "gpt-5.4", label: "gpt-5.4" },
   ],

@@ -19,7 +19,7 @@ test("headerModelLabel: 별칭이면 같은 계열의 실제 모델 버전을 �
   assert.equal(headerModelLabel("sonnet", "claude-opus-5-5"), "sonnet", "sonnet 으로 바꾼 직후엔 옛 opus 버전을 붙이지 않는다");
   assert.equal(headerModelLabel("claude-opus-5", "claude-opus-5"), "Opus 5");
   assert.equal(headerModelLabel("", "claude-opus-5-5"), "Opus 5.5", "기본 모델이면 실제 모델");
-  assert.equal(headerModelLabel("gpt-6-astra", "gpt-6-astra"), "gpt-6-astra", "가격표에 없는 모델은 id 그대로");
+  assert.equal(headerModelLabel("gpt-7-nova", "gpt-7-nova"), "gpt-7-nova", "가격표에 없는 모델은 id 그대로");
   assert.equal(headerModelLabel("opus", null), "opus");
   assert.equal(headerModelLabel(null, null), "");
 });

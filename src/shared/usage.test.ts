@@ -38,6 +38,10 @@ test("resolvePrice: 부분 문자열 매치, 순서 우선, 모르는 모델은 
   assert.equal(resolvePrice("claude-fable-5")?.label, "Claude Fable 5");
   assert.equal(resolvePrice("gpt-5.3-codex")?.label, "GPT-5 Codex");
   assert.equal(resolvePrice("gpt-5.5")?.label, "GPT-5.5");
+  assert.equal(resolvePrice("gpt-6.1-sol")?.label, "GPT-6.1 Sol");
+  assert.equal(resolvePrice("gpt-6-sol")?.label, "GPT-6 Sol");
+  assert.equal(resolvePrice("gpt-5.4-mini")?.label, "GPT-5.4 mini", "짧은 이름(gpt-5.4)에 먼저 잡히지 않는다");
+  assert.equal(resolvePrice("gpt-6.1-sol")?.estimated, undefined, "공식 가격");
   assert.equal(resolvePrice("<synthetic>"), null);
 });
 
