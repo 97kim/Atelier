@@ -8,6 +8,8 @@ import type {
   PermissionPolicy,
   PermissionRequestEvent,
   SessionStatus,
+  ForkPoint,
+  TurnResultEvent,
 } from "@shared/chat-events";
 import { buildDedupeIndex, dropReplayedPrefix, indexEvent, type DedupeIndex, type ReplayCutStats } from "@shared/event-dedupe";
 import { buildHandoff, estimateTokens, type Handoff } from "@shared/handoff";
@@ -996,6 +998,49 @@ export class SessionManager {
       });
     }
     s.mirror.start();
+  }
+
+  /**
+   * "이 턴에서 분기" 의 출발점. 분기할 수 있는지 보고, 새 탭에 옮길 기록(그 턴 끝까지)을 돌려준다.
+   * 분기 지점은 탭의 지금 provider 세션 것이어야 한다 — provider 를 바꾸기 전 턴이나 분기로 복사된 턴은 다른 세션을 가리킨다.
+   * 팬아웃·리뷰·검증·오케스트레이션 카드는 원래 탭의 작업(worktree 삭제 같은 동작이 딸림)이라 옮기지 않는다.
+   */
+  forkSource(tabId: string, pointId: string):
+    | { ok: true; point: ForkPoint; cwd: string; provider: Provider; model?: string; policy: PermissionPolicy; prefix: ChatEvent[] }
+    | { ok: false; error: string } {
+    const s = this.ensure(tabId);
+    if (s.controller !== "app") return { ok: false, error: "터미널이 이 세션을 제어하는 동안에는 분기할 수 없습니다." };
+    if (this.isBusy(tabId)) return { ok: false, error: "작업이 끝난 뒤 분기할 수 있습니다." };
+    if (!s.cwd) return { ok: false, error: "작업 경로가 없습니다." };
+    const events = this.loadEvents(s);
+    const idx = events.findIndex((e) => e.type === "turn_result" && e.forkPoint?.pointId === pointId);
+    const point = idx >= 0 ? (events[idx] as TurnResultEvent).forkPoint! : null;
+    if (!point) return { ok: false, error: "분기할 턴을 찾지 못했습니다." };
+    if (point.provider !== s.provider || point.sessionId !== s.sessionId)
+      return { ok: false, error: "지금 이어지는 대화의 턴이 아니라 분기할 수 없습니다." };
+    const carried = new Set<ChatEvent["type"]>(["review", "verify", "fanout", "orchestration", "thinking_delta", "subagent_activity"]);
+    const prefix = events.slice(0, idx + 1).filter((e) => !carried.has(e.type));
+    return { ok: true, point, cwd: s.cwd, provider: s.provider, model: s.model, policy: s.policy, prefix };
+  }
+
+  /** 분기로 만든 새 탭에 새 provider 세션과 옮겨 온 기록을 심는다. 대기열·예약·백그라운드는 물려받지 않는다. */
+  adoptFork(tabId: string, cfg: { provider: Provider; cwd: string; model?: string; policy: PermissionPolicy; sessionId: string }, prefix: ChatEvent[]): SessionSnapshot {
+    const s = this.ensure(tabId);
+    closeProviderSessions(tabId);
+    s.provider = cfg.provider;
+    s.cwd = cfg.cwd;
+    s.model = cfg.model;
+    s.policy = cfg.policy;
+    s.sessionId = cfg.sessionId;
+    this.deps.onMeta?.(tabId, { provider: cfg.provider, cwd: cfg.cwd, model: cfg.model, policy: cfg.policy, sessionId: cfg.sessionId });
+    const now = Date.now();
+    for (const e of prefix) this.record(s, e);
+    this.record(s, { type: "session", ts: now, sessionId: cfg.sessionId, provider: cfg.provider, ...(cfg.model ? { model: cfg.model } : {}) });
+    this.record(s, { type: "status", ts: now, status: "idle" });
+    this.record(s, { type: "notice", ts: now, level: "notice", message: "여기서 대화를 분기했습니다. 원래 탭과 같은 작업 폴더를 쓰며, 파일은 되돌리지 않았습니다." });
+    const snap = this.snapshot(tabId);
+    this.deps.onSnapshot?.(tabId, snap);
+    return snap;
   }
 
   /** 앱 기능(교차 리뷰 등)이 탭 기록에 남기는 알림 이벤트. */

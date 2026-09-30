@@ -79,3 +79,11 @@ test("classifyResumeFailure: thread-store 의 writer 충돌은 conflict, 나머�
   assert.match(resumeConflictMessage("01a08964-20a0-78e1-bdac-1563bc9cedc1", "x"), /01a08964…/);
   assert.match(resumeConflictMessage("01a08964-20a0-78e1-bdac-1563bc9cedc1", "x"), /\/exit/);
 });
+
+test("turn/completed: 완료된 턴에만 forkPoint(thread id + turn id)", () => {
+  const c = ctx();
+  const [ok] = mapAppServerNotification("turn/completed", { threadId: "th1", turn: { id: "turn-1", status: "completed", items: [] } }, 1500, c) as { forkPoint?: unknown }[];
+  assert.deepEqual(ok.forkPoint, { provider: "codex", sessionId: "th1", pointId: "turn-1" });
+  const [cut] = mapAppServerNotification("turn/completed", { threadId: "th1", turn: { id: "turn-2", status: "interrupted", items: [] } }, 1600, c) as { forkPoint?: unknown }[];
+  assert.equal(cut.forkPoint, undefined);
+});

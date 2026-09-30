@@ -111,6 +111,10 @@ function compactBlock(b: Block): Json {
       return { kind: "turn", durationMs: b.durationMs, isError: b.isError, ...(b.errorText ? { errorText: b.errorText } : {}) };
     case "error":
       return { kind: "error", message: b.message };
+    case "notice":
+      return { kind: "notice", level: b.level, message: b.message };
+    case "compacted":
+      return { kind: "compacted", trigger: b.trigger, preTokens: b.preTokens, ...(b.postTokens !== undefined ? { postTokens: b.postTokens } : {}) };
     case "review":
       return { kind: "review", reviewer: b.reviewer, status: b.status, text: b.text, ...(b.scope ? { scope: b.scope } : {}) };
     case "fanout":
@@ -132,6 +136,11 @@ function compactBlock(b: Block): Json {
         head: b.head,
         commands: b.commands.map((c) => ({ cmd: c.cmd, status: c.status, ...(c.exitCode !== undefined ? { exitCode: c.exitCode } : {}), ...(c.durationMs !== undefined ? { durationMs: c.durationMs } : {}), ...(c.output ? { output: c.output } : {}) })),
       };
+    default: {
+      // 블록 종류가 늘면 여기서 컴파일 오류가 난다 — 빠뜨리면 tab read 에 null 이 섞인다
+      const never: never = b;
+      return never;
+    }
   }
 }
 

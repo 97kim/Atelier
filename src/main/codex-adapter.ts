@@ -377,6 +377,39 @@ export async function runCodexTurn(runtime: CodexRuntime, req: CodexTurnRequest)
 }
 
 /**
+ * 스레드를 lastTurnId 턴까지(포함) 복사해 새 스레드를 만들고 그 id 를 돌려준다(app-server thread/fork).
+ * 원래 탭의 app-server 에서 하면 fork 가 내는 thread/started 가 그 탭의 threadId 를 덮어쓴다 — 잠깐 쓰는 프로세스를 따로 띄운다.
+ * 새 스레드는 디스크에 남으므로, 새 탭은 첫 턴에 평소처럼 thread/resume 으로 이어 간다.
+ */
+export async function forkCodexThread(
+  runtime: CodexRuntime,
+  req: { threadId: string; lastTurnId: string; cwd: string; model?: string; policy: PermissionPolicy; log?: (line: string) => void },
+): Promise<string> {
+  const server = new CodexAppServer({
+    log: req.log,
+    onNotification: () => {},
+    onServerRequest: async () => {
+      throw new Error("분기 중에는 요청을 받지 않습니다.");
+    },
+    onExit: () => {},
+  });
+  try {
+    await server.start(runtime.codexPath, runtime.env, req.cwd);
+    const map = POLICY_TO_APPSERVER[req.policy];
+    const r = await server.request<{ thread?: { id?: string } }>(
+      "thread/fork",
+      { threadId: req.threadId, lastTurnId: req.lastTurnId, cwd: req.cwd, model: req.model ?? null, approvalPolicy: map.approvalPolicy, sandbox: map.sandbox, excludeTurns: true },
+      30_000,
+    );
+    const id = r.thread?.id;
+    if (!id) throw new Error("Codex 가 분기한 스레드 id 를 주지 않았습니다.");
+    return id;
+  } finally {
+    server.close();
+  }
+}
+
+/**
  * 돌고 있는 턴에 지시를 끼워 넣는다(app-server turn/steer). 턴이 끝나기를 기다리지 않고 모델이 다음 걸음부터 반영한다.
  * expectedTurnId 로 "지금 그 턴" 인지 서버가 확인한다 — 그 사이 턴이 끝났으면 실패하고, 호출자는 대기열에 남긴다.
  * 리뷰·압축 턴은 끼워 넣을 수 없다(activeTurnNotSteerable).

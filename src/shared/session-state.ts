@@ -13,6 +13,7 @@ import {
   type FanoutVariant,
   type PermissionPolicy,
   type OrchestrationEvent,
+  type ForkPoint,
 } from "./chat-events";
 
 export interface UserBlock {
@@ -79,6 +80,7 @@ export interface TurnBlock {
   numTurns: number;
   isError: boolean;
   errorText?: string;
+  forkPoint?: ForkPoint;
 }
 
 /** 압축 경계. 여기 위쪽 대화는 요약으로 대체됐다는 표시. */
@@ -432,6 +434,7 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
             numTurns: event.numTurns,
             isError: event.isError,
             errorText: event.errorText,
+            forkPoint: event.forkPoint,
           },
         ],
         totals: {

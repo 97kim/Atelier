@@ -148,6 +148,18 @@ export interface TurnResultEvent extends Base {
   modelUsage: Record<string, ModelUsageEntry>;
   isError: boolean;
   errorText?: string;
+  /**
+   * 이 턴 끝에서 대화를 갈라 새 탭으로 이어 갈 수 있는 지점. 정상으로 끝난 일반 턴에만 붙는다.
+   * sessionId 는 그 지점이 속한 provider 세션 — 탭의 지금 세션과 다르면(provider 전환 전, 분기로 복사된 턴) 쓸 수 없다.
+   * pointId: Claude 는 그 턴 마지막 최상위 체인 항목의 uuid(forkSession upToMessageId), Codex 는 turn id(thread/fork lastTurnId).
+   */
+  forkPoint?: ForkPoint;
+}
+
+export interface ForkPoint {
+  provider: "claude" | "codex";
+  sessionId: string;
+  pointId: string;
 }
 
 /** provider 세션을 새로 시작했다(요약 후 새 세션 등). 컨텍스트 사용량 표시를 초기화한다. */

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { clearReveal, onReveal, pendingReveal } from "../reveal";
-import type { SessionStatus } from "@shared/chat-events";
+import type { ForkPoint, SessionStatus } from "@shared/chat-events";
 import type { Provider } from "@shared/ipc";
 import type { Block, ReviewBlock } from "@shared/session-state";
 import { Icon } from "./Icon";
@@ -161,7 +161,13 @@ export function MessageList({
     else groups.push({ kind, blocks: [b] });
   }
 
+  // 턴 끝의 "여기서 분기": 지금 이어지는 세션의 턴이고 탭이 쉬고 있을 때만
+  const forkCtx: ForkCtx = {
+    can: (p) => !!sessionId && p.sessionId === sessionId && (status === "idle" || status === "error"),
+    fork: (pointId) => window.workbench.chat.fork(tabId, pointId),
+  };
   return (
+    <ForkContext.Provider value={forkCtx}>
     <div className="relative h-full">
     <div
       ref={containerRef}
@@ -213,6 +219,7 @@ export function MessageList({
         </button>
       )}
     </div>
+    </ForkContext.Provider>
   );
 }
 
@@ -549,7 +556,12 @@ function BlockView({ block }: { block: Block }) {
       );
       // 성공한 턴은 통계 한 줄만 조용히. 실패는 원인을 봐야 하니 박스로.
       if (!block.isError)
-        return <div className="mt-1 text-right text-muted-2">{stats}</div>;
+        return (
+          <div className="group/turn mt-1 flex items-center justify-end gap-2 text-muted-2">
+            {block.forkPoint && <ForkButton point={block.forkPoint} />}
+            {stats}
+          </div>
+        );
       return (
         <div className="mt-1 flex items-center gap-2 rounded-md border border-err/40 bg-err-bg px-3 py-2 text-err">
           <Icon name="alert" size={13} />
@@ -563,6 +575,42 @@ function BlockView({ block }: { block: Block }) {
     default:
       return null;
   }
+}
+
+interface ForkCtx {
+  can: (p: ForkPoint) => boolean;
+  fork: (pointId: string) => Promise<{ ok: true; tabId: string } | { ok: false; error: string }>;
+}
+const ForkContext = createContext<ForkCtx | null>(null);
+
+/** 턴 통계 줄의 "여기서 분기". 줄에 올렸을 때만 보인다. 새 탭이 열리면 앱이 그리로 옮겨 간다. */
+function ForkButton({ point }: { point: ForkPoint }) {
+  const ctx = useContext(ForkContext);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!ctx?.can(point)) return null;
+  return (
+    <>
+      {error && <span className="text-[11px] text-err">{error}</span>}
+      <button
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          void ctx.fork(point.pointId).then((r) => {
+            setBusy(false);
+            if (!r.ok) setError(r.error);
+          });
+        }}
+        disabled={busy}
+        className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] hover:bg-panel-2 hover:text-fg disabled:opacity-60 ${busy || error ? "" : "opacity-0 group-hover/turn:opacity-100 focus:opacity-100"}`}
+        title="이 턴까지의 대화를 새 탭으로 갈라 다른 방향으로 이어 갑니다. 원래 탭은 그대로 두고, 파일은 되돌리지 않습니다"
+        data-fork-turn
+      >
+        <Icon name="switch" size={10} />
+        {busy ? "분기 중…" : "여기서 분기"}
+      </button>
+    </>
+  );
 }
 
 function fmt(n: number): string {

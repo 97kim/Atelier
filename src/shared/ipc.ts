@@ -162,6 +162,7 @@ export const IPC = {
   chatQueueUpdate: "chat:queue-update",
   chatQueueSendNext: "chat:queue-send-next",
   chatQueueSteer: "chat:queue-steer",
+  chatFork: "chat:fork",
   chatExport: "chat:export",
   chatAttachTerminal: "chat:attach-terminal",
   chatDetachTerminal: "chat:detach-terminal",
@@ -802,6 +803,8 @@ export interface WorkbenchApi {
     queueSendNext(tabId: string): Promise<SessionSnapshotDto>;
     /** Codex 가 작업 중일 때 대기열의 지시를 돌고 있는 턴에 바로 끼워 넣는다. 실패하면 대기열에 남고 error 가 온다. */
     queueSteer(tabId: string, id: string): Promise<{ ok: boolean; error?: string; snapshot: SessionSnapshotDto }>;
+    /** 이 턴(분기 지점 id)까지의 대화를 새 탭으로 갈라 이어 간다. 원래 탭은 그대로다. */
+    fork(tabId: string, pointId: string): Promise<{ ok: true; tabId: string } | { ok: false; error: string }>;
     /** 모든 세션(닫힌 것 포함)의 사용자·어시스턴트 텍스트에서 부분 일치 검색. */
     search(query: string): Promise<SearchResultDto[]>;
     /** 저장 다이얼로그를 띄워 세션을 마크다운으로 내보낸다. 취소하면 null. */

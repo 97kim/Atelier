@@ -571,3 +571,37 @@ test("configure: provider 가 바뀌면 이전 provider 의 모델은 버리고,
   assert.equal(manager.snapshot("m1").model, "claude-opus-5-5", "provider 가 그대로면 모델도 그대로");
   rmSync(root, { recursive: true, force: true });
 });
+
+test("분기: 지금 세션의 정상 턴에서만, 그 턴까지의 기록(작업 카드 제외)을 새 탭으로 옮기고 새 세션 id 를 쓴다", () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-fork-"));
+  const { manager } = makeManager(root);
+  const SID = "11111111-2222-3333-4444-555555555555";
+  const turn = (ts: number, pointId: string, sessionId = SID): ChatEvent => ({
+    type: "turn_result", ts, usage: ZERO_USAGE, costUsd: 0, durationMs: 1, numTurns: 1, modelUsage: {}, isError: false,
+    forkPoint: { provider: "claude", sessionId, pointId },
+  });
+  manager.note("t1", { type: "user_message", ts: 1, id: "m1", text: "첫 지시" });
+  manager.note("t1", turn(2, "old", "99999999-0000-0000-0000-000000000000")); // provider 전환 전 세션
+  manager.note("t1", { type: "user_message", ts: 3, id: "m2", text: "둘째 지시" });
+  manager.note("t1", { type: "review", ts: 4, reviewer: "codex", reviewTabId: "r", status: "done", text: "리뷰" });
+  manager.note("t1", turn(5, "p2"));
+  manager.note("t1", { type: "user_message", ts: 6, id: "m3", text: "셋째 지시" });
+  manager.note("t1", turn(7, "p3"));
+
+  assert.equal(manager.forkSource("t1", "nope").ok, false);
+  assert.equal(manager.forkSource("t1", "old").ok, false, "지금 세션이 아닌 턴");
+  const src = manager.forkSource("t1", "p2");
+  assert.ok(src.ok);
+  if (!src.ok) return;
+  assert.deepEqual(src.prefix.map((e) => e.type), ["user_message", "turn_result", "user_message", "turn_result"], "리뷰 카드는 옮기지 않고, 셋째 지시는 빠진다");
+
+  const NEW = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const snap = manager.adoptFork("t2", { provider: "claude", cwd: root, policy: "ask", sessionId: NEW }, src.prefix);
+  assert.equal(snap.sessionId, NEW);
+  assert.equal(snap.status, "idle");
+  const events = manager.events("t2");
+  assert.equal(events.filter((e) => e.type === "user_message").length, 2);
+  assert.equal(events.at(-1)?.type, "notice");
+  // 옮겨 온 턴은 옛 세션 것이라 새 탭에서 다시 분기할 수 없다
+  assert.equal(manager.forkSource("t2", "p2").ok, false);
+});

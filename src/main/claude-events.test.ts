@@ -556,3 +556,19 @@ test("system/init 의 plugin_errors 는 경고 한 줄로(key 고정), 없으면
   const ev = init({ plugin_errors: [{ plugin: "codex@openai", type: "dependency-unsatisfied", message: "node 가 없습니다" }, { plugin: "inline[0]", type: "path-not-found", message: "" }] });
   assert.deepEqual(ev[1], { type: "notice", ts: 1, level: "warning", key: "plugin-errors", message: "플러그인 2개를 불러오지 못했습니다: codex@openai (node 가 없습니다), inline[0]" });
 });
+
+test("forkPoint: 정상 턴의 마지막 최상위 체인 항목 uuid 를 붙이고, 서브에이전트 메시지는 빼며, 결과 뒤엔 비운다", () => {
+  const mapper = new ClaudeEventMapper();
+  const result = (extra: Record<string, unknown> = {}) =>
+    mapper.map(m({ type: "result", subtype: "success", is_error: false, duration_ms: 1, num_turns: 1, result: "", total_cost_usd: 0, session_id: "sess", usage: {}, modelUsage: {}, ...extra }), 9)[0] as { forkPoint?: unknown };
+  const asst = (uuid: string, parent: string | null = null) =>
+    mapper.map(m({ type: "assistant", uuid, parent_tool_use_id: parent, message: { id: `msg-${uuid}`, content: [] } }), 1);
+  const toolResult = (uuid: string) => mapper.map(m({ type: "user", uuid, parent_tool_use_id: null, message: { role: "user", content: [] } }), 1);
+  asst("a1");
+  toolResult("u1");
+  asst("sub", "toolu_x"); // 서브에이전트
+  assert.deepEqual(result().forkPoint, { provider: "claude", sessionId: "sess", pointId: "u1" });
+  assert.equal(result().forkPoint, undefined, "체인 항목이 없는 턴(압축만 등)은 앞 턴 것을 다시 쓰지 않는다");
+  asst("a2");
+  assert.equal(result({ subtype: "error_during_execution", is_error: true }).forkPoint, undefined, "오류·중단 턴은 분기 지점이 없다");
+});

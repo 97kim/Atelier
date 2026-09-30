@@ -33,6 +33,11 @@ export class ClaudeEventMapper {
   private readonly emittedTools = new Set<string>();
   /** 메인 루프의 마지막 assistant 메시지가 든 입력 컨텍스트 크기. result 의 usage 는 턴 누적치라 따로 든다. */
   private lastContextTokens: number | null = null;
+  /**
+   * 이 턴에서 본 마지막 최상위 체인 항목(assistant, 또는 도구 결과를 담은 user)의 uuid. 턴 끝의 분기 지점이다.
+   * 서브에이전트 메시지(parent_tool_use_id)는 본 세션 체인이 아니라 뺀다. 결과를 낸 뒤 비운다(예열 매퍼는 여러 턴을 산다).
+   */
+  private lastChainUuid: string | null = null;
   private readonly blocks = new Map<number, StreamBlock>();
   private counter = 0;
   /** 텍스트로 이미 내보낸 진행 설명(thinking 블록). 스트림과 완성 메시지에서 두 번 내지 않게 "메시지 id\n내용" 으로 본다. */
@@ -89,11 +94,14 @@ export class ClaudeEventMapper {
         if (msg.parent_tool_use_id) return []; // 서브에이전트 스트림은 노출하지 않는다
         return this.mapStreamEvent(msg.event, ts);
       case "assistant":
-        return this.mapAssistant(msg, ts);
       case "user":
-        return this.mapUser(msg, ts);
-      case "result":
-        return [this.mapResult(msg, ts)];
+        if (!msg.parent_tool_use_id && typeof msg.uuid === "string" && msg.uuid) this.lastChainUuid = msg.uuid;
+        return msg.type === "assistant" ? this.mapAssistant(msg, ts) : this.mapUser(msg, ts);
+      case "result": {
+        const ev = this.mapResult(msg, ts);
+        this.lastChainUuid = null;
+        return [ev];
+      }
       default:
         return [];
     }
@@ -347,6 +355,10 @@ export class ClaudeEventMapper {
       modelUsage,
       isError,
       errorText,
+      // 정상으로 끝난 일반 턴만. 중단·오류·압축만 한 턴(체인 항목 없음)은 분기 지점이 없다.
+      ...(!isError && this.lastChainUuid && msg.session_id
+        ? { forkPoint: { provider: "claude" as const, sessionId: msg.session_id, pointId: this.lastChainUuid } }
+        : {}),
     };
   }
 }

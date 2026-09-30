@@ -33,13 +33,13 @@ import {
   saveChatImages,
   toHistoryImages,
 } from "./chat-attachments";
-import { setClaudeSessionIdleMs, type ClaudeRuntime } from "./claude-adapter";
+import { forkClaudeSession, setClaudeSessionIdleMs, type ClaudeRuntime } from "./claude-adapter";
 import { buildCliDiscovery, type CliDiscovery } from "./cli-discovery";
 import { sanitizeCliEnv } from "./cli-env";
 import { ShellCliMonitor } from "./cli-watch";
 import { SlashCommandCache } from "./claude-commands";
 import { fetchMcpStatus } from "./claude-mcp";
-import { setCodexSessionIdleMs, type CodexRuntime } from "./codex-adapter";
+import { forkCodexThread, setCodexSessionIdleMs, type CodexRuntime } from "./codex-adapter";
 import { buildReviewPrompt, otherProvider, reviewPermissionDecision, reviewScope, reviewTabTitle } from "@shared/cross-review";
 import { handoffBriefPrompt, handoffNotePermission, NOTE_FILE } from "@shared/handoff";
 import { lastReplyText } from "@shared/session-state";
@@ -1459,6 +1459,39 @@ function bootstrap() {
   }
 }
 
+/**
+ * "이 턴에서 분기": provider 세션을 그 턴까지 복사한 새 세션을 만들고, 그것을 이어 가는 새 탭을 연다. 원래 탭은 그대로다.
+ * 새 탭은 분기가 성공한 뒤에만 만든다(실패하면 빈 탭이 남지 않게). worktree 정보는 넘기지 않는다 —
+ * 새 탭을 닫을 때 원래 탭이 쓰는 worktree 를 지우자고 묻지 않게.
+ */
+async function forkTab(tabId: string, pointId: string): Promise<{ ok: true; tabId: string } | { ok: false; error: string }> {
+  const src = sessions.forkSource(tabId, pointId);
+  if (!src.ok) return src;
+  const tab = workspaces.state().model.tabs.find((t) => t.id === tabId);
+  if (!tab) return { ok: false, error: "탭을 찾지 못했습니다." };
+  let sessionId: string;
+  try {
+    sessionId =
+      src.provider === "claude"
+        ? await forkClaudeSession(await claudeRuntime(), src.point.sessionId, src.cwd, src.point.pointId)
+        : await forkCodexThread(await codexRuntime(), {
+            threadId: src.point.sessionId,
+            lastTurnId: src.point.pointId,
+            cwd: src.cwd,
+            model: src.model,
+            policy: src.policy,
+            log: (l) => console.log(l),
+          });
+  } catch (e) {
+    return { ok: false, error: `분기하지 못했습니다: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const newTabId = workspaces.createTab(tab.workspaceId, { cwd: src.cwd, title: `${tabTitleOf(tabId)} (분기)` });
+  if (!newTabId) return { ok: false, error: "새 탭을 만들지 못했습니다." };
+  sessions.adoptFork(newTabId, { provider: src.provider, cwd: src.cwd, model: src.model, policy: src.policy, sessionId }, src.prefix);
+  workspaces.activateTab(newTabId);
+  return { ok: true, tabId: newTabId };
+}
+
 function tabTitleOf(tabId: string): string {
   const tab = workspaces.state().model.tabs.find((t) => t.id === tabId);
   return tab ? tabTitle(tab) : "세션";
@@ -1834,6 +1867,10 @@ function registerIpc() {
     return sessions.queueRemove(tabId, id);
   });
   ipcMain.handle(IPC.chatQueueSendNext, (_e, tabId: string) => sessions.queueSendNext(tabId));
+  ipcMain.handle(IPC.chatFork, (_e, tabId: string, pointId: string) => {
+    if (typeof tabId !== "string" || typeof pointId !== "string") throw new Error("잘못된 인자");
+    return forkTab(tabId, pointId);
+  });
   ipcMain.handle(IPC.chatQueueSteer, (_e, tabId: string, id: string) => {
     if (typeof tabId !== "string" || typeof id !== "string") throw new Error("잘못된 인자");
     return sessions.queueSteer(tabId, id);

@@ -198,7 +198,8 @@ export function mapAppServerNotification(method: string, params: Json, ts: numbe
       return [];
     }
     case "turn/completed": {
-      const turn = (params.turn ?? {}) as { status?: string; error?: { message?: string } | null };
+      const turn = (params.turn ?? {}) as { id?: string; status?: string; error?: { message?: string } | null };
+      const threadId = typeof params.threadId === "string" ? params.threadId : "";
       const usage = ctx.lastUsage ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
       const modelUsage: Record<string, ModelUsageEntry> = ctx.model ? { [ctx.model]: { ...usage, costUsd: 0 } } : {};
       // 중단(interrupted)을 성공으로 읽으면 안 된다. 예약 회차에서는 "사용자가 세운 것" 이
@@ -215,6 +216,8 @@ export function mapAppServerNotification(method: string, params: Json, ts: numbe
           modelUsage,
           isError: failed,
           errorText: failed ? (turn.error?.message ?? (turn.status === "interrupted" ? "중단되었습니다." : "Codex turn 실패")) : undefined,
+          // 정상으로 끝난 턴만 분기 지점이 된다(thread/fork lastTurnId)
+          ...(turn.status === "completed" && turn.id && threadId ? { forkPoint: { provider: "codex" as const, sessionId: threadId, pointId: turn.id } } : {}),
         },
       ];
     }

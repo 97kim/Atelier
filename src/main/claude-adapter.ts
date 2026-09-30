@@ -274,6 +274,19 @@ function openSession(runtime: ClaudeRuntime, req: ClaudeTurnRequest): Promise<Li
   return p;
 }
 
+/**
+ * 세션을 upToMessageId 항목까지(포함) 새 세션 파일로 복사하고 새 세션 id 를 돌려준다(SDK forkSession).
+ * 파일 되감기 기록은 복사되지 않는다. SDK 는 세션 파일 위치를 이 프로세스의 CLAUDE_CONFIG_DIR 로 찾으므로,
+ * CLI 에 넘기는 환경에만 있으면 여기에도 맞춘다.
+ */
+export async function forkClaudeSession(runtime: ClaudeRuntime, sessionId: string, cwd: string, upToMessageId: string): Promise<string> {
+  const { forkSession } = await importClaudeSdk();
+  const cfg = runtime.env.CLAUDE_CONFIG_DIR;
+  if (cfg && !process.env.CLAUDE_CONFIG_DIR) process.env.CLAUDE_CONFIG_DIR = cfg;
+  const r = await forkSession(sessionId, { dir: cwd, upToMessageId });
+  return r.sessionId;
+}
+
 async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): Promise<LiveSession> {
   const { query } = await importClaudeSdk();
   const input = new InputQueue();
