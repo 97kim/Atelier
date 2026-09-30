@@ -64,11 +64,16 @@ export function parseLiveTasks(raw: unknown): LiveBackgroundTask[] {
   return out;
 }
 
-/** 끝났다는 알림. status 를 우리 쪽 성공/실패로 옮긴다 — stopped 는 사용자가 세운 것이라 실패가 아니다. */
+/**
+ * 끝났다는 알림. status 를 우리 쪽 성공/실패로 옮긴다 — stopped 는 사용자가 세운 것이라 실패가 아니다.
+ * 단 SDK 0.3.285 부터 백그라운드 명령은 시간 제한(기본 30분)에 걸려도 stopped 로 온다. 이유를 알려 주는 필드는 없고
+ * 요약 문구에만 있다("... was stopped after reaching its background time limit") — 그것은 timedOut 으로 따로 본다.
+ */
 export interface TaskFinishedNote {
   id: string;
   status: "completed" | "failed" | "stopped";
   summary: string;
+  timedOut?: boolean;
 }
 
 export function parseTaskFinished(raw: unknown): TaskFinishedNote | null {
@@ -79,5 +84,7 @@ export function parseTaskFinished(raw: unknown): TaskFinishedNote | null {
   if (!id) return null;
   if (o.ambient === true) return null;
   if (status !== "completed" && status !== "failed" && status !== "stopped") return null;
-  return { id, status, summary: typeof o.summary === "string" ? taskSummary(o.summary) : "" };
+  const summary = typeof o.summary === "string" ? o.summary : "";
+  const timedOut = status === "stopped" && /background time limit/i.test(summary);
+  return { id, status, summary: taskSummary(summary), ...(timedOut ? { timedOut } : {}) };
 }

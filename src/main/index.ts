@@ -1321,15 +1321,16 @@ function bootstrap() {
       scheduleEngine?.onSignal(tabId, { kind: "stream_ended", reason, expected });
     },
     onTaskFinished(tabId, note) {
-      // 사용자가 세운 것(stopped)은 알리지 않는다 — 자기가 한 일이다.
-      if (note.status === "stopped") return;
+      // 사용자가 세운 것(stopped)은 알리지 않는다 — 자기가 한 일이다. 시간 제한에 걸려 멈춘 것은 실패처럼 알린다.
+      if (note.status === "stopped" && !note.timedOut) return;
       const job = bgTasks.recall(note.id);
       const ok = note.status === "completed";
       // 배너는 잠깐이다. 보고 있지 않았다면 탭에도 표시를 남긴다 — 자리를 비웠다 와도 알아보게.
       attention.backgroundJob(tabId, !ok);
+      const what = job?.summary || job?.title || "백그라운드 작업";
       notify(
-        `${ok ? "백그라운드 작업 완료" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
-        note.summary || job?.summary || job?.title || "백그라운드 작업",
+        `${ok ? "백그라운드 작업 완료" : note.timedOut ? "백그라운드 작업 시간 초과" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
+        note.timedOut ? `시간 제한에 걸려 멈췄습니다: ${what}` : note.summary || what,
         tabId,
       );
     },

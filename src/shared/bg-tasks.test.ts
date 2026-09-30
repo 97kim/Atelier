@@ -52,6 +52,10 @@ test("끝났다는 알림을 읽는다", () => {
   });
   assert.equal(parseTaskFinished({ task_id: "t1", status: "failed", summary: "" })?.status, "failed");
   assert.equal(parseTaskFinished({ task_id: "t1", status: "stopped", summary: "" })?.status, "stopped");
+  assert.equal(parseTaskFinished({ task_id: "t1", status: "stopped", summary: "" })?.timedOut, undefined, "사용자가 세운 것");
+  // SDK 0.3.285 가 실제로 보낸 문구(백그라운드 Bash 에 timeout 5000 을 걸어 재현)
+  const late = parseTaskFinished({ task_id: "t1", status: "stopped", summary: 'Background command "sleep 30" was stopped after reaching its background time limit' });
+  assert.equal(late?.timedOut, true);
   // 모르는 상태·살림용·id 없음은 버린다
   assert.equal(parseTaskFinished({ task_id: "t1", status: "running" }), null);
   assert.equal(parseTaskFinished({ task_id: "t1", status: "completed", ambient: true }), null);
