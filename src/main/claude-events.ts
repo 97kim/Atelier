@@ -59,6 +59,7 @@ export class ClaudeEventMapper {
               model: msg.model,
               cwd: msg.cwd,
             },
+            ...pluginErrorNotice((msg as { plugin_errors?: unknown }).plugin_errors, ts),
           ];
         }
         // /usage, /help 같은 로컬 슬래시 커맨드 출력은 모델을 거치지 않고 텍스트로만 온다.
@@ -575,4 +576,23 @@ export function subagentActivity(parentToolUseId: string, content: unknown, ts: 
     }
   }
   return out;
+}
+
+/**
+ * 세션 시작 때 불러오지 못한 플러그인(SDK 0.3.283+ plugin_errors). 조용히 빠진 플러그인은 명령·훅이 왜 없는지
+ * 알 길이 없어 경고 한 줄로 알린다. 시작 메시지는 프로세스가 다시 뜰 때마다 오므로 key 를 고정해 한 줄로 둔다.
+ */
+function pluginErrorNotice(raw: unknown, ts: number): ChatEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const items = raw
+    .map((e) => {
+      const o = (e ?? {}) as { plugin?: unknown; message?: unknown };
+      const name = typeof o.plugin === "string" ? o.plugin : "";
+      const message = typeof o.message === "string" ? o.message.trim() : "";
+      return name ? `${name}${message ? ` (${message})` : ""}` : "";
+    })
+    .filter(Boolean);
+  if (items.length === 0) return [];
+  const shown = items.slice(0, 3).join(", ") + (items.length > 3 ? ` 외 ${items.length - 3}개` : "");
+  return [{ type: "notice", ts, level: "warning", key: "plugin-errors", message: `플러그인 ${items.length}개를 불러오지 못했습니다: ${shown}` }];
 }

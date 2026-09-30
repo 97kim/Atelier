@@ -547,3 +547,12 @@ test("system/informational: notice·suggestion·warning 은 알림으로, info �
   assert.deepEqual(info("info", "기록 보기 전용"), []);
   assert.deepEqual(info("warning", "  "), []);
 });
+
+test("system/init 의 plugin_errors 는 경고 한 줄로(key 고정), 없으면 세션 이벤트만", () => {
+  const mapper = new ClaudeEventMapper();
+  const init = (extra: Record<string, unknown>) =>
+    mapper.map(m({ type: "system", subtype: "init", session_id: "s", model: "opus", cwd: "/r", uuid: "u", ...extra }), 1);
+  assert.equal(init({}).length, 1);
+  const ev = init({ plugin_errors: [{ plugin: "codex@openai", type: "dependency-unsatisfied", message: "node 가 없습니다" }, { plugin: "inline[0]", type: "path-not-found", message: "" }] });
+  assert.deepEqual(ev[1], { type: "notice", ts: 1, level: "warning", key: "plugin-errors", message: "플러그인 2개를 불러오지 못했습니다: codex@openai (node 가 없습니다), inline[0]" });
+});
