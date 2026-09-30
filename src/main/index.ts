@@ -27,7 +27,7 @@ import {
   type PricingEntry,
   type UsageFilter,
 } from "@shared/usage";
-import { tabTitle, type WorktreeMeta } from "@shared/workspace-model";
+import { tabTitle, tabsUsingPath, type WorktreeMeta } from "@shared/workspace-model";
 import {
   prepareChatImages,
   saveChatImages,
@@ -2288,10 +2288,11 @@ function registerIpc() {
   const managedWorktrees = async (): Promise<ManagedWorktreeDto[]> => {
     const env = await cliDiscovery().buildEnv();
     const list = await listManagedWorktrees(env, [worktreeRootDir(), join(app.getPath("userData"), "worktrees")]);
-    const tabs = workspaces.state().model.tabs;
+    const model = workspaces.state().model;
     return list.map((w) => {
-      const t = tabs.find((x) => x.worktree?.path === w.path || x.cwd === w.path);
-      return { ...w, tab: t ? { id: t.id, title: tabTitle(t), open: t.open !== false } : null };
+      const users = tabsUsingPath(model, w.path);
+      const t = users[0];
+      return { ...w, tab: t ? { id: t.id, title: tabTitle(t), open: t.open !== false } : null, openTabs: users.filter((x) => x.open !== false).length };
     });
   };
   ipcMain.handle(IPC.wtListManaged, () => managedWorktrees());
@@ -2300,7 +2301,8 @@ function registerIpc() {
     // 렌더러가 준 경로를 그대로 지우지 않는다 — 지금 목록에 있는 것만
     const w = (await managedWorktrees()).find((x) => x.path === path);
     if (!w) return { ok: false, error: "앱이 만든 작업 사본이 아닙니다." };
-    if (w.tab?.open) return { ok: false, error: `열려 있는 탭(${w.tab.title})이 쓰고 있습니다. 탭을 닫은 뒤 지우세요.` };
+    if (w.openTabs > 0)
+      return { ok: false, error: `열려 있는 탭 ${w.openTabs}개(${w.tab?.title ?? ""}${w.openTabs > 1 ? " 등" : ""})가 쓰고 있습니다. 탭을 닫은 뒤 지우세요.` };
     return worktreeRemove(await cliDiscovery().buildEnv(), { repo: w.repo, path: w.path, branch: w.branch, base: "" }, { force: true });
   });
   ipcMain.handle(IPC.wtRemove, async (_e, tabId: string, opts: { force?: boolean }) => {

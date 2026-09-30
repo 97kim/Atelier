@@ -1269,7 +1269,7 @@ function PendingQueue({
               />
             ) : (
               <button
-                onClick={() => setEditing({ id: p.id, text: p.text })}
+                onClick={() => steering !== p.id && setEditing({ id: p.id, text: p.text })}
                 className="min-w-0 flex-1 truncate rounded px-1 text-left text-fg hover:bg-panel-2"
                 title={`${p.text}\n\n클릭해서 편집`}
               >
@@ -1291,7 +1291,8 @@ function PendingQueue({
             )}
             <button
               onClick={() => void window.workbench.chat.queueRemove(tabId, p.id).then(onChanged)}
-              className="shrink-0 rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+              disabled={steering === p.id}
+              className="shrink-0 rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
               title="대기 중인 요청 삭제"
               data-pending-remove
             >

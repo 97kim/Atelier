@@ -9,6 +9,7 @@ import {
   createTab,
   createWorkspace,
   tabCwd,
+  tabsUsingPath,
   inheritedCwd,
   updateWorkspace,
   emptyModel,
@@ -270,4 +271,14 @@ test("inheritedCwd: 같은 워크스페이스면 활성 탭 경로, 다른 워�
   const withPath = addWorkspace(m, "/repo/d", T0 + 80, "wd");
   m = createTab(withPath.model, "wd", T0 + 90, "d1", { cwd: "/elsewhere" }).model;
   assert.equal(inheritedCwd(m, "wd", "b1"), undefined, "기본 경로가 있으면 그걸 따르게 비운다");
+});
+
+test("tabsUsingPath: worktree 정보가 없는 분기 탭도 같은 경로면 쓰는 탭이고, 열린 탭이 앞에 온다", () => {
+  const WT = "/wt/repo/feat";
+  let m = seeded();
+  m = { ...m, tabs: m.tabs.map((t) => (t.id === "t1" ? { ...t, cwd: WT, worktree: { repo: "/repo/a", path: WT, branch: "atelier/feat", base: "main" }, open: false } : t.id === "t2" ? { ...t, cwd: WT } : t)) };
+  const users = tabsUsingPath(m, WT);
+  assert.deepEqual(users.map((t) => t.id), ["t2", "t1"], "닫힌 원본(t1)보다 열린 분기 탭(t2)이 먼저");
+  assert.equal(users.filter((t) => t.open !== false).length, 1);
+  assert.deepEqual(tabsUsingPath(m, "/elsewhere"), []);
 });

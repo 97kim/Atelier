@@ -139,6 +139,8 @@ interface Session {
   queued: QueuedTurn | null;
   /** 프롬프트 큐 (턴 진행 중 써 둔 다음 지시들). */
   promptQueue: PendingPrompt[];
+  /** "지금 반영" 으로 보내는 중인 대기 항목 id. 응답이 올 때까지 그 항목은 고치거나 지울 수 없다(보낸 것과 기록이 어긋나지 않게). */
+  steeringId?: string | null;
   /** 한도 도달로 실패한 턴의 재시도 예약. */
   limitWait: (LimitWaitDto & { turn: QueuedTurn; timer: ReturnType<typeof setTimeout> | null }) | null;
   /** 재시도 중인 턴의 누적 시도 횟수(재시도 시작 시 limitWait 에서 옮겨 둔다). */
@@ -177,6 +179,8 @@ export interface SessionStore {
 }
 
 export interface SessionManagerDeps {
+  /** 돌고 있는 Codex 턴에 지시를 끼워 넣는다. 테스트에서 바꿔 끼운다(기본: codex-adapter 의 steerCodexTurn). */
+  steerCodex?: typeof steerCodexTurn;
   emit(tabId: string, event: ChatEvent): void;
   claudeRuntime(): Promise<ClaudeRuntime>;
   codexRuntime(): Promise<CodexRuntime>;
@@ -449,6 +453,7 @@ export class SessionManager {
 
   queueRemove(tabId: string, id: string): SessionSnapshot {
     const s = this.ensure(tabId);
+    if (s.steeringId === id) return this.snapshot(tabId);
     const n = s.promptQueue.length;
     s.promptQueue = s.promptQueue.filter((p) => p.id !== id);
     if (s.promptQueue.length !== n) {
@@ -460,6 +465,7 @@ export class SessionManager {
 
   queueUpdate(tabId: string, id: string, text: string): SessionSnapshot {
     const s = this.ensure(tabId);
+    if (s.steeringId === id) return this.snapshot(tabId);
     const p = s.promptQueue.find((x) => x.id === id);
     if (p) {
       p.text = text;
@@ -518,14 +524,20 @@ export class SessionManager {
     if (!p) return fail("대기열에 없는 지시입니다.");
     if (s.provider !== "codex" || s.controller !== "app" || (s.status !== "running" && s.status !== "waiting_permission"))
       return fail("Codex 가 작업 중일 때만 바로 반영할 수 있습니다.");
+    if (s.steeringId) return fail("다른 지시를 반영하는 중입니다.");
+    // 보낸 그대로를 기록한다 — 응답을 기다리는 사이 항목이 바뀌어도(수정·삭제는 막지만) 보낸 것과 어긋나지 않게
+    const sent = { text: p.text, images: p.images, userEvent: p.userEvent };
+    s.steeringId = id;
     try {
-      await steerCodexTurn(tabId, p.text, p.images);
+      await (this.deps.steerCodex ?? steerCodexTurn)(tabId, sent.text, sent.images);
     } catch (e) {
       return fail(describeError(e));
+    } finally {
+      s.steeringId = null;
     }
     s.promptQueue = s.promptQueue.filter((x) => x.id !== id);
     this.persistQueue(s);
-    this.record(s, { ...p.userEvent, ts: Date.now() });
+    this.record(s, { ...sent.userEvent, ts: Date.now() });
     this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
     return { ok: true, snapshot: this.snapshot(tabId) };
   }

@@ -1242,8 +1242,8 @@ function WorktreeCleanup() {
               ) : (
                 <button
                   onClick={() => setConfirm(w.path)}
-                  disabled={!!w.tab?.open}
-                  title={w.tab?.open ? "열린 탭이 쓰고 있어 지울 수 없습니다. 탭을 닫은 뒤 지우세요." : "작업 사본과 브랜치(합쳐진 경우)를 지웁니다"}
+                  disabled={w.openTabs > 0}
+                  title={w.openTabs > 0 ? "열린 탭이 쓰고 있어 지울 수 없습니다. 탭을 닫은 뒤 지우세요." : "작업 사본과 브랜치(합쳐진 경우)를 지웁니다"}
                   className="shrink-0 rounded-md border border-line px-2 py-0.5 hover:bg-panel disabled:opacity-40"
                   data-worktree-remove
                 >

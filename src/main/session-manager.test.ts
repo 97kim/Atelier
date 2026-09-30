@@ -605,3 +605,34 @@ test("분기: 지금 세션의 정상 턴에서만, 그 턴까지의 기록(작�
   // 옮겨 온 턴은 옛 세션 것이라 새 탭에서 다시 분기할 수 없다
   assert.equal(manager.forkSource("t2", "p2").ok, false);
 });
+
+test("지금 반영: 응답을 기다리는 동안 그 항목은 고치거나 지울 수 없고, 보낸 문장이 기록된다", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wb-steer-"));
+  let release!: () => void;
+  const sent: string[] = [];
+  const manager = new SessionManager({
+    emit: () => {},
+    claudeRuntime: () => Promise.reject(new Error("unused")),
+    codexRuntime: () => Promise.reject(new Error("unused")),
+    resolveConfig: () => ({ provider: "codex", cwd: root, policy: "ask", sessionId: "th-1" }),
+    steerCodex: async (_key, text) => {
+      sent.push(text);
+      await new Promise<void>((r) => (release = r));
+    },
+  });
+  const s = manager.ensure("t1");
+  s.status = "running";
+  s.promptQueue.push({ id: "q1", text: "A", images: [], userEvent: { type: "user_message", ts: 1, id: "u1", text: "A" } });
+  const pending = manager.queueSteer("t1", "q1");
+  await wait(10);
+  manager.queueUpdate("t1", "q1", "B");
+  manager.queueRemove("t1", "q1");
+  assert.equal(s.promptQueue[0]?.text, "A", "반영 중에는 고치지도 지우지도 않는다");
+  release();
+  const r = await pending;
+  assert.equal(r.ok, true);
+  assert.deepEqual(sent, ["A"]);
+  assert.equal(s.promptQueue.length, 0);
+  const last = manager.events("t1").filter((e) => e.type === "user_message").at(-1);
+  assert.equal(last?.type === "user_message" ? last.text : null, "A");
+});

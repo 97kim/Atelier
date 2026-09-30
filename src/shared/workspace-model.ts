@@ -63,6 +63,15 @@ export function emptyModel(): WorkbenchModel {
   return { version: 1, workspaces: [], tabs: [], openTabIds: [], activeTabId: null };
 }
 
+/**
+ * 이 경로를 작업 경로로 쓰는 탭 전부. worktree 탭에서 분기하면 분기 탭도 같은 폴더를 쓰지만 worktree 정보는 없다 —
+ * 하나만 찾으면(닫힌 원본을 먼저 만나면) 열린 분기 탭을 놓쳐 쓰는 중인 폴더를 지운다. 열린 탭을 앞에 둔다.
+ */
+export function tabsUsingPath(model: WorkbenchModel, path: string): TabMeta[] {
+  const users = model.tabs.filter((t) => t.worktree?.path === path || t.cwd === path);
+  return [...users.filter((t) => t.open !== false), ...users.filter((t) => t.open === false)];
+}
+
 export function tabTitle(tab: TabMeta): string {
   return tab.title?.trim() || "새 세션";
 }

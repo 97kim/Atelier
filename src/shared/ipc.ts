@@ -676,6 +676,8 @@ export interface ManagedWorktreeDto {
   sizeKb: number | null;
   /** 이 worktree 를 작업 경로로 쓰는 탭. 없으면(탭을 지웠거나 팬아웃 정리 전) null. */
   tab: { id: string; title: string; open: boolean } | null;
+  /** 이 폴더를 쓰는 열린 탭 수(분기 탭 포함). 하나라도 있으면 지울 수 없다. */
+  openTabs: number;
 }
 
 export interface WorkspaceApi {
