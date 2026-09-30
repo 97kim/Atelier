@@ -537,3 +537,13 @@ test("progressNotes: 스트림이 끊겨 블록 끝을 못 봤으면 완성 메�
   const ev2 = off.map(m({ type: "assistant", parent_tool_use_id: null, message: { id: "msg3", content: [{ type: "thinking", thinking: "추론 요약" }] } }), 3);
   assert.deepEqual(ev2, [], "showThinkingSummaries 일 때(기본 꺼짐)는 추론 요약을 채팅에 남기지 않는다");
 });
+
+test("system/informational: notice·suggestion·warning 은 알림으로, info 와 빈 글은 버린다", () => {
+  const mapper = new ClaudeEventMapper();
+  const info = (level: string, content: string, extra: Record<string, unknown> = {}) =>
+    mapper.map(m({ type: "system", subtype: "informational", level, content, uuid: "u", session_id: "s", ...extra }), 1);
+  assert.deepEqual(info("warning", " 컨텍스트가 곧 찹니다 "), [{ type: "notice", ts: 1, message: "컨텍스트가 곧 찹니다", level: "warning" }]);
+  assert.deepEqual(info("notice", "훅이 막았습니다", { tool_use_id: "t1" }), [{ type: "notice", ts: 1, message: "훅이 막았습니다", level: "notice", key: "t1" }]);
+  assert.deepEqual(info("info", "기록 보기 전용"), []);
+  assert.deepEqual(info("warning", "  "), []);
+});

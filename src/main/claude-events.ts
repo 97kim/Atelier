@@ -75,6 +75,14 @@ export class ClaudeEventMapper {
               ]
             : [];
         }
+        // 턴 도중의 안내·경고(0.3.283+). info 는 CLI 도 기록 보기에서만 보여 주는 것이라 버린다.
+        if (msg.subtype === "informational") {
+          const m = msg as { content?: unknown; level?: unknown; tool_use_id?: unknown };
+          const text = typeof m.content === "string" ? m.content.trim() : "";
+          const level = m.level === "notice" || m.level === "suggestion" || m.level === "warning" ? m.level : null;
+          if (!text || !level) return [];
+          return [{ type: "notice", ts, message: text, level, ...(typeof m.tool_use_id === "string" ? { key: m.tool_use_id } : {}) }];
+        }
         return [];
       case "stream_event":
         if (msg.parent_tool_use_id) return []; // 서브에이전트 스트림은 노출하지 않는다

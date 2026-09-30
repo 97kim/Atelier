@@ -267,6 +267,17 @@ export interface ErrorEvent extends Base {
   willRetry?: boolean;
 }
 
+/**
+ * 턴 도중 CLI 가 띄우는 안내·경고(Claude 의 system/informational). 턴은 계속된다.
+ * key 가 같으면 한 줄로 갱신한다(같은 도구의 진행 안내).
+ */
+export interface NoticeEvent extends Base {
+  type: "notice";
+  message: string;
+  level: "notice" | "suggestion" | "warning";
+  key?: string;
+}
+
 export type ChatEvent =
   | UserMessageEvent
   | StatusEvent
@@ -286,6 +297,7 @@ export type ChatEvent =
   | VerifyEvent
   | FanoutEvent
   | OrchestrationEvent
+  | NoticeEvent
   | ErrorEvent;
 
 export type ChatEventType = ChatEvent["type"];

@@ -96,6 +96,13 @@ export interface ErrorBlock {
   message: string;
 }
 
+export interface NoticeBlock {
+  kind: "notice";
+  id: string;
+  message: string;
+  level: "notice" | "suggestion" | "warning";
+}
+
 export interface ReviewBlock {
   kind: "review";
   id: string; // === reviewTabId
@@ -144,7 +151,7 @@ export interface OrchestrationBlock {
   ts: number;
 }
 
-export type Block = UserBlock | TextBlock | ToolBlock | TurnBlock | CompactedBlock | ErrorBlock | ReviewBlock | VerifyBlock | FanoutBlock | OrchestrationBlock;
+export type Block = UserBlock | TextBlock | ToolBlock | TurnBlock | CompactedBlock | ErrorBlock | NoticeBlock | ReviewBlock | VerifyBlock | FanoutBlock | OrchestrationBlock;
 
 export interface SessionTotals {
   usage: TokenUsage;
@@ -519,6 +526,11 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
     case "session_reset":
       // 새 provider 세션: 다음 턴이 들고 갈 컨텍스트는 요약 한 덩어리뿐이라 게이지를 비운다.
       return { ...state, lastTurn: null };
+
+    case "notice": {
+      const id = event.key ? `notice-${event.key}` : `notice-${event.ts}-${state.eventCount}`;
+      return { ...state, blocks: upsert<NoticeBlock>(state.blocks, id, "notice", () => ({ kind: "notice", id, message: event.message, level: event.level })) };
+    }
 
     case "error":
       return {

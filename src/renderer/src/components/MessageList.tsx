@@ -155,7 +155,7 @@ export function MessageList({
   const groups: { kind: GroupKind; blocks: Block[] }[] = [];
   for (const b of blocks) {
     const kind: GroupKind =
-      b.kind === "user" ? "user" : b.kind === "compacted" ? "compacted" : b.kind === "error" ? "error" : b.kind === "review" ? "review" : b.kind === "verify" ? "verify" : b.kind === "fanout" ? "fanout" : b.kind === "orchestration" ? "orchestration" : "assistant";
+      b.kind === "user" ? "user" : b.kind === "compacted" ? "compacted" : b.kind === "error" ? "error" : b.kind === "notice" ? "notice" : b.kind === "review" ? "review" : b.kind === "verify" ? "verify" : b.kind === "fanout" ? "fanout" : b.kind === "orchestration" ? "orchestration" : "assistant";
     const last = groups[groups.length - 1];
     if (last && last.kind === kind && kind === "assistant") last.blocks.push(b);
     else groups.push({ kind, blocks: [b] });
@@ -322,7 +322,7 @@ function Avatar({ provider }: { provider: Provider }) {
   return <ProviderLogo provider={provider} size={32} className="mt-0.5" />;
 }
 
-type GroupKind = "user" | "assistant" | "compacted" | "error" | "review" | "verify" | "fanout" | "orchestration";
+type GroupKind = "user" | "assistant" | "compacted" | "error" | "notice" | "review" | "verify" | "fanout" | "orchestration";
 
 function Group({
   group,
@@ -367,6 +367,22 @@ function Group({
           {b.postTokens !== undefined ? ` → ${k(b.postTokens)}` : ""} · 위쪽 대화는 요약으로 대체됐습니다
         </span>
         <div className="h-px flex-1 bg-line" />
+      </div>
+    );
+  }
+  if (group.kind === "notice") {
+    const b = group.blocks[0];
+    if (b.kind !== "notice") return null;
+    // notice 는 흐린 한 줄, suggestion·warning 은 오류 줄처럼 눈에 띄게(CLI 의 표시 수준을 따른다)
+    return b.level === "notice" ? (
+      <div className="content-indent flex items-center gap-2 px-1 text-[12px] text-muted-2" data-notice="notice">
+        <Icon name="info" size={12} className="shrink-0" />
+        <span style={{ userSelect: "text" }}>{b.message}</span>
+      </div>
+    ) : (
+      <div className="content-indent flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-muted" data-notice={b.level}>
+        <Icon name="info" size={13} className={`shrink-0 ${b.level === "warning" ? "text-warn" : "text-accent"}`} />
+        <span style={{ userSelect: "text" }}>{b.message}</span>
       </div>
     );
   }

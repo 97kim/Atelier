@@ -444,3 +444,15 @@ test("치명적 오류로 끝나도 돌던 도구를 닫는다 — 경고는 건
   assert.equal(res(warn), undefined, "경고는 턴이 끝난 것이 아니다 — 도구는 계속 돈다");
   assert.ok(res(fatal), "치명적 오류면 닫는다");
 });
+
+test("notice: 턴은 계속되고, 같은 key 면 한 줄을 갱신한다", () => {
+  const s = replaySession([
+    ev("status", { status: "running" }),
+    ev("notice", { message: "진행 1/3", level: "notice", key: "t1" }),
+    ev("notice", { message: "진행 2/3", level: "notice", key: "t1" }),
+    ev("notice", { message: "요금 한도에 가까워요", level: "warning" }),
+  ]);
+  const notices = s.blocks.filter((b) => b.kind === "notice") as { message: string; level: string }[];
+  assert.deepEqual(notices.map((n) => n.message), ["진행 2/3", "요금 한도에 가까워요"]);
+  assert.equal(s.status, "running");
+});
