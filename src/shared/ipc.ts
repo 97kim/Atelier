@@ -243,6 +243,8 @@ export const IPC = {
   wtStatus: "worktree:status",
   wtMerge: "worktree:merge",
   wtRemove: "worktree:remove",
+  wtListManaged: "worktree:list-managed",
+  wtRemoveManaged: "worktree:remove-managed",
   tabActivate: "tab:activate",
   tabSetVisible: "tab:set-visible",
   tabRename: "tab:rename",
@@ -660,6 +662,20 @@ export interface WorktreeApi {
   merge(tabId: string): Promise<WorktreeResult<{ merged: number }>>;
   /** worktree 삭제. 탭은 원본 저장소 경로로 돌아간다. 미커밋 변경은 force 없이는 거부. */
   remove(tabId: string, opts?: { force?: boolean }): Promise<WorktreeResult<{ branchDeleted: boolean }>>;
+  /** 작업 사본 폴더(지금·예전 위치)에 있는 앱이 만든 worktree 전부. 설정의 정리 목록용. */
+  listManaged(): Promise<ManagedWorktreeDto[]>;
+  /** 목록의 worktree 하나를 지운다(미커밋 변경도 함께). 열린 탭이 쓰고 있으면 거부. */
+  removeManaged(path: string): Promise<WorktreeResult<{ branchDeleted: boolean }>>;
+}
+
+export interface ManagedWorktreeDto {
+  path: string;
+  repo: string;
+  branch: string;
+  dirty: number;
+  sizeKb: number | null;
+  /** 이 worktree 를 작업 경로로 쓰는 탭. 없으면(탭을 지웠거나 팬아웃 정리 전) null. */
+  tab: { id: string; title: string; open: boolean } | null;
 }
 
 export interface WorkspaceApi {

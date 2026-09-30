@@ -207,6 +207,8 @@ const api: WorkbenchApi = {
     merge: (tabId: string) => ipcRenderer.invoke(IPC.wtMerge, tabId),
     remove: (tabId: string, opts?: { force?: boolean }) =>
       ipcRenderer.invoke(IPC.wtRemove, tabId, opts ?? {}),
+    listManaged: () => ipcRenderer.invoke(IPC.wtListManaged),
+    removeManaged: (path: string) => ipcRenderer.invoke(IPC.wtRemoveManaged, path),
   },
   snippets: {
     list: () => ipcRenderer.invoke(IPC.snippetsList),

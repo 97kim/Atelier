@@ -18,7 +18,7 @@ import {
 } from "electron";
 import type { PermissionAnswer } from "@shared/chat-events";
 import { isThemeMode } from "@shared/theme";
-import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type CompactResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, SearchResultDto } from "@shared/ipc";
+import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type CompactResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, type ManagedWorktreeDto, SearchResultDto } from "@shared/ipc";
 import {
   DEFAULT_PRICING,
   periodRange,
@@ -64,6 +64,7 @@ import { writeFileView, listDirectory, locateFiles, readFileView, createPath, re
 import { gitChanges, gitCommit, gitDiffFor, gitInfo, gitRevert } from "./git";
 import {
   applyPatch,
+  listManagedWorktrees,
   worktreeCreate,
   worktreeMerge,
   worktreePatch,
@@ -2282,6 +2283,25 @@ function registerIpc() {
     const wt = workspaces.tab(tabId)?.worktree;
     if (!wt) return { ok: false, error: "격리 세션이 아닙니다." };
     return worktreeMerge(await cliDiscovery().buildEnv(), wt);
+  });
+  // 설정의 작업 사본 정리 목록. 지금 위치와 예전(앱 데이터 폴더 안) 위치를 함께 본다.
+  const managedWorktrees = async (): Promise<ManagedWorktreeDto[]> => {
+    const env = await cliDiscovery().buildEnv();
+    const list = await listManagedWorktrees(env, [worktreeRootDir(), join(app.getPath("userData"), "worktrees")]);
+    const tabs = workspaces.state().model.tabs;
+    return list.map((w) => {
+      const t = tabs.find((x) => x.worktree?.path === w.path || x.cwd === w.path);
+      return { ...w, tab: t ? { id: t.id, title: tabTitle(t), open: t.open !== false } : null };
+    });
+  };
+  ipcMain.handle(IPC.wtListManaged, () => managedWorktrees());
+  ipcMain.handle(IPC.wtRemoveManaged, async (_e, path: string) => {
+    if (typeof path !== "string") throw new Error("잘못된 인자");
+    // 렌더러가 준 경로를 그대로 지우지 않는다 — 지금 목록에 있는 것만
+    const w = (await managedWorktrees()).find((x) => x.path === path);
+    if (!w) return { ok: false, error: "앱이 만든 작업 사본이 아닙니다." };
+    if (w.tab?.open) return { ok: false, error: `열려 있는 탭(${w.tab.title})이 쓰고 있습니다. 탭을 닫은 뒤 지우세요.` };
+    return worktreeRemove(await cliDiscovery().buildEnv(), { repo: w.repo, path: w.path, branch: w.branch, base: "" }, { force: true });
   });
   ipcMain.handle(IPC.wtRemove, async (_e, tabId: string, opts: { force?: boolean }) => {
     const wt = workspaces.tab(tabId)?.worktree;

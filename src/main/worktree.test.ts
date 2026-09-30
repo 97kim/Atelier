@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { realpathSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { worktreeCreate, worktreeMerge, worktreeRemove, worktreeSlug, worktreeStatus } from "./worktree";
+import { listManagedWorktrees, worktreeCreate, worktreeMerge, worktreeRemove, worktreeSlug, worktreeStatus } from "./worktree";
 
 const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@x" };
 const sh = (cwd: string, args: string[]) => execFileSync("git", args, { cwd, env }).toString();
@@ -152,4 +152,25 @@ test("worktree: 작업 사본 폴더가 저장소 안이면 만들지 않는다(
   const r = await worktreeCreate(repo, env, { rootDir: join(repo, ".worktrees"), slug: "feat" });
   assert.equal(r.ok, false);
   if (!r.ok) assert.match(r.error, /저장소 안/);
+});
+
+test("listManagedWorktrees: 작업 사본 폴더의 worktree 를 원본 저장소·브랜치·변경 수와 함께 모은다", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "wb-wt-list-")));
+  const repo = join(root, "repo");
+  const wtRoot = join(root, "worktrees");
+  execFileSync("git", ["init", "-q", "-b", "main", repo], { env });
+  writeFileSync(join(repo, "a.txt"), "a\n");
+  sh(repo, ["add", "."]);
+  sh(repo, ["commit", "-q", "-m", "init"]);
+  const c = await worktreeCreate(repo, env, { rootDir: wtRoot, slug: "feat" });
+  assert.ok(c.ok);
+  if (!c.ok) return;
+  writeFileSync(join(c.worktree.path, "new.txt"), "x\n");
+  const list = await listManagedWorktrees(env, [wtRoot, join(root, "없는-폴더")]);
+  assert.equal(list.length, 1);
+  assert.equal(list[0].path, c.worktree.path);
+  assert.equal(list[0].repo, repo);
+  assert.equal(list[0].branch, "atelier/feat");
+  assert.equal(list[0].dirty, 1);
+  assert.ok((list[0].sizeKb ?? 0) > 0);
 });

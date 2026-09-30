@@ -7,6 +7,7 @@ import {
   SESSION_IDLE_MINUTES_MIN,
   type AppInfoDto,
   type AppSettingsDto,
+  type ManagedWorktreeDto,
   type InstallStatusDto,
   type CliCandidateDto,
   type CliDiagnosticsDto,
@@ -591,6 +592,7 @@ function GeneralSection() {
             </span>
           </div>
         )}
+        <WorktreeCleanup />
       </div>
 
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="link-open">
@@ -1174,6 +1176,85 @@ function LspServerRow({ status, onChanged }: { status: LspStatusDto; onChanged: 
       </div>
       {msg && <p className={`mono mt-2 text-[10.5px] ${msg.ok ? "text-ok" : "text-err"}`}>{msg.text}</p>}
       {status.running.length > 0 && <p className="mono mt-2 text-[10.5px] text-muted">실행 중: {status.running.join(", ")}</p>}
+    </div>
+  );
+}
+
+/**
+ * 남아 있는 작업 사본(worktree) 정리. git 상태·크기를 재느라 몇 초 걸릴 수 있어 눌렀을 때 불러온다.
+ * 열린 탭이 쓰는 것은 지울 수 없다(main 도 거부한다). 지우기 전에 한 번 더 묻고, 커밋 안 한 변경이 있으면 그 수를 알린다.
+ */
+function WorktreeCleanup() {
+  const [list, setList] = useState<ManagedWorktreeDto[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const load = async () => {
+    setLoading(true);
+    try {
+      setList(await window.workbench.worktree.listManaged());
+    } finally {
+      setLoading(false);
+    }
+  };
+  const remove = async (w: ManagedWorktreeDto) => {
+    setConfirm(null);
+    const r = await window.workbench.worktree.removeManaged(w.path);
+    setMsg(r.ok ? { ok: true, text: `지웠습니다: ${shorten(w.path)}` } : { ok: false, text: r.error });
+    await load();
+  };
+  const size = (kb: number | null) => (kb === null ? "크기 모름" : kb >= 1024 * 1024 ? `${(kb / 1024 / 1024).toFixed(1)}GB` : kb >= 1024 ? `${Math.round(kb / 1024)}MB` : `${kb}KB`);
+  const total = list?.reduce((n, w) => n + (w.sizeKb ?? 0), 0) ?? 0;
+  return (
+    <div className="mt-4 border-t border-line pt-3" data-worktree-cleanup>
+      <div className="flex items-center gap-2 text-[12.5px]">
+        <span className="text-muted">
+          {list === null ? "남아 있는 작업 사본을 확인하고 지울 수 있습니다." : list.length === 0 ? "남아 있는 작업 사본이 없습니다." : `작업 사본 ${list.length}개 · 모두 ${size(total)}`}
+        </span>
+        <button onClick={() => void load()} disabled={loading} className="ml-auto rounded-md border border-line px-2.5 py-1 hover:bg-panel-2 disabled:opacity-50" data-worktree-list-load>
+          {loading ? "확인 중…" : list === null ? "목록 보기" : "새로고침"}
+        </button>
+      </div>
+      {list && list.length > 0 && (
+        <ul className="mt-2 flex flex-col gap-1">
+          {list.map((w) => (
+            <li key={w.path} className="flex items-center gap-3 rounded-md px-2 py-1.5 text-[12px] hover:bg-panel-2" data-worktree-row>
+              <span className="min-w-0 flex-1">
+                <span className="mono block truncate text-[11.5px]" title={w.path}>
+                  {shorten(w.path)}
+                </span>
+                <span className="block truncate text-[11px] text-muted">
+                  {w.branch || "브랜치 없음"} · {w.tab ? `${w.tab.title === w.branch ? "" : `${w.tab.title} `}${w.tab.open ? "(열린 탭)" : "(닫힌 탭)"}` : "탭 없음"}
+                  {w.dirty > 0 && <span className="text-warn"> · 커밋 안 한 변경 {w.dirty}개</span>}
+                </span>
+              </span>
+              <span className="mono shrink-0 text-[11px] text-muted">{size(w.sizeKb)}</span>
+              {confirm === w.path ? (
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span className="text-[11px] text-err">{w.dirty > 0 ? `변경 ${w.dirty}개도 사라집니다` : "지울까요?"}</span>
+                  <button onClick={() => void remove(w)} className="rounded-md border border-err/40 px-2 py-0.5 text-err hover:bg-err/10" data-worktree-remove-confirm>
+                    삭제
+                  </button>
+                  <button onClick={() => setConfirm(null)} className="rounded-md border border-line px-2 py-0.5 hover:bg-panel">
+                    취소
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setConfirm(w.path)}
+                  disabled={!!w.tab?.open}
+                  title={w.tab?.open ? "열린 탭이 쓰고 있어 지울 수 없습니다. 탭을 닫은 뒤 지우세요." : "작업 사본과 브랜치(합쳐진 경우)를 지웁니다"}
+                  className="shrink-0 rounded-md border border-line px-2 py-0.5 hover:bg-panel disabled:opacity-40"
+                  data-worktree-remove
+                >
+                  삭제
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {msg && <div className={`mt-2 text-[11.5px] ${msg.ok ? "text-ok" : "text-err"}`}>{msg.text}</div>}
     </div>
   );
 }

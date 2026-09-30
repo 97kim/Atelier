@@ -146,6 +146,69 @@ export async function worktreeRemove(
   return { ok: true, branchDeleted: del.code === 0 };
 }
 
+/** 앱이 만든 worktree 하나(설정의 정리 목록용). */
+export interface ManagedWorktree {
+  path: string;
+  /** 원본 저장소(메인 작업 트리) 경로. */
+  repo: string;
+  branch: string;
+  dirty: number;
+  /** 디스크 사용량(KB). 너무 커서 제때 못 셌으면 null. */
+  sizeKb: number | null;
+}
+
+/**
+ * 작업 사본 폴더들(<root>/<repo>/<slug>) 에서 git worktree 를 모은다. `.git` 이 파일("gitdir: …/.git/worktrees/<name>")인 폴더만.
+ * 원본 저장소는 그 gitdir 에서 거꾸로 찾는다 — 앱이 탭에 적어 둔 정보가 없어도(탭을 지웠어도) 정리할 수 있게.
+ */
+export async function listManagedWorktrees(env: NodeJS.ProcessEnv, roots: string[]): Promise<ManagedWorktree[]> {
+  const out: ManagedWorktree[] = [];
+  const seen = new Set<string>();
+  const dirs = (p: string) => {
+    try {
+      return fs.readdirSync(p, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(p, d.name));
+    } catch {
+      return [];
+    }
+  };
+  for (const root of roots)
+    for (const repoDir of dirs(root))
+      for (const path of dirs(repoDir)) {
+        const real = (() => {
+          try {
+            return fs.realpathSync(path);
+          } catch {
+            return path;
+          }
+        })();
+        if (seen.has(real)) continue;
+        let gitdir: string;
+        try {
+          const m = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(join(path, ".git"), "utf8"));
+          if (!m) continue;
+          gitdir = resolve(path, m[1].trim());
+        } catch {
+          continue;
+        }
+        seen.add(real);
+        // <repo>/.git/worktrees/<name> → <repo>
+        const repo = resolve(gitdir, "..", "..", "..");
+        const branch = ok(await run(path, ["rev-parse", "--abbrev-ref", "HEAD"], env)) ?? "";
+        const status = ok(await run(path, ["status", "--porcelain", "--untracked-files=all"], env)) ?? "";
+        out.push({ path, repo, branch, dirty: status ? status.split("\n").filter(Boolean).length : 0, sizeKb: await diskUsageKb(path) });
+      }
+  return out;
+}
+
+function diskUsageKb(path: string): Promise<number | null> {
+  return new Promise((done) => {
+    execFile("du", ["-sk", path], { timeout: 10_000 }, (err, stdout) => {
+      const n = err ? NaN : Number(String(stdout).split(/\s+/)[0]);
+      done(Number.isFinite(n) ? n : null);
+    });
+  });
+}
+
 function runInput(cwd: string, args: string[], env: NodeJS.ProcessEnv, input: string): Promise<Run> {
   return new Promise((resolve) => {
     const p = execFile("git", ["-c", "core.quotePath=false", ...args], { cwd, env, timeout: 30000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
