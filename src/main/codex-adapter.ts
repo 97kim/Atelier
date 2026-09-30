@@ -376,6 +376,19 @@ export async function runCodexTurn(runtime: CodexRuntime, req: CodexTurnRequest)
   }
 }
 
+/**
+ * 돌고 있는 턴에 지시를 끼워 넣는다(app-server turn/steer). 턴이 끝나기를 기다리지 않고 모델이 다음 걸음부터 반영한다.
+ * expectedTurnId 로 "지금 그 턴" 인지 서버가 확인한다 — 그 사이 턴이 끝났으면 실패하고, 호출자는 대기열에 남긴다.
+ * 리뷰·압축 턴은 끼워 넣을 수 없다(activeTurnNotSteerable).
+ */
+export async function steerCodexTurn(sessionKey: string, text: string, images: { filePath: string }[]): Promise<void> {
+  const s = live.get(sessionKey);
+  const t = s?.turn;
+  if (!s || s.dead || !t?.turnId || !s.threadId) throw new Error("지금 반영할 Codex 작업이 없습니다.");
+  const input: Record<string, unknown>[] = [...images.map((i) => ({ type: "localImage", path: i.filePath })), { type: "text", text }];
+  await s.server.request("turn/steer", { threadId: s.threadId, input, expectedTurnId: t.turnId }, 15_000);
+}
+
 /** 폴백: SDK exec 경로. 한 턴 = runStreamed 한 번, thread.started 의 id 로 다음 턴 resumeThread. */
 export async function runCodexTurnExec(runtime: CodexRuntime, req: CodexTurnRequest): Promise<void> {
   const { Codex } = await importCodexSdk();

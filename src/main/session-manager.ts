@@ -17,7 +17,7 @@ import type { LiveBackgroundTask, TaskFinishedNote } from "@shared/bg-tasks";
 import type { StoredChatImage } from "./chat-attachments";
 import type { BackgroundTasksSource } from "./claude-adapter";
 import { applyClaudePolicy, closeAllClaudeSessions, closeClaudeSession, interruptClaudeSession, runClaudeTurn, warmClaudeSession, type ClaudeRuntime } from "./claude-adapter";
-import { applyCodexPolicy, closeAllCodexSessions, closeCodexSession, runCodexTurn, warmCodexSession, type CodexRuntime } from "./codex-adapter";
+import { applyCodexPolicy, closeAllCodexSessions, closeCodexSession, runCodexTurn, steerCodexTurn, warmCodexSession, type CodexRuntime } from "./codex-adapter";
 import { randomUUID } from "node:crypto";
 import {
   isUsageLimitText,
@@ -503,6 +503,29 @@ export class SessionManager {
     } catch (e) {
       this.deps.log?.(tabId, `[${s.provider}] 예열 실패: ${describeError(e)}`);
     }
+  }
+
+  /**
+   * Codex 가 작업 중일 때 대기열의 지시 하나를 돌고 있는 턴에 바로 끼워 넣는다(turn/steer).
+   * 성공하면 대기열에서 빼고 사용자 메시지로 남긴다. 실패하면(그새 턴이 끝났거나 끼워 넣을 수 없는 턴) 대기열에 그대로 둔다.
+   */
+  async queueSteer(tabId: string, id: string): Promise<{ ok: true; snapshot: SessionSnapshot } | { ok: false; error: string; snapshot: SessionSnapshot }> {
+    const s = this.ensure(tabId);
+    const p = s.promptQueue.find((x) => x.id === id);
+    const fail = (error: string) => ({ ok: false as const, error, snapshot: this.snapshot(tabId) });
+    if (!p) return fail("대기열에 없는 지시입니다.");
+    if (s.provider !== "codex" || s.controller !== "app" || (s.status !== "running" && s.status !== "waiting_permission"))
+      return fail("Codex 가 작업 중일 때만 바로 반영할 수 있습니다.");
+    try {
+      await steerCodexTurn(tabId, p.text, p.images);
+    } catch (e) {
+      return fail(describeError(e));
+    }
+    s.promptQueue = s.promptQueue.filter((x) => x.id !== id);
+    this.persistQueue(s);
+    this.record(s, { ...p.userEvent, ts: Date.now() });
+    this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
+    return { ok: true, snapshot: this.snapshot(tabId) };
   }
 
   /** 세션이 놀고 있을 때(복원됐거나 오류로 끝난 뒤) 큐 맨 앞을 지금 보낸다. 진행 중이면 아무것도 안 한다. */

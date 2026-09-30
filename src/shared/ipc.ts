@@ -161,6 +161,7 @@ export const IPC = {
   chatLimitCancel: "chat:limit-cancel",
   chatQueueUpdate: "chat:queue-update",
   chatQueueSendNext: "chat:queue-send-next",
+  chatQueueSteer: "chat:queue-steer",
   chatExport: "chat:export",
   chatAttachTerminal: "chat:attach-terminal",
   chatDetachTerminal: "chat:detach-terminal",
@@ -799,6 +800,8 @@ export interface WorkbenchApi {
     queueUpdate(tabId: string, id: string, text: string): Promise<SessionSnapshotDto>;
     /** 세션이 놀고 있을 때 대기열 맨 앞을 지금 보낸다(앱 재시작으로 복원된 지시 등). */
     queueSendNext(tabId: string): Promise<SessionSnapshotDto>;
+    /** Codex 가 작업 중일 때 대기열의 지시를 돌고 있는 턴에 바로 끼워 넣는다. 실패하면 대기열에 남고 error 가 온다. */
+    queueSteer(tabId: string, id: string): Promise<{ ok: boolean; error?: string; snapshot: SessionSnapshotDto }>;
     /** 모든 세션(닫힌 것 포함)의 사용자·어시스턴트 텍스트에서 부분 일치 검색. */
     search(query: string): Promise<SearchResultDto[]>;
     /** 저장 다이얼로그를 띄워 세션을 마크다운으로 내보낸다. 취소하면 null. */

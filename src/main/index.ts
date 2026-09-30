@@ -1834,6 +1834,10 @@ function registerIpc() {
     return sessions.queueRemove(tabId, id);
   });
   ipcMain.handle(IPC.chatQueueSendNext, (_e, tabId: string) => sessions.queueSendNext(tabId));
+  ipcMain.handle(IPC.chatQueueSteer, (_e, tabId: string, id: string) => {
+    if (typeof tabId !== "string" || typeof id !== "string") throw new Error("잘못된 인자");
+    return sessions.queueSteer(tabId, id);
+  });
   ipcMain.handle(IPC.chatQueueUpdate, (_e, tabId: string, id: string, text: string) => {
     if (typeof tabId !== "string" || typeof id !== "string" || typeof text !== "string") throw new Error("잘못된 인자");
     return sessions.queueUpdate(tabId, id, text.slice(0, 20_000));

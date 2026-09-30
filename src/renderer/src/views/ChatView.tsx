@@ -850,6 +850,7 @@ export function ChatView({
                 tabId={tabId}
                 items={config!.pendingPrompts}
                 idle={(config!.status === "idle" || config!.status === "error") && !config!.limitWait}
+                steerable={provider === "codex" && (config!.status === "running" || config!.status === "waiting_permission") && !terminalControlled}
                 onChanged={setConfig}
               />
             )}
@@ -1203,15 +1204,28 @@ function PendingQueue({
   tabId,
   items,
   idle,
+  steerable,
   onChanged,
 }: {
   tabId: string;
   items: PendingPromptDto[];
   /** 턴이 돌고 있지 않다(앱 재시작으로 복원됐거나 오류로 멈춘 뒤): 자동으로 나가지 않으니 "지금 보내기" 를 준다. */
   idle: boolean;
+  /** Codex 가 작업 중이다: 턴이 끝나길 기다리지 않고 지금 끼워 넣을 수 있다("지금 반영"). */
+  steerable: boolean;
   onChanged: (snapshot: SessionSnapshotDto) => void;
 }) {
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [steering, setSteering] = useState<string | null>(null);
+  const [steerError, setSteerError] = useState<string | null>(null);
+  const steer = async (id: string) => {
+    setSteering(id);
+    setSteerError(null);
+    const r = await window.workbench.chat.queueSteer(tabId, id);
+    setSteering(null);
+    onChanged(r.snapshot);
+    if (!r.ok) setSteerError(r.error ?? "바로 반영하지 못했습니다. 대기열에 남겨 두었습니다.");
+  };
   const save = async () => {
     if (!editing) return;
     onChanged(await window.workbench.chat.queueUpdate(tabId, editing.id, editing.text));
@@ -1263,6 +1277,18 @@ function PendingQueue({
                 {p.hasImages && <span className="ml-1 text-muted">📎</span>}
               </button>
             )}
+            {steerable && editing?.id !== p.id && (
+              <button
+                onClick={() => void steer(p.id)}
+                disabled={steering !== null}
+                className="flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-fg hover:bg-panel-2 disabled:opacity-40"
+                title="작업이 끝나길 기다리지 않고 지금 하고 있는 Codex 작업에 이 지시를 바로 전달합니다"
+                data-pending-steer
+              >
+                <Icon name="play" size={9} />
+                {steering === p.id ? "반영 중…" : "지금 반영"}
+              </button>
+            )}
             <button
               onClick={() => void window.workbench.chat.queueRemove(tabId, p.id).then(onChanged)}
               className="shrink-0 rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg"
@@ -1274,6 +1300,11 @@ function PendingQueue({
           </li>
         ))}
       </ul>
+      {steerError && (
+        <div className="mt-1 px-1 text-[11px] text-err" data-pending-steer-error>
+          {steerError}
+        </div>
+      )}
     </div>
   );
 }

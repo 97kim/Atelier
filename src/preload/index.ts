@@ -166,6 +166,7 @@ const api: WorkbenchApi = {
     queueUpdate: (tabId: string, id: string, text: string) =>
       ipcRenderer.invoke(IPC.chatQueueUpdate, tabId, id, text),
     queueSendNext: (tabId: string) => ipcRenderer.invoke(IPC.chatQueueSendNext, tabId),
+    queueSteer: (tabId: string, id: string) => ipcRenderer.invoke(IPC.chatQueueSteer, tabId, id),
     exportMarkdown: (tabId: string) =>
       ipcRenderer.invoke(IPC.chatExport, tabId),
     attachTerminal: (tabId: string) =>
