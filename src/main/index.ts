@@ -2284,7 +2284,7 @@ function registerIpc() {
     if (!wt) return { ok: false, error: "격리 세션이 아닙니다." };
     return worktreeMerge(await cliDiscovery().buildEnv(), wt);
   });
-  // 설정의 작업 사본 정리 목록. 지금 위치와 예전(앱 데이터 폴더 안) 위치를 함께 본다.
+  // 설정의 worktree 정리 목록. 지금 위치와 예전(앱 데이터 폴더 안) 위치를 함께 본다.
   const managedWorktrees = async (): Promise<ManagedWorktreeDto[]> => {
     const env = await cliDiscovery().buildEnv();
     const list = await listManagedWorktrees(env, [worktreeRootDir(), join(app.getPath("userData"), "worktrees")]);
@@ -2300,7 +2300,7 @@ function registerIpc() {
     if (typeof path !== "string") throw new Error("잘못된 인자");
     // 렌더러가 준 경로를 그대로 지우지 않는다 — 지금 목록에 있는 것만
     const w = (await managedWorktrees()).find((x) => x.path === path);
-    if (!w) return { ok: false, error: "앱이 만든 작업 사본이 아닙니다." };
+    if (!w) return { ok: false, error: "앱이 만든 worktree가 아닙니다." };
     if (w.openTabs > 0)
       return { ok: false, error: `열려 있는 탭 ${w.openTabs}개(${w.tab?.title ?? ""}${w.openTabs > 1 ? " 등" : ""})가 쓰고 있습니다. 탭을 닫은 뒤 지우세요.` };
     return worktreeRemove(await cliDiscovery().buildEnv(), { repo: w.repo, path: w.path, branch: w.branch, base: "" }, { force: true });

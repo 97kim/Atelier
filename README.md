@@ -294,7 +294,7 @@ merge-base 기준 패치 하나로 떠서 원래 작업 트리에 적용한다(�
 팬아웃을 만든 저장소가 아니면 거부하고, 원래 탭의 턴이 돌고 있으면 끝난 뒤에 적용한다.
 
 **정리는 자동이 아니다.** 카드의 "worktree 삭제"를 눌러야 각 세션의 worktree를 지우고 탭을 닫는다(확인 한 번 거침). 채택해도 정리되지 않으므로
-비교를 더 볼 수 있지만, 누르지 않으면 작업 사본 폴더(기본 `~/atelier/worktrees/`)에 계속 남는다.
+비교를 더 볼 수 있지만, 누르지 않으면 worktree 폴더(기본 `~/atelier/worktrees/`)에 계속 남는다.
 
 ## 교차 리뷰 (Claude ↔ Codex)
 
@@ -336,7 +336,7 @@ Codex 로 짠 것은 Claude 가 본다. 리뷰 탭은 같은 워크스페이스�
 
 같은 저장소에서 세션 여러 개를 돌리면 서로 파일을 건드린다. 사이드바에서 워크스페이스를 우클릭 → "격리 세션 (git worktree)" 을 고르면
 저장소(활성 탭의 작업 경로 또는 워크스페이스 기본 경로)에서 브랜치 `atelier/<slug>` 와 worktree 를 만들어 그 경로를 작업 경로로 하는 새 세션을
-연다(`src/main/worktree.ts`). worktree 는 저장소 밖 `<작업 사본 폴더>/<repo>/<slug>`(기본 `~/atelier/worktrees`, 설정 > 일반 > 저장 위치에서 변경)에 두어 원본에 untracked 로 보이지 않는다. 저장소 안의 폴더는 고를 수 없다. 세션 헤더의
+연다(`src/main/worktree.ts`). worktree 는 저장소 밖 `<worktree 폴더>/<repo>/<slug>`(기본 `~/atelier/worktrees`, 설정 > 일반 > 저장 위치에서 변경)에 두어 원본에 untracked 로 보이지 않는다. 저장소 안의 폴더는 고를 수 없다. 세션 헤더의
 브랜치 칩을 누르면 base 대비 커밋 수·미커밋 수가 보이고, "변경 가져오기" 는 원본 저장소에서 `git merge --no-edit <branch>` 를 한다(원본이 base
 브랜치에 있고 양쪽에 미커밋 변경이 없을 때만; 충돌이면 `merge --abort` 로 되돌리고 알림). "worktree 정리" 는 폴더를 지우고 탭을 원본 경로로 돌린다
 (미커밋 변경이 있으면 확인 뒤 강제; 브랜치는 base 에 합쳐졌을 때만 `-d` 로 지운다). 격리 세션 탭을 삭제하면 턴·터미널을 먼저 멈춘 뒤 worktree 를 지우고,
@@ -421,7 +421,7 @@ ANSI 를 벗긴 최근 출력을 이어 붙여 선택지 앞의 "$ <명령> › 
   설정 화면 하단 "폴더 열기" 로 바로 연다.
 - `slash-commands.json` — 워크스페이스(cwd)별 Claude 슬래시 커맨드 목록 캐시
 - `snippets.json` — 프롬프트 스니펫 · `rate-limits.json` — 마지막으로 관측한 구독 한도
-- `worktrees/<repo>/<slug>/` — 예전 버전이 만든 worktree(계속 쓸 수 있다). 새 worktree 는 작업 사본 폴더(기본 `~/atelier/worktrees/`)에 만든다.
+- `worktrees/<repo>/<slug>/` — 예전 버전이 만든 worktree(계속 쓸 수 있다). 새 worktree 는 worktree 폴더(기본 `~/atelier/worktrees/`)에 만든다.
 - `orchestration/<runId>.jsonl` — Run 의 이벤트 원본(재시작 복구)
 - `control.sock` · `control.json` — atelier CLI 가 붙는 소켓과 그 위치
 - `hooks/<세션 id>.jsonl` — 터미널 모드 권한 대기 힌트용 훅 로그(CLI 종료 시 삭제)

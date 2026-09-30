@@ -142,7 +142,7 @@ test("worktreePatch → applyPatch: 커밋·수정·새 파일을 한 패치로 
   assert.equal(again.ok, false);
 });
 
-test("worktree: 작업 사본 폴더가 저장소 안이면 만들지 않는다(원본에 untracked 로 보인다)", async () => {
+test("worktree: worktree 폴더가 저장소 안이면 만들지 않는다(원본에 untracked 로 보인다)", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "wb-wt-in-")));
   const repo = join(root, "repo");
   execFileSync("git", ["init", "-q", "-b", "main", repo], { env });
@@ -154,7 +154,7 @@ test("worktree: 작업 사본 폴더가 저장소 안이면 만들지 않는다(
   if (!r.ok) assert.match(r.error, /저장소 안/);
 });
 
-test("listManagedWorktrees: 작업 사본 폴더의 worktree 를 원본 저장소·브랜치·변경 수와 함께 모은다", async () => {
+test("listManagedWorktrees: worktree 폴더의 worktree 를 원본 저장소·브랜치·변경 수와 함께 모은다", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "wb-wt-list-")));
   const repo = join(root, "repo");
   const wtRoot = join(root, "worktrees");

@@ -93,7 +93,7 @@ export interface AppSettingsDto {
    */
   keepBrowserLogin: boolean;
   /**
-   * 격리 세션·팬아웃 등이 git worktree(작업 사본)를 만드는 폴더. 기본 ~/atelier/worktrees.
+   * 격리 세션·팬아웃 등이 git worktree를 만드는 폴더. 기본 ~/atelier/worktrees.
    * 바꾸면 앞으로 만드는 것부터 — 이미 만든 worktree 는 옮기지 않는다(git 연결이 깨진다).
    * 경로는 설정 저장으로 바꾸지 않고 app:pick-worktree-dir(선택 창)로만 고른다. 저장으로는 worktreeDirCustom:false(기본값으로)만.
    */
@@ -662,7 +662,7 @@ export interface WorktreeApi {
   merge(tabId: string): Promise<WorktreeResult<{ merged: number }>>;
   /** worktree 삭제. 탭은 원본 저장소 경로로 돌아간다. 미커밋 변경은 force 없이는 거부. */
   remove(tabId: string, opts?: { force?: boolean }): Promise<WorktreeResult<{ branchDeleted: boolean }>>;
-  /** 작업 사본 폴더(지금·예전 위치)에 있는 앱이 만든 worktree 전부. 설정의 정리 목록용. */
+  /** worktree 폴더(지금·예전 위치)에 있는 앱이 만든 worktree 전부. 설정의 정리 목록용. */
   listManaged(): Promise<ManagedWorktreeDto[]>;
   /** 목록의 worktree 하나를 지운다(미커밋 변경도 함께). 열린 탭이 쓰고 있으면 거부. */
   removeManaged(path: string): Promise<WorktreeResult<{ branchDeleted: boolean }>>;

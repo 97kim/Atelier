@@ -556,7 +556,7 @@ function GeneralSection() {
           저장 위치
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">
-          워크스페이스·채팅 기록·설정은 앱 데이터 폴더에 저장됩니다. 격리 세션·팬아웃에서 만드는 작업 사본(git worktree)은 아래 폴더에 만들어지고, 위치를 바꾸면 새로 만드는 것부터 적용됩니다. 이미 만든 작업 사본은 옮기지 않습니다.
+          워크스페이스·채팅 기록·설정은 앱 데이터 폴더에 저장됩니다. 격리 세션·팬아웃에서 만드는 git worktree는 아래 폴더에 만들어지고, 위치를 바꾸면 새로 만드는 것부터 적용됩니다. 이미 만든 worktree는 옮기지 않습니다.
         </p>
         {settings && (
           <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 text-[12.5px]">
@@ -568,7 +568,7 @@ function GeneralSection() {
               폴더 열기
             </button>
 
-            <span className="text-muted">작업 사본</span>
+            <span className="text-muted">worktree</span>
             <span className="mono truncate text-[11.5px]" title={settings.worktreeDir} data-worktree-dir>
               {shorten(settings.worktreeDir)}
               {!settings.worktreeDirCustom && <span className="ml-1.5 font-sans text-muted">(기본값)</span>}
@@ -1181,7 +1181,7 @@ function LspServerRow({ status, onChanged }: { status: LspStatusDto; onChanged: 
 }
 
 /**
- * 남아 있는 작업 사본(worktree) 정리. git 상태·크기를 재느라 몇 초 걸릴 수 있어 눌렀을 때 불러온다.
+ * 남아 있는 worktree 정리. git 상태·크기를 재느라 몇 초 걸릴 수 있어 눌렀을 때 불러온다.
  * 열린 탭이 쓰는 것은 지울 수 없다(main 도 거부한다). 지우기 전에 한 번 더 묻고, 커밋 안 한 변경이 있으면 그 수를 알린다.
  */
 function WorktreeCleanup() {
@@ -1209,7 +1209,7 @@ function WorktreeCleanup() {
     <div className="mt-4 border-t border-line pt-3" data-worktree-cleanup>
       <div className="flex items-center gap-2 text-[12.5px]">
         <span className="text-muted">
-          {list === null ? "남아 있는 작업 사본을 확인하고 지울 수 있습니다." : list.length === 0 ? "남아 있는 작업 사본이 없습니다." : `작업 사본 ${list.length}개 · 모두 ${size(total)}`}
+          {list === null ? "남아 있는 worktree를 확인하고 지울 수 있습니다." : list.length === 0 ? "남아 있는 worktree가 없습니다." : `worktree ${list.length}개 · 모두 ${size(total)}`}
         </span>
         <button onClick={() => void load()} disabled={loading} className="ml-auto rounded-md border border-line px-2.5 py-1 hover:bg-panel-2 disabled:opacity-50" data-worktree-list-load>
           {loading ? "확인 중…" : list === null ? "목록 보기" : "새로고침"}
@@ -1243,7 +1243,7 @@ function WorktreeCleanup() {
                 <button
                   onClick={() => setConfirm(w.path)}
                   disabled={w.openTabs > 0}
-                  title={w.openTabs > 0 ? "열린 탭이 쓰고 있어 지울 수 없습니다. 탭을 닫은 뒤 지우세요." : "작업 사본과 브랜치(합쳐진 경우)를 지웁니다"}
+                  title={w.openTabs > 0 ? "열린 탭이 쓰고 있어 지울 수 없습니다. 탭을 닫은 뒤 지우세요." : "worktree와 브랜치(합쳐진 경우)를 지웁니다"}
                   className="shrink-0 rounded-md border border-line px-2 py-0.5 hover:bg-panel disabled:opacity-40"
                   data-worktree-remove
                 >
