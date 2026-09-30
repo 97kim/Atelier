@@ -92,6 +92,15 @@ export interface AppSettingsDto {
    * 로그인 증표를 앱 데이터 디렉토리에 두는 일이므로 끌 수 있고, 끄면 적어 둔 것을 지운다.
    */
   keepBrowserLogin: boolean;
+  /**
+   * 격리 세션·팬아웃 등이 git worktree(작업 사본)를 만드는 폴더. 기본 ~/atelier/worktrees.
+   * 바꾸면 앞으로 만드는 것부터 — 이미 만든 worktree 는 옮기지 않는다(git 연결이 깨진다).
+   * 경로는 설정 저장으로 바꾸지 않고 app:pick-worktree-dir(선택 창)로만 고른다. 저장으로는 worktreeDirCustom:false(기본값으로)만.
+   */
+  worktreeDir: string;
+  worktreeDirCustom: boolean;
+  /** 앱 데이터(워크스페이스·채팅 기록·설정) 폴더. 읽기 전용 표시용. */
+  dataDir: string;
 }
 
 export type NotifyOnDone = "always" | "unfocused" | "off";
@@ -131,6 +140,8 @@ export const IPC = {
   appInfo: "app:info",
   appModels: "app:models",
   appOpenLogs: "app:open-logs",
+  appOpenPath: "app:open-path",
+  appPickWorktreeDir: "app:pick-worktree-dir",
   appSettingsGet: "app:settings-get",
   appSettingsSet: "app:settings-set",
   stateLoad: "state:load",
@@ -699,6 +710,10 @@ export interface WorkbenchApi {
     onShortcut(listener: (name: ShortcutName) => void): () => void;
     /** 로그 폴더를 Finder 로 연다. */
     openLogs(): Promise<void>;
+    /** 앱 데이터 폴더 또는 worktree 폴더를 Finder 로 연다. */
+    openPath(which: "data" | "worktrees"): Promise<void>;
+    /** 선택 창으로 worktree 폴더를 고른다. 취소하면 그대로. 바뀐 설정을 돌려준다. */
+    pickWorktreeDir(): Promise<AppSettingsDto>;
     /** window error / unhandledrejection 을 main 로그 파일로 보낸다 (fire-and-forget). */
     reportError(error: RendererErrorDto): void;
     getSettings(): Promise<AppSettingsDto>;

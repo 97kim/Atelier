@@ -549,6 +549,50 @@ function GeneralSection() {
         </label>
       </div>
 
+      <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="storage">
+        <div className="mb-1 flex items-center gap-2 font-medium">
+          <Icon name="folder" size={14} className="text-accent" />
+          저장 위치
+        </div>
+        <p className="mb-3 text-[12px] leading-5 text-muted">
+          워크스페이스·채팅 기록·설정은 앱 데이터 폴더에 저장됩니다. 격리 세션·팬아웃에서 만드는 작업 사본(git worktree)은 아래 폴더에 만들어지고, 위치를 바꾸면 새로 만드는 것부터 적용됩니다. 이미 만든 작업 사본은 옮기지 않습니다.
+        </p>
+        {settings && (
+          <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 text-[12.5px]">
+            <span className="text-muted">앱 데이터</span>
+            <span className="mono truncate text-[11.5px]" title={settings.dataDir} data-data-dir>
+              {shorten(settings.dataDir)}
+            </span>
+            <button onClick={() => void window.workbench.app.openPath("data")} className="justify-self-end rounded-md border border-line px-2.5 py-1 hover:bg-panel-2">
+              폴더 열기
+            </button>
+
+            <span className="text-muted">작업 사본</span>
+            <span className="mono truncate text-[11.5px]" title={settings.worktreeDir} data-worktree-dir>
+              {shorten(settings.worktreeDir)}
+              {!settings.worktreeDirCustom && <span className="ml-1.5 font-sans text-muted">(기본값)</span>}
+            </span>
+            <span className="flex items-center gap-1.5 justify-self-end">
+              <button onClick={() => void window.workbench.app.openPath("worktrees")} className="rounded-md border border-line px-2.5 py-1 hover:bg-panel-2">
+                폴더 열기
+              </button>
+              <button
+                onClick={() => void window.workbench.app.pickWorktreeDir().then(adopt)}
+                className="rounded-md border border-line px-2.5 py-1 hover:bg-panel-2"
+                data-worktree-dir-pick
+              >
+                변경…
+              </button>
+              {settings.worktreeDirCustom && (
+                <button onClick={() => void save({ worktreeDirCustom: false })} className="rounded-md border border-line px-2.5 py-1 hover:bg-panel-2" data-worktree-dir-reset>
+                  기본값으로
+                </button>
+              )}
+            </span>
+          </div>
+        )}
+      </div>
+
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="link-open">
         <div className="mb-1 flex items-center gap-2 font-medium">
           <Icon name="globe" size={14} className="text-accent" />

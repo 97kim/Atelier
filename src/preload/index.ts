@@ -33,6 +33,8 @@ const api: WorkbenchApi = {
       return () => ipcRenderer.removeListener(IPC.shortcut, handler);
     },
     openLogs: () => ipcRenderer.invoke(IPC.appOpenLogs),
+    openPath: (which: "data" | "worktrees") => ipcRenderer.invoke(IPC.appOpenPath, which),
+    pickWorktreeDir: () => ipcRenderer.invoke(IPC.appPickWorktreeDir),
     reportError: (error: RendererErrorDto) =>
       ipcRenderer.send(IPC.rendererError, error),
     getSettings: () => ipcRenderer.invoke(IPC.appSettingsGet),

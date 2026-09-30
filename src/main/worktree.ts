@@ -1,10 +1,10 @@
 // 세션별 git worktree: 같은 저장소에서 세션 여러 개가 서로 파일을 건드리지 않게 탭마다 브랜치+작업 트리를 따로 준다.
-// worktree 는 저장소 밖(userData/worktrees/<repo>/<slug>)에 만들어 원본에 untracked 파일로 보이지 않게 한다.
+// worktree 는 저장소 밖(<작업 사본 폴더>/<repo>/<slug>, 기본 ~/atelier/worktrees)에 만들어 원본에 untracked 파일로 보이지 않게 한다.
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { WorktreeMeta } from "@shared/workspace-model";
 import type { GitChangeDto } from "@shared/ipc";
 
@@ -50,6 +50,10 @@ export async function worktreeCreate(
   if (!baseRef || baseRef === "HEAD")
     return { ok: false, error: "원본 저장소가 브랜치에 연결되어 있지 않습니다(detached HEAD). 사용할 브랜치로 전환한 뒤 worktree를 만드세요." };
   const base = baseRef;
+  // 작업 사본 폴더를 저장소 안에 두면 만든 worktree 가 원본에 untracked 로 잡힌다(위치는 설정에서 고른다)
+  const inside = relative(resolve(top), resolve(opts.rootDir));
+  if (inside === "" || (!inside.startsWith("..") && !isAbsolute(inside)))
+    return { ok: false, error: `작업 사본 폴더(${opts.rootDir})가 이 저장소 안에 있습니다. 설정 > 일반 > 저장 위치에서 저장소 밖의 폴더를 고르세요.` };
   const dir = join(opts.rootDir, basename(top));
   fs.mkdirSync(dir, { recursive: true });
   // 이름 충돌 회피

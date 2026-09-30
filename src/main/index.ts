@@ -2,7 +2,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { existsSync, rmSync, mkdirSync, readdirSync, renameSync, rmdirSync, realpathSync, readFileSync, writeFileSync, chmodSync, statSync } from "node:fs";
 import { createConnection } from "node:net";
 import { randomUUID } from "node:crypto";
-import { tmpdir, userInfo } from "node:os";
+import { homedir, tmpdir, userInfo } from "node:os";
 import {
   nativeTheme,
   app,
@@ -424,7 +424,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
     await sweepIsolatedRuns(schedule.id);
     const env = await cliDiscovery().buildEnv();
     const r = await worktreeCreate(base, env, {
-      rootDir: join(app.getPath("userData"), "worktrees"),
+      rootDir: worktreeRootDir(),
       slug: worktreeSlug(schedule.name),
     });
     if (!r.ok) throw new Error(r.error);
@@ -794,7 +794,7 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
   for (let i = 0; i < v.variants.length; i++) {
     const spec = v.variants[i];
     const label = variantLabel(i);
-    const wt = await worktreeCreate(cwd, env, { rootDir: join(app.getPath("userData"), "worktrees"), slug: worktreeSlug(`fanout-${label.toLowerCase()}-${spec.provider}`) });
+    const wt = await worktreeCreate(cwd, env, { rootDir: worktreeRootDir(), slug: worktreeSlug(`fanout-${label.toLowerCase()}-${spec.provider}`) });
     if (!wt.ok) {
       // 이미 만든 세션은 되돌린다
       for (const m of meta) {
@@ -1138,6 +1138,15 @@ function usageSettings(): UsageSettingsDto & { budgetAlertedMonth?: string } {
 }
 
 /** 앱 동작 설정. 파일의 값이 이상하면(범위 밖·모르는 값) 기본값으로 읽는다. */
+/** 격리 세션·팬아웃·워커·예약이 worktree 를 만드는 곳. 사용자가 보고 에디터로 여는 코드라 보이는 곳에 둔다(설정에서 바꿀 수 있다). */
+function worktreeRootDir(): string {
+  const v = store.loadSettings<{ worktreeDir?: unknown }>({}).worktreeDir;
+  return typeof v === "string" && isAbsolute(v) ? v : defaultWorktreeRootDir();
+}
+function defaultWorktreeRootDir(): string {
+  return join(homedir(), "atelier", "worktrees");
+}
+
 function appSettings(): AppSettingsDto {
   const raw = store.loadSettings<Partial<AppSettingsDto>>({});
   const clamp = (v: unknown, min: number, max: number, fallback: number) => {
@@ -1152,6 +1161,9 @@ function appSettings(): AppSettingsDto {
     maxConcurrent: clamp(raw.maxConcurrent, MAX_CONCURRENT_MIN, MAX_CONCURRENT_MAX, Number(process.env.WORKBENCH_MAX_CONCURRENT) || MAX_CONCURRENT_DEFAULT),
     notifyOnDone: isNotifyOnDone(raw.notifyOnDone) ? raw.notifyOnDone : NOTIFY_ON_DONE_DEFAULT,
     keepBrowserLogin: raw.keepBrowserLogin !== false,
+    worktreeDir: worktreeRootDir(),
+    worktreeDirCustom: typeof raw.worktreeDir === "string" && isAbsolute(raw.worktreeDir),
+    dataDir: app.getPath("userData"),
   };
 }
 
@@ -1206,7 +1218,9 @@ function bootstrap() {
   searchIndex = new SearchIndex(store);
   // 지난 실행에서 사용자가 골랐던 경로들은 이미 승인된 것. worktree 는 앱이 그 루트 아래에 만든다.
   for (const c of workspaces.knownCwds()) approveRoot(c);
+  // 예전(1.0 전)엔 worktree 를 앱 데이터 폴더 안에 만들었다 — 이미 만든 것도 계속 쓸 수 있게 옛 위치도 승인한다
   approveRoot(join(app.getPath("userData"), "worktrees"));
+  approveRoot(worktreeRootDir());
   // 검증·개발용: 콜론으로 구분한 추가 루트(선택 창 없이 스크립트로 탭 cwd 를 정할 때)
   for (const r of (process.env.ATELIER_APPROVED_ROOTS ?? "").split(":")) if (r) approveRoot(r);
   lsp = new LspManager({
@@ -1642,6 +1656,8 @@ function registerIpc() {
       if (!isNotifyOnDone(patch.notifyOnDone)) throw new Error("잘못된 알림 설정");
       next.notifyOnDone = patch.notifyOnDone;
     }
+    // 경로를 고르는 건 main 의 선택 창(app:pick-worktree-dir)만 한다 — 여기서는 기본값으로 되돌리기만 받는다
+    if (patch.worktreeDirCustom === false) delete next.worktreeDir;
     if (patch.maxConcurrent !== undefined) {
       const n = Number(patch.maxConcurrent);
       if (!Number.isFinite(n) || n < MAX_CONCURRENT_MIN || n > MAX_CONCURRENT_MAX) throw new Error(`동시 작업 수는 ${MAX_CONCURRENT_MIN}~${MAX_CONCURRENT_MAX} 사이여야 합니다.`);
@@ -1656,6 +1672,21 @@ function registerIpc() {
       if (active) void sessions.warm(active);
     }
     return applied;
+  });
+  ipcMain.handle(IPC.appPickWorktreeDir, async (e): Promise<AppSettingsDto> => {
+    const dir = await pickDirectoryRaw(e.sender);
+    if (dir) {
+      store.saveSettings({ ...store.loadSettings<Record<string, unknown>>({}), worktreeDir: resolve(dir) });
+      approveRoot(dir);
+    }
+    return appSettings();
+  });
+  ipcMain.handle(IPC.appOpenPath, async (_e, which: "data" | "worktrees") => {
+    const dir = which === "worktrees" ? worktreeRootDir() : app.getPath("userData");
+    // 아직 worktree 를 하나도 안 만들었으면 폴더가 없다 — 열 수 있게 만들어 둔다
+    if (which === "worktrees") mkdirSync(dir, { recursive: true });
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(err);
   });
   ipcMain.handle(IPC.appOpenLogs, () =>
     shell.openPath(logger.dir).then(() => undefined),
@@ -1734,7 +1765,7 @@ function registerIpc() {
       let cwd = o.cwd;
       let worktree: WorktreeMeta | undefined;
       if (o.worktree) {
-        const wt = await worktreeCreate(o.cwd, env, { rootDir: join(app.getPath("userData"), "worktrees"), slug: worktreeSlug(`worker-${o.provider}`) });
+        const wt = await worktreeCreate(o.cwd, env, { rootDir: worktreeRootDir(), slug: worktreeSlug(`worker-${o.provider}`) });
         if (!wt.ok) return { ok: false, error: wt.error, stage: "creating_workspace" };
         worktree = wt.worktree;
         cwd = wt.worktree.path;
@@ -2233,7 +2264,7 @@ function registerIpc() {
         return { ok: false, error: "저장소 경로가 없습니다. 세션의 작업 경로나 워크스페이스 기본 경로를 먼저 정하세요." };
       const env = await cliDiscovery().buildEnv();
       const r = await worktreeCreate(repo, env, {
-        rootDir: join(app.getPath("userData"), "worktrees"),
+        rootDir: worktreeRootDir(),
         // 제목이 아직 없는 새 탭에서 만들면 "새 세션" 대신 워크스페이스 이름을 쓴다.
         slug: worktreeSlug(from?.title ? tabTitleOf(from.id) : ws.name),
       });

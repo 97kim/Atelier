@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { realpathSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { worktreeCreate, worktreeMerge, worktreeRemove, worktreeSlug, worktreeStatus } from "./worktree";
@@ -140,4 +140,16 @@ test("worktreePatch → applyPatch: 커밋·수정·새 파일을 한 패치로 
   // 같은 패치를 다시 적용하면 --check 에서 거부
   const again = await applyPatch(env, repo, p.patch);
   assert.equal(again.ok, false);
+});
+
+test("worktree: 작업 사본 폴더가 저장소 안이면 만들지 않는다(원본에 untracked 로 보인다)", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "wb-wt-in-")));
+  const repo = join(root, "repo");
+  execFileSync("git", ["init", "-q", "-b", "main", repo], { env });
+  writeFileSync(join(repo, "a.txt"), "a\n");
+  sh(repo, ["add", "."]);
+  sh(repo, ["commit", "-q", "-m", "init"]);
+  const r = await worktreeCreate(repo, env, { rootDir: join(repo, ".worktrees"), slug: "feat" });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.match(r.error, /저장소 안/);
 });
