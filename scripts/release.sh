@@ -83,8 +83,12 @@ ${LOG}
 Homebrew로 설치하면 이후 업데이트도 \`brew upgrade --cask atelier\`로 받습니다.
 
 \`\`\`
-brew install --cask 97kim/atelier/atelier
+brew tap 97kim/atelier
+brew trust 97kim/atelier
+brew install --cask atelier
 \`\`\`
+
+Homebrew 7부터 새로 추가한 탭은 \`brew trust\`로 한 번 신뢰해야 설치할 수 있습니다.
 
 또는 DMG를 내려받아 열고 \`Atelier.app\`을 Applications 폴더로 옮기세요.
 
