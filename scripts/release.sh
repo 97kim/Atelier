@@ -167,7 +167,8 @@ else
   mkdir -p "$TAP_DIR/Casks"
   printf '%s\n' "$CASK" > "$TAP_DIR/Casks/atelier.rb"
   git -C "$TAP_DIR" add Casks/atelier.rb
-  git -C "$TAP_DIR" commit -q -m "atelier $VERSION"
+  # 임시 폴더라 저장소 설정이 없다 — 전역(회사 계정 등)이 아니라 소스 저장소의 이름·이메일로 커밋한다
+  git -C "$TAP_DIR" -c user.name="$(git config user.name)" -c user.email="$(git config user.email)" commit -q -m "atelier $VERSION"
   git -C "$TAP_DIR" push -q origin HEAD
 fi
 
