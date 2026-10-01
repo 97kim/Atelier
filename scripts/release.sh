@@ -84,11 +84,11 @@ Homebrew로 설치하면 이후 업데이트도 \`brew upgrade --cask atelier\`�
 
 \`\`\`
 brew tap 97kim/atelier
-brew trust 97kim/atelier
+brew trust --cask 97kim/atelier/atelier
 brew install --cask atelier
 \`\`\`
 
-Homebrew 7부터는 새로 추가한 탭을 \`brew trust\`로 한 번 신뢰해야 설치할 수 있어요.
+Homebrew 7부터는 공식 목록 밖의 레시피를 \`brew trust\`로 한 번 신뢰해야 설치할 수 있어요. 위 명령은 Atelier 하나만 신뢰해요.
 
 DMG를 내려받아 \`Atelier.app\`을 Applications 폴더로 옮겨도 돼요.
 
