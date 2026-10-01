@@ -7,9 +7,9 @@ Atelier는 Claude Code와 Codex를 워크스페이스의 탭으로 띄우는 mac
 
 [왜 Atelier인가요](#왜-터미널-대신-atelier인가요) · [설치](#설치) · [첫 작업 시작하기](#첫-작업-시작하기) · [기능 안내](docs/GUIDE.md) · [릴리즈](https://github.com/97kim/Atelier/releases) · [문제 신고](https://github.com/97kim/Atelier/issues)
 
-![Claude가 버그를 고친 뒤 atelier CLI로 Codex 탭을 직접 열어 리뷰를 맡기고, 리뷰 결과를 받아 정리하는 장면](docs/images/demo-delegate.gif)
+![Claude가 버그를 고친 뒤 atelier CLI로 Codex 탭을 직접 열어 남은 수정과 테스트 추가를 맡기고, Codex가 끝내면 결과를 받아 테스트하고 정리하는 장면](docs/images/demo-delegate.gif)
 
-*Claude에게 "고친 다음 Codex에게 리뷰를 맡기고 결과를 정리해 줘"라고만 했어요. Claude가 직접 Codex 탭을 열어 리뷰를 맡기고(오른쪽), 끝나면 결과를 받아 와 정리해요. (약 4배속)*
+*Claude에게 "고친 다음, 수량이 없을 때 처리와 그 테스트는 Codex에게 맡겨 줘"라고만 했어요. Claude가 직접 Codex 탭을 열어 일을 넘기고(오른쪽), Codex가 끝내면 결과를 받아 테스트하고 정리해요. (기다리는 구간은 빠르게 감았어요)*
 
 Atelier 전용 계정은 필요 없어요. 로그인해 둔 `claude`·`codex` CLI를 앱이 찾아서 쓰고, 모델과의 통신은 Claude Code·Codex가 평소처럼 처리해요.
 
@@ -76,7 +76,7 @@ Homebrew 없이 설치하려면 [릴리즈](https://github.com/97kim/Atelier/rel
 
 ![Claude가 버그를 고친 뒤 교차 리뷰를 누르면, Codex 리뷰 탭이 변경을 읽어 리뷰하고 결과가 원래 탭의 카드로 돌아오는 장면](docs/images/demo-cross-review.gif)
 
-*Claude가 고친 뒤 "교차 리뷰"를 누르면, Codex 리뷰 탭(오른쪽)이 변경을 읽고 리뷰해서 결과를 원래 탭의 카드로 돌려줘요. (약 4배속)*
+*Claude가 고친 뒤 "교차 리뷰"를 누르면, Codex 리뷰 탭(오른쪽)이 변경을 읽고 리뷰해서 결과를 원래 탭의 카드로 돌려줘요. (기다리는 구간은 빠르게 감았어요)*
 
 같은 일을 터미널에서도 `atelier` CLI로 해요. 설정 → 일반 → **CLI와 에이전트 스킬**에서 CLI를 설치하면 워크스페이스와 탭을 열고, 지시를 보내고, 답을 읽을 수 있어요. 같은 화면에서 스킬을 설치하면 앱 안의 에이전트도 이 사용법을 알게 돼요.
 
