@@ -80,7 +80,7 @@ ${LOG}
 
 ## 설치
 
-Homebrew로 설치하면 이후 업데이트도 \`brew upgrade --cask atelier\`로 받을 수 있어요.
+Homebrew로 설치하면 이후 업데이트는 앱의 설정 → 일반 → 업데이트나 \`brew update && brew upgrade --cask atelier\`로 받을 수 있어요.
 
 \`\`\`
 brew tap 97kim/atelier

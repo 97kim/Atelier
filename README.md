@@ -39,7 +39,7 @@ brew install --cask atelier
 
 - `brew tap`은 Atelier cask가 있는 저장소를 Homebrew에 추가해요.
 - `brew trust`는 Homebrew 7부터 필요한 단계예요. 공식 목록 밖의 cask는 신뢰한다고 한 번 알려 줘야 설치할 수 있어요. 위 명령은 이 탭 전체가 아니라 Atelier 하나만 신뢰해요.
-- 새 버전은 `brew upgrade --cask atelier`로 받아요.
+- 새 버전은 앱의 **설정 → 일반 → 업데이트**에서 받거나, 터미널에서 `brew update && brew upgrade --cask atelier`로 받아요. `brew upgrade`만 실행하면 탭이 갱신되지 않아 새 버전을 찾지 못해요.
 
 **처음 열 때**: 서명과 공증(notarization)을 하지 않은 앱이라 macOS가 한 번 막아요. 앱을 열어 보고 차단 안내가 뜨면 **시스템 설정 → 개인정보 보호 및 보안**에서 "그래도 열기"를 누르세요. 한 번 허용하면 이후 업데이트에도 이어져요.
 
