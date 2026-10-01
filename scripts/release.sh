@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# GitHub Releases 에 DMG 를 올린다. 로컬에서 빌드해 올리는 방식이다 —
-# 서명·공증을 하지 않아 CI 로 옮길 이유가 없고, 받는 쪽은 어차피 첫 실행 때 우클릭 → 열기를 해야 한다.
+# 공개 릴리즈 저장소에 DMG 를 올리고 Homebrew cask 를 갱신한다. 로컬에서 빌드해 올리는 방식이다 —
+# 서명·공증을 하지 않아 CI 로 옮길 이유가 없고, 받는 쪽은 어차피 첫 실행 때 한 번 허용해야 한다.
+# 소스 저장소(origin)는 비공개로 두고 태그만 올린다. 릴리즈는 PUBLIC_REPO, cask 는 TAP_REPO 에.
 #
 #   scripts/release.sh            현재 package.json 버전으로
 #   scripts/release.sh 0.2.0      버전을 올리고(커밋까지) 릴리스
@@ -12,6 +13,8 @@ cd "$(dirname "$0")/.."
 
 NEW_VERSION="${1:-}"
 DRY_RUN="${DRY_RUN:-}"
+PUBLIC_REPO="${PUBLIC_REPO:-97kim/atelier-releases}"
+TAP_REPO="${TAP_REPO:-97kim/homebrew-atelier}"
 
 die() { echo "✗ $*" >&2; exit 1; }
 step() { echo; echo "▸ $*"; }
@@ -45,7 +48,7 @@ TAG="v$VERSION"
 DMG="release/atelier-${VERSION}-arm64.dmg"
 
 git rev-parse "$TAG" >/dev/null 2>&1 && die "$TAG 태그가 이미 있다. 버전을 올릴 것."
-gh release view "$TAG" >/dev/null 2>&1 && die "$TAG 릴리스가 이미 GitHub 에 있다."
+gh release view "$TAG" --repo "$PUBLIC_REPO" >/dev/null 2>&1 && die "$TAG 릴리스가 이미 $PUBLIC_REPO 에 있다."
 
 # ===== 검증하고 빌드 =====
 step "타입체크·테스트"
@@ -77,7 +80,13 @@ ${LOG}
 
 ## 설치
 
-DMG를 내려받아 열고 \`Atelier.app\`을 Applications 폴더로 옮기세요.
+Homebrew로 설치하면 이후 업데이트도 \`brew upgrade --cask atelier\`로 받습니다.
+
+\`\`\`
+brew install --cask 97kim/atelier/atelier
+\`\`\`
+
+또는 DMG를 내려받아 열고 \`Atelier.app\`을 Applications 폴더로 옮기세요.
 
 서명과 공증을 하지 않은 앱이라 처음 열 때 macOS가 막습니다. 터미널에서 격리 표시를 떼는 방법이 가장 확실합니다.
 
@@ -99,14 +108,64 @@ run git tag -a "$TAG" -m "$TAG"
 run git push origin main
 run git push origin "$TAG"
 
-step "릴리스 만들기 ($DMG)"
+step "릴리스 만들기 ($PUBLIC_REPO, $DMG)"
 if [[ -n "$DRY_RUN" ]]; then
-  echo "  (dry-run) gh release create $TAG $DMG --title $TAG --notes …"
+  echo "  (dry-run) gh release create $TAG $DMG --repo $PUBLIC_REPO --title $TAG --notes …"
   echo "$NOTES" | sed 's/^/    | /'
 else
-  gh release create "$TAG" "$DMG" --title "$TAG" --notes "$NOTES"
+  gh release create "$TAG" "$DMG" --repo "$PUBLIC_REPO" --title "$TAG" --notes "$NOTES"
+fi
+
+# ===== Homebrew cask =====
+# 탭 저장소의 Casks/atelier.rb 를 이번 버전·체크섬으로 다시 쓴다. 주소는 공개 저장소의 릴리스 파일이라 토큰이 필요 없다.
+step "Homebrew cask 갱신 ($TAP_REPO)"
+SHA="$([[ -n "$DRY_RUN" ]] && echo "<sha256>" || shasum -a 256 "$DMG" | cut -d' ' -f1)"
+CASK="$(cat <<EOF
+cask "atelier" do
+  version "$VERSION"
+  sha256 "$SHA"
+
+  url "https://github.com/$PUBLIC_REPO/releases/download/v#{version}/atelier-#{version}-arm64.dmg"
+  name "Atelier"
+  desc "Chat tabs for Claude Code and Codex"
+  homepage "https://github.com/$PUBLIC_REPO"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  depends_on arch: :arm64
+
+  app "Atelier.app"
+
+  zap trash: [
+    "~/Library/Application Support/Atelier",
+    "~/Library/Preferences/io.github.97kim.atelier.plist",
+    "~/Library/Saved Application State/io.github.97kim.atelier.savedState",
+  ]
+
+  caveats <<~CAVEATS
+    서명과 공증을 하지 않은 앱이라 처음 열 때 macOS가 막습니다.
+    시스템 설정 → 개인정보 보호 및 보안에서 "그래도 열기"를 누르거나 다음을 실행하세요.
+      xattr -d com.apple.quarantine #{appdir}/Atelier.app
+    한 번 허용하면 이후 brew upgrade 는 허용을 이어받습니다.
+  CAVEATS
+end
+EOF
+)"
+if [[ -n "$DRY_RUN" ]]; then
+  echo "$CASK" | sed 's/^/    | /'
+else
+  TAP_DIR="$(mktemp -d)"
+  trap 'rm -rf "$TAP_DIR"' EXIT
+  gh repo clone "$TAP_REPO" "$TAP_DIR" -- -q
+  mkdir -p "$TAP_DIR/Casks"
+  printf '%s\n' "$CASK" > "$TAP_DIR/Casks/atelier.rb"
+  git -C "$TAP_DIR" add Casks/atelier.rb
+  git -C "$TAP_DIR" commit -q -m "atelier $VERSION"
+  git -C "$TAP_DIR" push -q origin HEAD
 fi
 
 step "끝"
-[[ -n "$DRY_RUN" ]] || gh release view "$TAG" --web >/dev/null 2>&1 || true
-echo "  $TAG · $(du -h "$DMG" 2>/dev/null | cut -f1 || echo '?') · $(git remote get-url origin)"
+echo "  $TAG · $(du -h "$DMG" 2>/dev/null | cut -f1 || echo '?') · https://github.com/$PUBLIC_REPO/releases/tag/$TAG"
