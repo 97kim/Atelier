@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 공개 릴리즈 저장소에 DMG 를 올리고 Homebrew cask 를 갱신한다. 로컬에서 빌드해 올리는 방식이다 —
+# GitHub Releases 에 DMG 를 올리고 Homebrew cask 를 갱신한다. 로컬에서 빌드해 올리는 방식이다 —
 # 서명·공증을 하지 않아 CI 로 옮길 이유가 없고, 받는 쪽은 어차피 첫 실행 때 한 번 허용해야 한다.
-# 소스 저장소(origin)는 비공개로 두고 태그만 올린다. 릴리즈는 PUBLIC_REPO, cask 는 TAP_REPO 에.
+# 소스 저장소(origin, 공개·라이선스 없음)에 태그와 릴리즈를 올리고, cask 는 TAP_REPO 에.
 #
 #   scripts/release.sh            현재 package.json 버전으로
 #   scripts/release.sh 0.2.0      버전을 올리고(커밋까지) 릴리스
@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 
 NEW_VERSION="${1:-}"
 DRY_RUN="${DRY_RUN:-}"
-PUBLIC_REPO="${PUBLIC_REPO:-97kim/atelier-releases}"
+PUBLIC_REPO="${PUBLIC_REPO:-97kim/Atelier}"
 TAP_REPO="${TAP_REPO:-97kim/homebrew-atelier}"
 
 die() { echo "✗ $*" >&2; exit 1; }
