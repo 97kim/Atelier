@@ -70,6 +70,24 @@ export interface AppInfoDto {
   logPath: string;
 }
 
+/** 업데이트 확인 결과. brew 가 false 면 앱 안에서 올릴 수 없으니 릴리즈 페이지를 안내한다. */
+export interface UpdateCheckDto {
+  current: string;
+  latest: string;
+  available: boolean;
+  releaseUrl: string;
+  /** 이 앱이 Homebrew cask 로 설치됐는지(개발 실행이면 false). */
+  brew: boolean;
+}
+
+export type UpdateRunResult = { ok: true; version: string } | { ok: false; error: string };
+
+/** main 이 들고 있는 업데이트 상태. running 은 올리는 중인 목표 버전, installed 는 이번 실행에서 brew 로 설치를 마친 버전. */
+export interface UpdateStatusDto {
+  running: string | null;
+  installed: string | null;
+}
+
 /** 예열 대상: 보고 있는 탭(활성화·설정 변경·시작 때 프로세스를 미리 띄움) 또는 끔. */
 export type WarmTarget = "active" | "off";
 
@@ -144,6 +162,10 @@ export const IPC = {
   appPickWorktreeDir: "app:pick-worktree-dir",
   appSettingsGet: "app:settings-get",
   appSettingsSet: "app:settings-set",
+  appUpdateCheck: "app:update-check",
+  appUpdateRun: "app:update-run",
+  appUpdateStatus: "app:update-status",
+  appRelaunch: "app:relaunch",
   stateLoad: "state:load",
   stateSet: "state:set",
   rendererError: "app:renderer-error",
@@ -722,6 +744,12 @@ export interface ChatEventEnvelope {
 export interface WorkbenchApi {
   app: {
     info(): Promise<AppInfoDto>;
+    /** GitHub 최신 릴리즈와 지금 버전을 비교한다. */
+    checkUpdate(): Promise<UpdateCheckDto>;
+    /** brew 로 cask 를 마지막으로 확인한 최신 버전까지 올린다. 이미 도는 중이면 그 결과를 기다린다. 끝나도 지금 앱은 옛 버전이니 relaunch 로 다시 시작해야 한다. */
+    runUpdate(): Promise<UpdateRunResult>;
+    updateStatus(): Promise<UpdateStatusDto>;
+    relaunch(): Promise<void>;
     /** provider 의 모델 목록(CLI 에 물어 온 것, 실패하면 정적 폴백). force 면 캐시를 무시한다. */
     models(provider: Provider, opts?: { force?: boolean }): Promise<{ models: ModelOptionDto[]; source: "cli" | "static" }>;
     /** 메뉴 단축키(⌘T/⌘W/⌘K/⌘1~9)는 main 메뉴가 받아 renderer 로 넘긴다. */

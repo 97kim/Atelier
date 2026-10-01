@@ -15,6 +15,7 @@ import {
   type LspStatusDto,
   type McpServerStatusDto,
   type Provider,
+  type UpdateCheckDto,
   type WarmTarget,
 } from "@shared/ipc";
 import type { NotifyOnDone } from "@shared/ipc";
@@ -338,6 +339,98 @@ const NOTIFY_OPTIONS: { value: NotifyOnDone; label: string; hint: string }[] = [
   { value: "off", label: "끄기", hint: "응답 완료는 알리지 않습니다. 작업 승인 요청은 계속 알립니다." },
 ];
 
+type UpdateState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "checked"; r: UpdateCheckDto }
+  | { kind: "upgrading"; target: string; r?: UpdateCheckDto }
+  | { kind: "done"; version: string }
+  | { kind: "error"; text: string; r?: UpdateCheckDto };
+
+/** GitHub 최신 릴리즈와 비교하고, Homebrew 로 설치한 앱이면 brew 로 올린 뒤 다시 시작한다. */
+function UpdateCard() {
+  const [version, setVersion] = useState<string | null>(null);
+  const [st, setSt] = useState<UpdateState>({ kind: "idle" });
+  /** 진행 중인 업데이트에 붙는다. 이미 도는 중이면 main 이 같은 작업의 결과를 돌려준다. */
+  const follow = async (target: string, r?: UpdateCheckDto) => {
+    setSt({ kind: "upgrading", target, r });
+    const res = await window.workbench.app.runUpdate().catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
+    setSt(res.ok ? { kind: "done", version: res.version } : { kind: "error", text: res.error, r });
+  };
+  useEffect(() => {
+    window.workbench.app.info().then((i) => setVersion(i.version));
+    // 카드는 화면을 옮기면 사라지지만 업데이트는 main 에서 계속된다 — 돌아오면 이어서 보인다
+    window.workbench.app.updateStatus().then((u) => {
+      if (u.installed) setSt({ kind: "done", version: u.installed });
+      else if (u.running) void follow(u.running);
+    });
+  }, []);
+
+  const check = async () => {
+    setSt({ kind: "checking" });
+    try {
+      setSt({ kind: "checked", r: await window.workbench.app.checkUpdate() });
+    } catch (e) {
+      setSt({ kind: "error", text: `확인하지 못했습니다: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  };
+  const openRelease = (url: string) => void window.workbench.browser.openExternal(url);
+
+  const btn = "shrink-0 rounded-md border border-line px-2.5 py-1 text-[11.5px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40";
+  const r = st.kind === "checked" || st.kind === "upgrading" || st.kind === "error" ? st.r : undefined;
+
+  return (
+    <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="update">
+      <div className="mb-1 flex items-center gap-2 font-medium">
+        <Icon name="refresh" size={14} className="text-accent" />
+        업데이트
+      </div>
+      <p className="mb-3 text-[12px] leading-5 text-muted">
+        GitHub에 올라온 최신 버전과 비교합니다. Homebrew로 설치했다면 여기서 바로 업데이트할 수 있습니다.
+      </p>
+      <div className="flex items-center gap-3 rounded-md border border-line px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="font-medium">현재 버전</span>
+            <span className="mono text-[11.5px] text-muted">{version ?? "…"}</span>
+          </div>
+          <div className="text-[11.5px] text-muted" data-update-state>
+            {st.kind === "idle" && "아직 확인하지 않았습니다."}
+            {st.kind === "checking" && "확인하는 중…"}
+            {st.kind === "checked" && (st.r.available ? <span className="text-warn">새 버전이 있습니다: {st.r.latest}</span> : <span className="text-ok">최신 버전입니다.</span>)}
+            {st.kind === "checked" && st.r.available && !st.r.brew && " Homebrew로 설치한 앱이 아니어서 릴리즈 페이지에서 DMG를 받아야 합니다."}
+            {st.kind === "upgrading" && `새 버전(${st.target})으로 업데이트하는 중… 1~2분 걸릴 수 있습니다.`}
+            {st.kind === "done" && <span className="text-ok">업데이트했습니다({st.version}). 다시 시작하면 새 버전이 열립니다.</span>}
+          </div>
+        </div>
+        {r?.available && (
+          <button onClick={() => openRelease(r.releaseUrl)} className={btn} data-update-notes>
+            {r.brew ? "변경 사항" : "릴리즈 페이지"}
+          </button>
+        )}
+        {st.kind === "done" ? (
+          <button onClick={() => void window.workbench.app.relaunch()} className={btn} data-update-relaunch>
+            다시 시작
+          </button>
+        ) : st.kind === "upgrading" || (r?.available && r.brew) ? (
+          <button onClick={() => r && void follow(r.latest, r)} disabled={st.kind === "upgrading"} className={btn} data-update-run>
+            업데이트
+          </button>
+        ) : (
+          <button onClick={() => void check()} disabled={st.kind === "checking"} className={btn} data-update-check>
+            업데이트 확인
+          </button>
+        )}
+      </div>
+      {st.kind === "error" && (
+        <pre className="mono mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-err" data-update-error>
+          {st.text}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function GeneralSection() {
   const [linkMode, setLinkModeState] = useState<LinkOpenMode>(() => getLinkOpenMode());
   const [settings, setSettings] = useState<AppSettingsDto | null>(null);
@@ -436,6 +529,8 @@ function GeneralSection() {
         <h1 className="text-[20px] font-semibold">일반</h1>
         <p className="mt-1 text-muted">화면과 알림, 브라우저, Claude·Codex의 실행 방식을 설정합니다.</p>
       </div>
+
+      <UpdateCard />
 
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="theme">
         <div className="mb-1 flex items-center gap-2 font-medium">

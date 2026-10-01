@@ -25,6 +25,10 @@ import {
 const api: WorkbenchApi = {
   app: {
     info: () => ipcRenderer.invoke(IPC.appInfo),
+    checkUpdate: () => ipcRenderer.invoke(IPC.appUpdateCheck),
+    runUpdate: () => ipcRenderer.invoke(IPC.appUpdateRun),
+    updateStatus: () => ipcRenderer.invoke(IPC.appUpdateStatus),
+    relaunch: () => ipcRenderer.invoke(IPC.appRelaunch),
     models: (provider: Provider, opts?: { force?: boolean }) => ipcRenderer.invoke(IPC.appModels, provider, opts),
     onShortcut: (listener) => {
       const handler = (_e: IpcRendererEvent, name: ShortcutName) =>

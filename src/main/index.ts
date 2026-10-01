@@ -18,7 +18,7 @@ import {
 } from "electron";
 import type { PermissionAnswer } from "@shared/chat-events";
 import { isThemeMode } from "@shared/theme";
-import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type CompactResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, type ManagedWorktreeDto, SearchResultDto } from "@shared/ipc";
+import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type UpdateCheckDto, type UpdateRunResult, type UpdateStatusDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type CompactResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, type ManagedWorktreeDto, SearchResultDto } from "@shared/ipc";
 import {
   DEFAULT_PRICING,
   periodRange,
@@ -79,6 +79,7 @@ import { ScheduleEngine } from "./schedule-engine";
 import { runPrecheckCommand } from "./precheck";
 import { SCHEDULE_WORKSPACE, type Run, type Schedule, type ScheduleTarget } from "@shared/schedules";
 import { createFileLogger, type FileLogger } from "./logger";
+import { brewUpgrade, caskVersion, compareVersions, fetchLatestRelease } from "./app-update";
 import { Store } from "./persistence";
 import { RendererState } from "./renderer-state";
 import { claudeHookSettings, shellQuote } from "./transcript-mirror";
@@ -1629,6 +1630,42 @@ function registerIpc() {
       logPath: logger.file,
     }),
   );
+  // cask 가 깔려 있어도 지금 띄운 것이 그 앱이어야 한다 — 다른 곳의 빌드에서 누르면 /Applications 의 앱이 바뀐다.
+  const fromCask = () => app.isPackaged && /^\/Applications\/Atelier\.app\//.test(realpathSync(process.execPath));
+  // 업데이트 진행·완료는 main 이 들고 있다 — 카드가 화면에서 빠졌다 돌아와도 이어 보이게.
+  let latestSeen: string | null = null;
+  let update: { target: string; job: Promise<UpdateRunResult> } | null = null;
+  let installed: string | null = null;
+  ipcMain.handle(IPC.appUpdateCheck, async (): Promise<UpdateCheckDto> => {
+    const current = app.getVersion();
+    const [latest, cask] = await Promise.all([fetchLatestRelease(), fromCask() ? caskVersion(await cliDiscovery().buildEnv()) : null]);
+    latestSeen = latest.version;
+    return { current, latest: latest.version, available: compareVersions(latest.version, current) > 0, releaseUrl: latest.url, brew: cask !== null };
+  });
+  ipcMain.handle(IPC.appUpdateStatus, (): UpdateStatusDto => ({ running: update?.target ?? null, installed }));
+  ipcMain.handle(IPC.appUpdateRun, (): Promise<UpdateRunResult> => {
+    if (update) return update.job;
+    // 진행 상태를 본 뒤 다시 붙기 전에 끝났을 수 있다 — 다시 돌리지 않고 결과를 준다
+    if (installed) return Promise.resolve({ ok: true, version: installed });
+    if (!fromCask()) return Promise.resolve({ ok: false, error: "Homebrew로 설치한 /Applications/Atelier.app에서만 업데이트할 수 있습니다." });
+    const target = latestSeen;
+    if (!target) return Promise.resolve({ ok: false, error: "먼저 업데이트를 확인하세요." });
+    const job = cliDiscovery()
+      .buildEnv()
+      .then((env) => brewUpgrade(env, target))
+      .then((r) => {
+        console.log(r.ok ? `[update] brew upgrade 완료 (${r.version})` : `[update] ${r.error}`);
+        if (r.ok) installed = r.version;
+        return r;
+      })
+      .finally(() => (update = null));
+    update = { target, job };
+    return job;
+  });
+  ipcMain.handle(IPC.appRelaunch, () => {
+    app.relaunch();
+    app.quit();
+  });
   applyAppSettings(appSettings());
   ipcMain.handle(IPC.appSettingsGet, (): AppSettingsDto => appSettings());
   ipcMain.handle(IPC.appSettingsSet, (_e, patch: Partial<AppSettingsDto>): AppSettingsDto => {
