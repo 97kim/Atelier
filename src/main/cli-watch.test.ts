@@ -22,7 +22,7 @@ test("parsePsTree/findCliDescendants: 셸의 자손 가운데 claude·codex 를 
 });
 
 test("parseResumeId: 명령에서 이어받는 세션 id 만 뽑는다(--last·세션 이름은 null)", () => {
-  const uuid = "01a08529-46ec-7330-a7d2-ae5b8feed3b0";
+  const uuid = "01a01111-1111-7111-8111-111111111111";
   assert.equal(parseResumeId(`/opt/homebrew/bin/codex resume ${uuid}`), uuid);
   assert.equal(parseResumeId(`codex resume ${uuid} "숫자 2만 답해."`), uuid);
   assert.equal(parseResumeId(`claude --resume ${uuid} --settings {}`), uuid);
@@ -44,7 +44,7 @@ test("ShellCliMonitor: 나타나면 onStart(한 번), 사라지거나 셸이 닫
     onExit: (tabId, pid) => exited.push([tabId, pid]),
     ps: async () => ps(rows),
     cwdOf: async (pid) => (pid === 102 ? "/w/sub" : null),
-    argsOf: async (pid) => (pid === 102 ? "claude --resume 01a08529-46ec-7330-a7d2-ae5b8feed3b0" : "codex"),
+    argsOf: async (pid) => (pid === 102 ? "claude --resume 01a01111-1111-7111-8111-111111111111" : "codex"),
   });
   await m.tick();
   assert.deepEqual(started, []);
@@ -53,7 +53,7 @@ test("ShellCliMonitor: 나타나면 onStart(한 번), 사라지거나 셸이 닫
   await m.tick();
   assert.deepEqual(
     started,
-    [["t1", { pid: 102, provider: "claude", cwd: "/w/sub", resumeId: "01a08529-46ec-7330-a7d2-ae5b8feed3b0" }]],
+    [["t1", { pid: 102, provider: "claude", cwd: "/w/sub", resumeId: "01a01111-1111-7111-8111-111111111111" }]],
     "한 번만 알리고, 명령의 resume id 도 함께 준다",
   );
   rows = [[100, 1, "/bin/zsh"]];

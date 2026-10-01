@@ -72,12 +72,12 @@ test("reasoningSummaryArgs: config 에 model_reasoning_summary 가 없을 때만
 });
 
 test("classifyResumeFailure: thread-store 의 writer 충돌은 conflict, 나머지는 missing", () => {
-  assert.equal(classifyResumeFailure("thread 01a08964-20a0-78e1-bdac-1563bc9cedc1 already has an active writer"), "conflict");
+  assert.equal(classifyResumeFailure("thread 01a02222-2222-7222-8222-222222222222 already has an active writer"), "conflict");
   assert.equal(classifyResumeFailure("failed to initialize thread persistence: thread-store conflict"), "conflict");
   assert.equal(classifyResumeFailure("thread not found"), "missing");
   assert.equal(classifyResumeFailure("no rollout file for 01a0…"), "missing");
-  assert.match(resumeConflictMessage("01a08964-20a0-78e1-bdac-1563bc9cedc1", "x"), /01a08964…/);
-  assert.match(resumeConflictMessage("01a08964-20a0-78e1-bdac-1563bc9cedc1", "x"), /\/exit/);
+  assert.match(resumeConflictMessage("01a02222-2222-7222-8222-222222222222", "x"), /01a02222…/);
+  assert.match(resumeConflictMessage("01a02222-2222-7222-8222-222222222222", "x"), /\/exit/);
 });
 
 test("turn/completed: 완료된 턴에만 forkPoint(thread id + turn id)", () => {
