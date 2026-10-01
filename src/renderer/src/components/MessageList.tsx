@@ -247,7 +247,8 @@ function Thinking({
   void since;
   const tail = reasoning
     .split("\n")
-    .map((l) => l.trim())
+    // Codex 요약은 단락 제목을 "**Preparing review**" 처럼 굵게 표시해 보낸다 — 일반 텍스트로 보여 주므로 기호만 걷는다
+    .map((l) => l.trim().replace(/\*\*(.+?)\*\*/g, "$1"))
     .filter(Boolean)
     .slice(-2)
     .join("\n");
