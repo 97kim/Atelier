@@ -939,7 +939,7 @@ export type ControlOpenDto =
   | { kind: "file"; tabId: string; path: string; line?: number }
   | { kind: "browser"; tabId: string; url: string };
 
-/** 설정 > 일반의 "명령줄 도구·스킬" 설치 상태. */
+/** 설정 > 일반의 "CLI와 에이전트 스킬" 설치 상태. */
 export interface InstallStatusDto {
   cli: {
     path: string;

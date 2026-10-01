@@ -403,7 +403,7 @@ function GeneralSection() {
     const cli = installed?.cli;
     rows.push({
       key: "cli",
-      name: "atelier 명령",
+      name: "atelier CLI",
       path: cli?.path ?? "~/.local/bin/atelier",
       state: !cli ? "" : !cli.installed ? "설치되지 않음" : !cli.current ? "다른 앱 위치를 가리킴" : !cli.onPath ? "설치됨 · 셸 PATH에 ~/.local/bin을 추가해야 합니다" : "설치됨",
       tone: !cli || !cli.installed ? "text-muted" : cli.current && cli.onPath ? "text-ok" : "text-warn",
@@ -489,10 +489,10 @@ function GeneralSection() {
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="cli">
         <div className="mb-1 flex items-center gap-2 font-medium">
           <Icon name="terminal" size={14} className="text-accent" />
-          명령줄 도구와 에이전트 스킬
+          CLI와 에이전트 스킬
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">
-          <code>atelier</code> 명령을 설치하면 터미널에서 워크스페이스와 탭을 열고 관리할 수 있습니다.
+          <code>atelier</code> CLI를 설치하면 터미널에서 워크스페이스와 탭을 열고 관리할 수 있습니다.
           스킬도 설치하면 Claude Code와 Codex에 말로 요청해 Atelier를 조작할 수 있습니다.
         </p>
         <div className="divide-y divide-line rounded-md border border-line" data-install-list>

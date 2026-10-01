@@ -15,6 +15,6 @@ description: >-
 atelier skills get atelier-cli
 ```
 
-- `atelier` 가 없으면(command not found) 사용자에게 "Atelier 설정 > 일반 > 명령줄 도구 설치" 를 안내하고 멈춘다. 소스 파일을 뒤지지 않는다.
+- `atelier` 가 없으면(command not found) 사용자에게 "Atelier 설정 > 일반 > CLI와 에이전트 스킬에서 atelier CLI 설치" 를 안내하고 멈춘다. 소스 파일을 뒤지지 않는다.
 - 결과가 `{"error":{"code":"not_running"}}` 이면 Atelier 앱을 먼저 열어 달라고 하고 멈춘다.
 - 출력은 항상 JSON 이다. 사람에게 보고할 때는 필요한 필드만 골라 말한다.
