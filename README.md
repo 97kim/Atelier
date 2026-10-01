@@ -79,15 +79,19 @@ xattr -d com.apple.quarantine /Applications/Atelier.app
 ## 자주 묻는 질문
 
 **계정이나 API 키가 필요한가요?**
+
 아니요. 각자 로그인해 둔 `claude`·`codex` CLI를 그대로 써요. 요금도 각 서비스의 구독이나 API 요금 그대로예요.
 
 **내 코드가 어디로 가나요?**
+
 Atelier 자체는 아무 데도 보내지 않아요. 모델과의 통신은 Claude Code·Codex CLI가 평소처럼 해요.
 
 **데이터는 어디에 저장되나요?**
+
 워크스페이스와 채팅 기록은 `~/Library/Application Support/Atelier/`에, 격리 세션의 worktree는 `~/atelier/worktrees/`에 있어요. **설정 → 일반 → 저장 위치**에서 열거나 바꿀 수 있어요.
 
 **Intel Mac에서도 되나요?**
+
 지금은 Apple Silicon만 지원해요.
 
 ## 더 보기
