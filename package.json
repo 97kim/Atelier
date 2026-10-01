@@ -8,6 +8,7 @@
   },
   "homepage": "https://github.com/97kim/Atelier",
   "author": "97kim",
+  "license": "MIT",
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
