@@ -295,9 +295,10 @@ function MdPre(props: React.HTMLAttributes<HTMLPreElement> & { node?: unknown })
   );
 }
 
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
+/** variant "doc": 파일 미리보기처럼 문서 한 편을 읽는 화면. 채팅보다 큰 제목·넉넉한 간격·읽기 좋은 폭(styles.css .md-doc). */
+export const Markdown = memo(function Markdown({ text, variant }: { text: string; variant?: "doc" }) {
   return (
-    <div className="md">
+    <div className={variant === "doc" ? "md md-doc" : "md"}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight, rehypeFileRefs]}

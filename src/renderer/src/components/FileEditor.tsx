@@ -324,8 +324,8 @@ export function FileEditor({
               </div>
             )}
             {isMarkdown && mdView === "preview" && (
-              <div className="min-h-0 flex-1 overflow-auto px-6 py-4" style={{ userSelect: "text" }} data-md-preview>
-                <Markdown text={text} />
+              <div className="min-h-0 flex-1 overflow-auto px-8 py-6" style={{ userSelect: "text" }} data-md-preview>
+                <Markdown text={text} variant="doc" />
               </div>
             )}
             <div className={`min-h-0 flex-1 ${isMarkdown && mdView === "preview" ? "hidden" : ""}`}>

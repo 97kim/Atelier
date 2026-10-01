@@ -332,6 +332,94 @@ kbd,
   border-top: 1px solid var(--color-line);
   margin: 0.8em 0;
 }
+/* GFM 체크리스트: 글머리 점 대신 체크박스만 */
+.md ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.md li.task-list-item input[type="checkbox"] {
+  margin: 0 0.45em 0 0;
+  vertical-align: -1px;
+}
+
+/* 파일 미리보기(문서 한 편) — 채팅보다 크고 여유 있게, GitHub README 에 가까운 읽기 화면 */
+.md-doc {
+  max-width: 780px;
+  margin: 0 auto;
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+.md-doc p {
+  margin: 0.75em 0;
+}
+.md-doc h1,
+.md-doc h2,
+.md-doc h3,
+.md-doc h4 {
+  margin: 1.6em 0 0.6em;
+  line-height: 1.25;
+}
+.md-doc h1 {
+  font-size: 1.9em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--color-line);
+}
+.md-doc h2 {
+  font-size: 1.4em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--color-line);
+}
+.md-doc h3 {
+  font-size: 1.15em;
+}
+.md-doc ul,
+.md-doc ol {
+  margin: 0.6em 0;
+  padding-left: 1.6em;
+}
+.md-doc ul.contains-task-list {
+  padding-left: 0.2em;
+}
+.md-doc li {
+  margin: 0.3em 0;
+}
+.md-doc code {
+  font-size: 0.86em;
+}
+.md-doc pre {
+  margin: 1em 0;
+  padding: 0.9em 1.1em;
+}
+.md-doc pre code {
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.md-doc blockquote {
+  margin: 1em 0;
+  padding: 0.2em 1em;
+  border-left: 4px solid color-mix(in srgb, var(--color-accent) 55%, var(--color-line));
+}
+.md-doc table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1em 0;
+  font-size: 13px;
+}
+.md-doc th,
+.md-doc td {
+  padding: 0.45em 0.9em;
+}
+.md-doc th {
+  font-weight: 600;
+}
+.md-doc tr:nth-child(2n) td {
+  background: color-mix(in srgb, var(--color-inset) 60%, transparent);
+}
+.md-doc hr {
+  margin: 1.6em 0;
+}
 
 /* 검색 결과로 이동한 블록을 잠깐 강조 */
 .reveal-target { border-radius: 6px; transition: background-color 0.4s ease; }
