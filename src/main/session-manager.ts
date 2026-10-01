@@ -1332,6 +1332,7 @@ export class SessionManager {
             images: turn.images,
             sessionId: s.sessionId,
             policy: s.policy,
+            currentPolicy: () => s.policy,
             model: s.model,
             abort,
             onEvent: emit,

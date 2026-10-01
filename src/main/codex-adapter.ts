@@ -23,6 +23,8 @@ export interface CodexTurnRequest {
   images: StoredChatImage[];
   sessionId: string | null;
   policy: PermissionPolicy;
+  /** 지금 탭의 권한. 프로세스·스레드를 여는 동안 바꾼 권한이 첫 턴에도 먹게, 턴을 시작하는 순간에 다시 읽는다. */
+  currentPolicy?(): PermissionPolicy;
   model?: string;
   abort: AbortController;
   onEvent(event: ChatEvent): void;
@@ -338,7 +340,9 @@ export async function runCodexTurn(runtime: CodexRuntime, req: CodexTurnRequest)
     s.announcedModel = model;
   }
 
-  s.policy = req.policy;
+  // 여는 동안에는 살아 있는 세션이 없어 applyCodexPolicy 가 바꾼 권한을 받을 곳이 없다 — 여기서 다시 읽는다
+  const policy = req.currentPolicy?.() ?? req.policy;
+  s.policy = policy;
   const done = new Promise<void>((resolve, reject) => {
     s.turn = { req, turnId: null, ctx: { model, startedAt: Date.now(), lastUsage: null }, resolve, reject, permissionSeq: 0 };
   });
@@ -352,7 +356,7 @@ export async function runCodexTurn(runtime: CodexRuntime, req: CodexTurnRequest)
   };
   req.abort.signal.addEventListener("abort", onAbort, { once: true });
   try {
-    const map = POLICY_TO_APPSERVER[req.policy];
+    const map = POLICY_TO_APPSERVER[policy];
     const input: Record<string, unknown>[] = [
       ...req.images.map((i) => ({ type: "localImage", path: i.filePath })),
       { type: "text", text: req.prompt },
