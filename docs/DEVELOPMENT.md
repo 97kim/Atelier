@@ -47,9 +47,9 @@ DRY_RUN=1 yarn release  # 올리지 않고 할 일만 본다
 태그와 푸시, DMG 를 붙인 릴리스 생성. 노트는 지난 태그 이후의 커밋 제목으로 만들고 설치 안내를 덧붙인다.
 같은 버전의 태그나 릴리스가 이미 있으면 멈춘다.
 
-자동 업데이트는 붙이지 않았다. 새 버전은 받는 쪽이 DMG 를 다시 받아 덮어쓴다.
-붙이려면 `electron-updater` 를 다시 넣고 electron-builder 의 publish 를 GitHub provider 로 바꾼다.
-다만 서명·공증이 없으면 자동 설치가 Gatekeeper 에 막혀 "새 버전이 있다" 는 알림까지만 된다.
+새 버전은 설정 → 일반 → 업데이트에서 "업데이트 확인"을 눌러 확인한다. Homebrew로 설치한 앱은 "업데이트"를 누르면 새 버전을 설치하고, 완료 후 "다시 시작"을 누르면 새 버전으로 열린다. `electron-updater`는 사용하지 않는다.
+터미널에서는 `brew update && brew upgrade --cask atelier`로 업데이트한다. 앱에서도 Homebrew 탭을 갱신한 뒤 업그레이드하고 설치된 버전을 확인한다. GitHub 릴리스가 Homebrew 탭에 아직 반영되지 않았다면 잠시 뒤 다시 시도한다.
+DMG로 직접 설치한 앱도 새 버전을 확인할 수 있지만 앱 안에서 설치할 수는 없다. 릴리스 페이지에서 새 DMG를 받아 Applications 폴더의 Atelier.app을 교체한다.
 
 ## 실기기 검증 (e2e)
 
