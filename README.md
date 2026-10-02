@@ -3,164 +3,164 @@
   Atelier
 </h1>
 
-<p align="center"><strong>한국어</strong> · <a href="README.en.md">English</a></p>
+<p align="center"><a href="README.ko.md">한국어</a> · <strong>English</strong></p>
 
 <p align="center">
-  <a href="https://github.com/97kim/Atelier/releases"><img src="https://img.shields.io/github/v/release/97kim/Atelier?label=release&color=4f5bd5" alt="최신 릴리즈" /></a>
-  <img src="https://img.shields.io/badge/license-MIT-4f5bd5" alt="라이선스: MIT" />
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-4f5bd5" alt="지원 환경: macOS Apple Silicon" />
+  <a href="https://github.com/97kim/Atelier/releases"><img src="https://img.shields.io/github/v/release/97kim/Atelier?label=release&color=4f5bd5" alt="Latest release" /></a>
+  <img src="https://img.shields.io/badge/license-MIT-4f5bd5" alt="License: MIT" />
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-4f5bd5" alt="Supported: macOS Apple Silicon" />
 </p>
 
 <p align="center">
-  <strong>에이전트가 다른 에이전트에게 일을 맡기고, 결과를 받아 와요.</strong><br/>
-  Claude Code와 Codex를 워크스페이스의 탭으로 띄우는 macOS 앱이에요.
+  <strong>Agents hand work to other agents and collect the results.</strong><br/>
+  A macOS app that runs Claude Code and Codex as tabs in a workspace.
 </p>
 
 <p align="center">
-  <a href="#설치"><strong>설치</strong></a> · <a href="#첫-작업-시작하기">첫 작업 시작하기</a> · <a href="docs/GUIDE.md">기능 안내</a> · <a href="https://github.com/97kim/Atelier/releases">릴리즈</a> · <a href="https://github.com/97kim/Atelier/issues">문제 신고</a>
+  <a href="#install"><strong>Install</strong></a> · <a href="#start-your-first-task">Start your first task</a> · <a href="docs/GUIDE.md">Feature guide</a> · <a href="https://github.com/97kim/Atelier/releases">Releases</a> · <a href="https://github.com/97kim/Atelier/issues">Report an issue</a>
 </p>
 
 <p align="center">
-  <img src="docs/images/demo-delegate.gif" alt="Claude가 버그를 고친 뒤 atelier CLI로 Codex 탭을 직접 열어 남은 수정과 테스트 추가를 맡기고, Codex가 끝내면 결과를 받아 테스트하고 정리하는 장면" width="960" />
+  <img src="docs/images/en/demo-delegate.gif" alt="Claude fixes a bug, then uses the atelier CLI to open a Codex tab and hand off the remaining fix and a new test; when Codex finishes, Claude collects the result, tests it, and wraps up" width="960" />
 </p>
 
 <p align="center">
-  <sub>Claude에게 "고친 다음, 수량이 없을 때 처리와 그 테스트는 Codex에게 맡겨 줘"라고만 했어요. Claude가 직접 Codex 탭을 열어 일을 넘기고, 끝나면 결과를 받아 테스트하고 정리해요. (기다리는 구간은 빠르게 감았어요)</sub>
+  <sub>All I told Claude was: "Fix it, then hand the missing-quantity case and its test to Codex." Claude opened the Codex tab itself, handed off the work, and when Codex finished, collected the result, tested it, and wrapped up. (The waiting parts are sped up.)</sub>
 </p>
 
-Atelier 전용 계정은 필요 없어요. 로그인해 둔 `claude`·`codex` CLI를 앱이 찾아서 쓰니, `CLAUDE.md`·스킬·MCP 서버 같은 설정이 터미널에서 쓸 때와 똑같이 적용돼요.
+You don't need an Atelier account. The app finds the `claude` and `codex` CLIs you've already logged in to and uses them, so `CLAUDE.md`, skills, MCP servers, and the rest of your setup apply exactly as they do in the terminal.
 
-## 에이전트가 직접 일을 맡겨요
+## Agents hand off work on their own
 
-앱 안의 Claude Code·Codex가 `atelier` CLI로 새 탭을 열어 일을 넘기고, 끝나면 결과를 읽어 와요. 사람은 처음 요청만 하면 돼요.
-설정 → 일반 → **CLI와 에이전트 스킬**에서 CLI와 스킬을 설치해 두면 에이전트가 이 사용법을 알게 돼요. 같은 명령을 터미널에서 직접 써도 돼요.
+Claude Code and Codex inside the app open new tabs with the `atelier` CLI, hand off work, and read the results when it's done. You only make the first request.
+Install the CLI and skills under Settings → General → **CLI and agent skills** and your agents learn how to use it. You can run the same commands yourself in a terminal.
 
 ```
-atelier tab new --provider codex --title "리뷰" --prompt "방금 바꾼 코드를 리뷰해 줘"
-atelier tab send --tab 리뷰 --text "테스트도 돌려 줘" --wait
-atelier tab read --tab 리뷰 --last 3
+atelier tab new --provider codex --title "Review" --prompt "Review the code I just changed"
+atelier tab send --tab Review --text "Run the tests too" --wait
+atelier tab read --tab Review --last 3
 ```
 
-## 기능
+## Features
 
 <table>
 <tr>
 <td width="42%" valign="middle">
 
-### 버튼 하나로 교차 리뷰
+### Cross-review in one click
 
-헤더의 `···` → "교차 리뷰"를 누르면 지금 탭의 변경을 반대쪽 에이전트의 새 탭에 보내요. 리뷰 결과는 원래 탭에 카드로 돌아와요.
+Click `···` → "Cross-review" in the header to send the current tab's changes to a new tab on the other agent. The review comes back to the original tab as a card.
 
 </td>
-<td width="58%"><img src="docs/images/demo-cross-review.gif" alt="Claude가 고친 뒤 교차 리뷰를 누르면 Codex 리뷰 탭이 변경을 리뷰하고 결과가 원래 탭의 카드로 돌아오는 장면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/demo-cross-review.gif" alt="After Claude makes a fix, clicking Cross-review has a Codex review tab review the changes, and the result returns to the original tab as a card" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 큰 작업은 워커들에게 나눠 맡겨요
+### Split big jobs across workers
 
-코디네이터 탭이 작업을 나눠 워커 탭들에 맡겨요. 워커는 막히면 묻고, 끝나면 보고해요. 작업 순서와 사람이 결정할 지점도 정해 둘 수 있어요.
+A coordinator tab breaks the job down and hands pieces to worker tabs. Workers ask when they're stuck and report when they're done. You can also set the order of tasks and the points where a human decides.
 
 </td>
-<td width="58%"><img src="docs/images/orchestration.png" alt="코디네이터 탭의 오케스트레이션 카드에 Claude 워커는 성공, Codex 워커는 진행 중으로 표시된 화면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/orchestration.png" alt="The orchestration card in a coordinator tab, showing the Claude worker as succeeded and the Codex worker as in progress" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 같은 요청을 여러 에이전트에 보내고 비교해요
+### Send one request to several agents and compare
 
-팬아웃은 같은 요청을 격리된 git worktree의 여러 세션에 동시에 보내요. 결과 diff를 나란히 비교하고 마음에 드는 것만 원본에 가져와요.
+Fan-out sends the same request to several sessions at once, each in its own isolated git worktree. Compare the resulting diffs side by side and bring only the one you like into your original.
 
 </td>
-<td width="58%"><img src="docs/images/fanout.png" alt="같은 버그 수정 요청에 대한 Claude Code와 Codex의 diff를 나란히 비교하는 화면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/fanout.png" alt="Claude Code and Codex diffs for the same bug-fix request, side by side" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 무엇을 하려는지 먼저 보여 줘요
+### See what it's about to do first
 
-파일을 바꾸거나 명령을 실행하기 전에 권한 카드로 물어봐요. 읽은 파일, 실행한 명령, 바꾼 코드는 툴 카드로 쌓여서 터미널 출력을 쫓지 않아도 돼요.
+Before it changes a file or runs a command, it asks with a permission card. Files read, commands run, and code changed pile up as tool cards, so you don't have to chase terminal output.
 
 </td>
-<td width="58%"><img src="docs/images/hero.png" alt="Claude가 테스트를 돌리기 전에 명령 실행 권한을 묻는 화면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/hero.png" alt="Claude asking for permission to run a command before running tests" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 바뀐 걸 확인하고 커밋해요
+### Check the changes and commit
 
-테스트·빌드 명령을 버튼 하나로 돌리면 결과가 대화에 카드로 남아요. 바뀐 파일을 diff로 보고, 커밋 메시지 초안을 받아 앱 안에서 바로 커밋해요.
+Run your test and build commands with one button and the results stay in the conversation as cards. Review changed files as diffs, get a draft commit message, and commit right inside the app.
 
 </td>
-<td width="58%"><img src="docs/images/review.png" alt="채팅에 검증 통과 카드가 있고 오른쪽 패널에 변경 파일과 커밋 버튼이 있는 화면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/review.png" alt="A passed-verification card in the chat, with changed files and a commit button in the right panel" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 파일을 열어 바로 고쳐요
+### Open a file and edit it on the spot
 
-답변 속 파일 이름을 누르면 코드 에디터가 그 줄로 열려요. 에이전트가 바꾼 줄은 diff 색으로 표시돼요. 언어 서버(LSP)를 설치하면 자동완성과 정의로 이동도 써요.
+Click a file name in an answer and the code editor opens at that line. Lines the agent changed are shown in diff colors. Install a language server (LSP) and you get autocomplete and go-to-definition too.
 
 </td>
-<td width="58%"><img src="docs/images/editor.png" alt="Claude가 고친 src/cart.js를 에디터로 열어 바뀐 줄이 표시된 화면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/editor.png" alt="src/cart.js, fixed by Claude, open in the editor with the changed lines marked" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 마크다운은 문서처럼 읽어요
+### Read Markdown like a document
 
-마크다운 파일은 표·인용·코드·체크리스트까지 정리된 미리보기로 열려요. "편집"을 누르면 바로 고칠 수 있어요.
+Markdown files open as a clean preview, with tables, quotes, code, and checklists rendered. Click "Edit" to change them right away.
 
 </td>
-<td width="58%"><img src="docs/images/markdown.png" alt="배송비 정책 마크다운 문서를 표와 코드 블록까지 정리된 미리보기로 연 화면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/markdown.png" alt="A shipping-fee policy Markdown document open as a clean preview, with tables and code blocks rendered" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 터미널이 옆에 있어요
+### A terminal right next to it
 
-터미널을 채팅 아래나 오른쪽에 열고 좌우·상하로 나눠요. 툴 카드의 명령을 터미널에 바로 넣고, 출력의 주소나 파일 경로를 누르면 브라우저·에디터로 열려요.
+Open a terminal below or beside the chat, and split it horizontally or vertically. Send a tool card's command straight to the terminal, and click a URL or file path in the output to open it in the browser or editor.
 
 </td>
-<td width="58%"><img src="docs/images/terminal.png" alt="채팅에는 Claude가 고친 diff, 오른쪽 터미널에는 테스트 통과 결과" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/terminal.png" alt="The chat showing a diff fixed by Claude, and the terminal on the right showing passing tests" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 터미널에서 이어가기
+### Continue in terminal
 
-`···` → "터미널에서 이어가기"를 누르면 같은 대화를 터미널의 Claude·Codex CLI에서 이어 가요. CLI에서 주고받은 내용은 채팅에도 따라 그려지고, CLI를 끝내면 채팅으로 돌아와요.
+Click `···` → "Continue in terminal" to carry on the same conversation in the Claude or Codex CLI in a terminal. What you exchange in the CLI is drawn into the chat as well, and when you quit the CLI you're back in the chat.
 
 </td>
-<td width="58%"><img src="docs/images/attach.png" alt="아래 터미널의 Claude CLI에서 주고받은 대화가 위 채팅 화면에도 그대로 보이는 화면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/attach.png" alt="A conversation held in the Claude CLI in the terminal below, also shown as-is in the chat above" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
 
-### 고친 화면을 인앱 브라우저로 확인해요
+### Check your fixes in the in-app browser
 
-개발 중인 화면을 채팅 옆에 띄우고, 폰·태블릿 폭으로 바꿔 봐요. 에이전트도 `atelier browser`로 그 페이지를 읽고 눌러 보며 고친 화면을 스스로 확인해요.
+Put the screen you're building next to the chat and switch it to phone or tablet width. Agents can read and click that page with `atelier browser`, so they verify their own fixes.
 
 </td>
-<td width="58%"><img src="docs/images/browser.png" alt="채팅 옆 인앱 브라우저에 개발 중인 장바구니 페이지가 떠 있는 화면" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/browser.png" alt="A shopping cart page under development, open in the in-app browser next to the chat" width="100%" /></td>
 </tr>
 </table>
 
-## 지원하는 에이전트
+## Supported agents
 
-| 에이전트 | 필요한 것 |
+| Agent | What you need |
 |---|---|
-| Claude Code | 로그인을 마친 `claude` CLI |
-| Codex | 로그인을 마친 `codex` CLI |
+| Claude Code | A logged-in `claude` CLI |
+| Codex | A logged-in `codex` CLI |
 
-둘 중 하나만 있어도 쓸 수 있어요. 대화 도중에 에이전트를 바꾸면 지금까지의 대화를 요약해서 넘겨줘요.
+Either one is enough. If you switch agents mid-conversation, Atelier summarizes the conversation so far and passes it along.
 
-## 설치
+## Install
 
-**필요한 것**: Apple Silicon Mac(macOS 13 이상), 그리고 로그인을 마친 `claude`와 `codex` CLI 중 하나 이상.
-아직 없다면 [Claude Code 설치](https://code.claude.com/docs/en/setup)나 [Codex CLI 설치](https://developers.openai.com/codex/cli) 안내를 따라 설치하고 로그인해 두세요.
+**Requirements**: An Apple Silicon Mac (macOS 13 or later), and at least one logged-in `claude` or `codex` CLI.
+If you don't have one yet, follow the [Claude Code setup](https://code.claude.com/docs/en/setup) or [Codex CLI setup](https://developers.openai.com/codex/cli) guide, then log in.
 
-Homebrew로 설치해요.
+Install with Homebrew.
 
 ```
 brew tap 97kim/atelier
@@ -168,16 +168,16 @@ brew trust --cask 97kim/atelier/atelier
 brew install --cask atelier
 ```
 
-- `brew tap`은 Atelier cask가 있는 저장소를 Homebrew에 추가해요.
-- `brew trust`는 Homebrew 7부터 필요한 단계예요. 공식 목록 밖의 cask는 신뢰한다고 한 번 알려 줘야 설치할 수 있어요. 위 명령은 이 탭 전체가 아니라 Atelier 하나만 신뢰해요.
-- 새 버전은 앱의 **설정 → 일반 → 업데이트**에서 받거나, 터미널에서 `brew update && brew upgrade --cask atelier`로 받아요. `brew upgrade`만 실행하면 탭이 갱신되지 않아 새 버전을 찾지 못해요.
+- `brew tap` adds the repository that hosts the Atelier cask to Homebrew.
+- `brew trust` is a step Homebrew 7 and later requires. For a cask outside the official list, you have to tell Homebrew once that you trust it. The command above trusts only Atelier, not the whole tap.
+- Get new versions in the app under **Settings → General → Updates**, or in a terminal with `brew update && brew upgrade --cask atelier`. Running `brew upgrade` alone doesn't refresh the tap, so it won't find the new version.
 
-**처음 열 때**: 서명과 공증(notarization)을 하지 않은 앱이라 macOS가 한 번 막아요. 앱을 열어 보고 차단 안내가 뜨면 **시스템 설정 → 개인정보 보호 및 보안**에서 "그래도 열기"를 누르세요. 한 번 허용하면 이후 업데이트에도 이어져요.
+**First launch**: The app isn't signed or notarized, so macOS blocks it once. Try opening the app, and when the block notice appears, go to **System Settings → Privacy & Security** and click "Open Anyway". Once you allow it, the permission carries over to later updates.
 
 <details>
-<summary>"그래도 열기"가 안 보이면</summary>
+<summary>If "Open Anyway" doesn't appear</summary>
 
-터미널에서 quarantine 속성을 지우면 바로 열려요.
+Remove the quarantine attribute in a terminal and the app opens right away.
 
 ```
 xattr -d com.apple.quarantine /Applications/Atelier.app
@@ -185,58 +185,58 @@ xattr -d com.apple.quarantine /Applications/Atelier.app
 
 </details>
 
-Homebrew 없이 설치하려면 [릴리즈](https://github.com/97kim/Atelier/releases)에서 DMG를 받아 `Atelier.app`을 Applications 폴더로 옮기세요.
+To install without Homebrew, download the DMG from [Releases](https://github.com/97kim/Atelier/releases) and move `Atelier.app` to your Applications folder.
 
-## 첫 작업 시작하기
+## Start your first task
 
-1. 사이드바의 **워크스페이스 +** 를 눌러 업무 이름으로 워크스페이스를 만들어요.
-2. 화면 위쪽의 **작업 경로 선택…** 을 눌러 작업할 저장소 폴더를 골라요.
-3. 오른쪽 위에서 **Claude Code** 나 **Codex** 를 골라요.
-4. 입력창에 요청을 쓰고 보내요. 예: "테스트가 실패해요. 원인을 찾아서 고쳐 주세요."
+1. Click **Add workspace** in the sidebar and create a workspace named after your work.
+2. Click **Choose working directory…** at the top of the screen and pick the repository folder you'll work in.
+3. Pick **Claude Code** or **Codex** at the top right.
+4. Type a request in the input box and send it. For example: "The tests are failing. Find the cause and fix it."
 
-처음에는 권한이 "변경 전 물어보기"로 되어 있어서, 파일을 바꾸거나 명령을 실행하기 전에 무엇을 하려는지 보여 주고 물어봐요.
+Permissions start at "Ask before changes", so before it changes a file or runs a command, it shows you what it's about to do and asks.
 
-## 그 밖에
+## And more
 
-- **화면 분할**: 두 탭을 좌우로 나란히 보고, ⌘⌥←/→로 오가요.
-- **격리 세션**: 별도 git worktree에서 작업해서, 같은 저장소에서 여러 세션을 돌려도 파일이 섞이지 않아요. 끝난 대화의 한 지점에서 새 탭으로 갈라 다른 방향도 시도해요.
-- **프롬프트 큐**: 작업 중에 다음 요청을 써 두면 끝난 뒤에 보내요. Codex에는 진행 중인 작업에 바로 끼워 넣을 수도 있어요.
-- **예약**: 매시·매일·평일·매주, 또는 cron으로 정한 시각에 새 세션을 열어 요청을 보내요. 앱이 켜져 있을 때 돌아요.
-- **슬래시 커맨드와 스니펫**: `/`를 치면 Claude의 커맨드·스킬이 뜨고, 자주 쓰는 요청은 스니펫으로 저장해 꺼내 써요.
-- **알림**: 권한을 기다리거나 끝난 세션을 사이드바·Dock 배지·macOS 알림으로 알려 주고, ⌘⇧↓로 바로 찾아가요.
-- **대화 검색과 내보내기**: ⌘F로 닫은 세션까지 찾고, 대화를 마크다운으로 내보내요.
-- **worktree 정리**: 설정에서 남아 있는 worktree를 크기·커밋 안 한 변경 수와 함께 보고 지워요.
-- **사용량**: 모델·워크스페이스별 사용량과 API 요금 기준 추정 비용, Claude·Codex 구독 한도를 보여 줘요.
-- **컨텍스트와 한도**: 컨텍스트 윈도가 차기 전에 알려 주고, Claude 사용 한도에 걸리면 풀리는 시각에 다시 시도해요.
-- 다크 모드, 이미지 붙여넣기, 턴이 끝난 뒤에도 도는 백그라운드 작업 표시.
-- **언어**: 화면·메뉴·알림을 한국어와 영어로 쓸 수 있어요. 설정 → 일반 → 언어에서 고르고, 기본은 macOS 언어를 따라가요.
+- **Split view**: View two tabs side by side, and switch between them with ⌘⌥←/→.
+- **Isolated sessions**: Work in a separate git worktree, so files don't get mixed up even when you run several sessions in the same repository. Branch a finished conversation into a new tab at any point to try a different direction.
+- **Prompt queue**: Write your next request while a task is running, and it's sent when the task finishes. With Codex, you can also slip one into the task in progress.
+- **Schedules**: Open a new session and send a request at a time you set: hourly, daily, weekdays, weekly, or a cron expression. It runs while the app is open.
+- **Slash commands and snippets**: Type `/` to see Claude's commands and skills, and save requests you use often as snippets.
+- **Notifications**: Sessions waiting for permission or finished show up in the sidebar, the Dock badge, and macOS notifications, and ⌘⇧↓ jumps straight to them.
+- **Chat search and export**: ⌘F searches even closed sessions, and you can export a conversation as Markdown.
+- **Worktree cleanup**: In settings, see leftover worktrees with their size and number of uncommitted changes, and delete them.
+- **Usage**: See usage by model and workspace, estimated cost at API prices, and your Claude and Codex subscription limits.
+- **Context and limits**: Warns you before the context window fills up, and when you hit a Claude usage limit, retries at the time it resets.
+- Dark mode, image paste, and an indicator for background tasks that keep running after a turn ends.
+- **Language**: Use the screens, menus, and notifications in Korean or English. Choose under Settings → General → Language; the default follows your macOS language.
 
-단축키는 [기능 안내](docs/GUIDE.md#단축키)에 모아 두었어요.
+Shortcuts are collected in the [feature guide](docs/GUIDE.md#keyboard-shortcuts).
 
-## 자주 묻는 질문
+## FAQ
 
-### 계정이나 API 키가 필요한가요?
+### Do I need an account or API key?
 
-Atelier용 별도 계정은 필요 없어요. 각자 로그인해 둔 `claude`·`codex` CLI를 그대로 쓰고, 요금도 각 서비스의 구독이나 API 요금 그대로예요.
+You don't need a separate Atelier account. It uses the `claude` and `codex` CLIs you've already logged in to, and billing is just each service's subscription or API pricing.
 
-### 내 코드가 어디로 가나요?
+### Where does my code go?
 
-Atelier 자체는 아무 데도 보내지 않아요. 모델과의 통신은 Claude Code·Codex CLI가 평소처럼 해요.
+Atelier itself sends nothing anywhere. Communication with the models is handled by the Claude Code and Codex CLIs, as usual.
 
-### 데이터는 어디에 저장되나요?
+### Where is my data stored?
 
-워크스페이스와 채팅 기록은 `~/Library/Application Support/Atelier/`에, 격리 세션의 worktree는 `~/atelier/worktrees/`에 있어요. **설정 → 일반 → 저장 위치**에서 열거나 바꿀 수 있어요.
+Workspaces and chat history are in `~/Library/Application Support/Atelier/`, and worktrees for isolated sessions are in `~/atelier/worktrees/`. Open or change them under **Settings → General → Storage location**.
 
-### Intel Mac에서도 되나요?
+### Does it work on Intel Macs?
 
-지금은 Apple Silicon만 지원해요.
+For now, only Apple Silicon is supported.
 
-## 라이선스
+## License
 
-[MIT](LICENSE)예요. 저작권 표시와 라이선스 문구만 남기면 자유롭게 쓰고, 고치고, 다시 배포할 수 있어요.
-앱에 함께 들어 있는 의존성은 각자의 라이선스를 따라요. 특히 Claude Agent SDK는 [Anthropic 이용 약관](https://www.anthropic.com/legal/commercial-terms)을 따라요.
+[MIT](LICENSE). Keep the copyright notice and license text, and you're free to use, modify, and redistribute it.
+Dependencies bundled with the app follow their own licenses. In particular, the Claude Agent SDK is subject to [Anthropic's Commercial Terms](https://www.anthropic.com/legal/commercial-terms).
 
-## 더 보기
+## Learn more
 
-- [기능 안내](docs/GUIDE.md): 기능마다 자세한 동작과 단축키
-- [개발 문서](docs/DEVELOPMENT.md): 빌드·릴리스·검증·구조
+- [Feature guide](docs/GUIDE.md): The details of how each feature works, plus shortcuts
+- [Development docs](docs/DEVELOPMENT.md): Build, release, verification, and structure

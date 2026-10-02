@@ -1,409 +1,407 @@
-[English](GUIDE.en.md)
+[한국어](GUIDE.ko.md)
 
-# Atelier 기능 안내서
+# Atelier Feature Guide
 
-기능마다 무엇을 하고 어떻게 동작하는지 정리한 문서예요. 처음이라면 [README](../README.md)부터 보세요.
+This document covers what each feature does and how it works. If you're new, start with the [README](../README.md).
 
-## 단축키
+## Keyboard shortcuts
 
-⌘T 새 세션 · ⌘W 닫기(포커스가 코드·브라우저에 있으면 그 탭, 아니면 세션) · ⌘1~9 탭 이동 · ⌃Tab / ⌃⇧Tab 다음·이전 탭 · ⌘K 워크스페이스 전환 · ⌘F 대화 검색 · ⌘B 사이드바 접기·펼치기 · ⌘⇧T 닫은 코드·브라우저 탭 다시 열기 · ⌘J 터미널 패널 ·
-⌘⇧E 코드·브라우저 넓게 보기 ·
-⌘⇧↓ / ⌘⇧↑ 다음·이전 "응답 필요" 세션(권한 대기·확인 안 한 완료; 사이드바의 "응답 필요 N" 을 눌러도 같다)
+⌘T new session · ⌘W close (the code or browser tab if focus is in one, otherwise the session) · ⌘1~9 go to tab · ⌃Tab / ⌃⇧Tab next / previous tab · ⌘K switch workspace · ⌘F search chats · ⌘B collapse / expand sidebar · ⌘⇧T reopen closed code / browser tab · ⌘J terminal panel ·
+⌘⇧E widen code / browser view ·
+⌘⇧↓ / ⌘⇧↑ next / previous "Needs response" session (waiting for permission, or finished and unread; clicking "Needs response N" in the sidebar does the same)
 
-세션 이름은 헤더 제목을 클릭하거나 탭을 더블클릭해 바꾼다. 직접 붙인 이름은 첫 메시지 자동 제목이 덮어쓰지 않으며, 비워서 저장하면 자동 제목으로 돌아간다.
+Rename a session by clicking the title in the header or double-clicking its tab. A name you set yourself isn't overwritten by the automatic title from the first message; save it empty to go back to the automatic title.
 
-## 사이드바
+## Sidebar
 
-워크스페이스는 실제 디렉토리가 아니라 업무 단위 이름표다. 이름만으로 만들고(사이드바 +, ⌘K 팔레트에서 이름 입력), 작업 경로는 세션마다
-헤더의 경로 버튼으로 고른다. 경로를 바꾸면 provider 세션은 새로 시작하고 대화 기록은 남는다. 같은 워크스페이스에서 새 세션을 열면
-활성 세션의 경로를 이어받고, 워크스페이스 우클릭 메뉴에서 기본 경로를 정해 둘 수도 있다.
+A workspace isn't a real directory; it's a label for a unit of work. You create one with just a name (the + in the sidebar, or type a name in the ⌘K palette), and pick the working directory per session
+with the path button in the header. Changing the path starts a new provider session and keeps the conversation history. A new session in the same workspace
+inherits the active session's path, and you can also set a default path from the workspace's right-click menu.
 
-좌측은 워크스페이스 트리다. 워크스페이스 행 아래에 그 워크스페이스의 세션이 붙고(열린 세션은 탭바 순서, 닫힌 세션은 흐리게 최근 순),
-행에 마우스를 올리면 × 가 나타난다 — 열린 세션은 닫기, 닫힌 세션은 삭제 확인. 워크스페이스 행의 + 로 그 안에 새 세션을 열고,
-행을 누르면 접힌다(저장됨). 우클릭 메뉴: 세션은 닫기/열기·이름 변경·삭제, 워크스페이스는 새 세션·접기·제거.
-⌘B(또는 머리말의 패널 아이콘)로 사이드바를 접는다 — 상태는 저장돼 다시 켜도 유지된다. 아주 없애지 않고 52px 짜리 띠를 남기는데, macOS 는
-신호등 버튼이 창 안에 떠 있어서(`hiddenInset`) 폭을 0 으로 만들면 그 버튼들이 본문 위를 덮기 때문이다. 띠에는 펼치기·화면 전환·새 세션·
-대화 검색과, 응답이 필요한 세션이 있으면 그 버튼이 아이콘만으로 남는다.
+The left side is the workspace tree. Each workspace row has its sessions underneath (open sessions in tab-bar order, closed ones dimmed, most recent first).
+Hover over a row and an × appears: it closes an open session, or asks to confirm deleting a closed one. The + on a workspace row opens a new session in it,
+and clicking the row collapses it (remembered). Right-click menu: for sessions, Close / Open, Rename, Delete; for workspaces, New session, Collapse, Remove.
+Collapse the sidebar with ⌘B (or the panel icon in the header); the state is saved and stays when you turn it back on. It doesn't disappear entirely but leaves a 52px strip, because on macOS the
+traffic-light buttons float inside the window (`hiddenInset`), so a width of 0 would leave those buttons covering the content. The strip keeps buttons for expand, switching screens, new session, and
+chat search, plus a button for sessions that need a response, shown as an icon only.
 
-하단 "구독 한도" 블록의 새로고침은 Claude 는 `/usage` 로컬 커맨드를 SDK 로 실행해 읽고(모델 호출 없음, 비용 0), Codex 는
-트랜스크립트를 재스캔한다. 사용량 화면의 한도 블록에도 같은 버튼이 있다.
+The refresh in the "Subscription limits" block at the bottom reads Claude by running the `/usage` local command through the SDK (no model call, no cost), and rescans
+transcripts for Codex. The limits block on the Usage screen has the same button.
 
-## 턴 실행 방식
+## How turns run
 
-탭마다 Claude CLI 프로세스를 하나 살려 두고(SDK streaming input, `src/main/claude-adapter.ts` 의 세션 풀) 턴마다 사용자 메시지만 흘려보낸다.
-예전처럼 턴마다 `query()` 를 새로 열면 프로세스 기동·MCP 서버 연결·세션 복원에 매번 3~5초가 들었다(실측: 첫 토큰까지 콜드 9초대 → 웜 2초대).
-중단은 `interrupt()`(프로세스 유지, 8초 안에 result 가 없으면 종료), 권한 정책은 `setPermissionMode`, 모델은 `setModel` 로 바꾼다. 단 bypass ↔ 비-bypass
-전환은 시작 플래그와 묶여 있어 프로세스를 새로 띄운다. cwd·세션 id 가 바뀌거나, 대화 비우기·provider 전환·탭 해제·터미널 모드 진입·앱 종료 때 내리고,
-턴 없이 10분이 지나면 스스로 내린다(다음 턴에 다시 뜬다). 권한 요청 콜백은 "지금 진행 중인 턴" 으로 라우팅한다.
-**예열**: 탭을 활성화하거나 cwd·provider·정책을 바꿀 때, 앱 시작 직후 활성 탭에 대해 프로세스를 미리 띄워 두므로(`SessionManager.warm`) 첫 턴도 웜으로 시작한다.
+One Claude CLI process is kept alive per tab (SDK streaming input, the session pool in `src/main/claude-adapter.ts`), and only the user message is streamed in each turn.
+Opening a fresh `query()` every turn, as it used to, cost 3 to 5 seconds each time for process startup, MCP server connections, and session restore (measured: time to first token 9 seconds cold, 2 seconds warm).
+Interrupt uses `interrupt()` (the process stays; if there's no result within 8 seconds it's terminated), permission policy uses `setPermissionMode`, and the model uses `setModel`. Switching between bypass and non-bypass
+is tied to a startup flag, so it starts a new process. The process is shut down when the cwd or session id changes, or on clearing the conversation, switching provider, detaching a tab, entering terminal mode, or quitting the app,
+and it shuts itself down after 10 minutes without a turn (it starts again on the next turn). The permission-request callback is routed to "the turn currently in progress".
+**Warm-up**: The process is started ahead of time when you activate a tab, when you change the cwd, provider, or policy, and for the active tab right after the app starts (`SessionManager.warm`), so even the first turn starts warm.
 
-**Codex** 도 같다. `codex app-server`(JSON-RPC over stdio, `src/main/codex-app-server.ts`)를 탭마다 하나 살려 두고 스레드를 이어 가며 턴마다 `turn/start` 만 보낸다
-(실측 첫 토큰 콜드 15초대 → 웜 3~5초). 중단은 `turn/interrupt`, 정책·모델은 턴마다 파라미터로 준다. 승인 요청(`item/commandExecution/requestApproval`,
-`item/fileChange/requestApproval`)은 서버 요청으로 와서 앱의 권한 카드로 이어지므로 이제 Codex 도 실제로 묻는다 — ask 는 `approvalPolicy: untrusted` + 읽기 전용
-샌드박스(신뢰되지 않은 명령·쓰기마다 요청), auto_edit 은 `on-request` + workspace-write(작업 디렉토리 안의 변경과 네트워크는 허용, 그 밖의 권한이 필요하면 요청), full 은 `never` + 전체 접근. app-server 가 없는 옛 CLI 는
-SDK exec 경로(턴마다 `codex exec`, 승인 없이 샌드박스만)로 폴백한다.
+**Codex** works the same way. One `codex app-server` (JSON-RPC over stdio, `src/main/codex-app-server.ts`) is kept alive per tab, continuing the thread and sending only `turn/start` each turn
+(measured time to first token: 15 seconds cold, 3 to 5 seconds warm). Interrupt uses `turn/interrupt`, and policy and model are passed as parameters each turn. Approval requests (`item/commandExecution/requestApproval`,
+`item/fileChange/requestApproval`) arrive as server requests and flow into the app's permission card, so Codex now really asks too: ask is `approvalPolicy: untrusted` plus a read-only
+sandbox (a request for every untrusted command and write), auto_edit is `on-request` plus workspace-write (changes inside the working directory and network access are allowed; anything beyond that is requested), and full is `never` plus full access. For older CLIs without an app-server, it falls back to
+the SDK exec path (`codex exec` each turn, sandbox only, no approvals).
 
-## 슬래시 커맨드
+## Slash commands
 
-Claude 탭 입력창에서 `/` 를 치면 그 워크스페이스에서 쓸 수 있는 커맨드(내장·스킬·`.claude/commands`·플러그인)가 뜬다.
-↑↓ 이동, Tab/Enter 선택, Esc 닫기. 목록은 CLI 를 프롬프트 없이 잠깐 띄워 initialize 응답에서 받아오고(`src/main/claude-commands.ts`,
-턴·비용 없음) cwd 별로 캐시한다. 턴 도중 `commands_changed` 푸시가 오면 갱신한다. `/exit`, `/resume` 같은 터미널 전용 명령은
-숨긴다. Codex 탭에는 해당 API 가 없어 뜨지 않는다.
+Type `/` in a Claude tab's input box and the commands available in that workspace appear (built-in, skills, `.claude/commands`, plugins).
+↑↓ to move, Tab/Enter to select, Esc to close. The list comes from briefly launching the CLI without a prompt and reading the initialize response (`src/main/claude-commands.ts`,
+no turn, no cost), and is cached per cwd. It refreshes when a `commands_changed` push arrives mid-turn. Terminal-only commands like `/exit` and `/resume` are
+hidden. Codex tabs have no such API, so nothing appears there.
 
-앱이 직접 처리하는 커맨드(`src/shared/app-commands.ts`, 팔레트에 "앱에서 처리" 로 표시): `/model` 은 모델 피커를 열고 `/model opus` 처럼 인자를
-주면 바로 이 세션의 모델을 바꾼다(`/model 기본` 은 CLI 기본값으로; 다음 턴부터 적용, 세션 유지, 헤더에 설정한 모델이 보인다). `/config` 는 설정 화면을 연다.
-둘 다 SDK 모드에서는 TUI 화면을 못 띄우기 때문이다. 이 커맨드들은 CLI 로 보내지 않으므로 대화 기록에도 남지 않는다.
+Commands the app handles itself (`src/shared/app-commands.ts`, marked "handled by the app" in the palette): `/model` opens the model picker, and with an argument like `/model opus` it
+changes this session's model right away (`/model default` goes back to the CLI default; applies from the next turn, the session is kept, and the header shows the model you set). `/config` opens the settings screen.
+Both exist because the TUI screens can't be shown in SDK mode. These commands aren't sent to the CLI, so they don't appear in the conversation history either.
 
-`/mcp` 는 SDK 모드에서 요약 한 줄만 돌아오므로 CLI 로 보내지 않고 설정 → MCP 서버 화면을 연다. 이 화면은 같은 방식(프롬프트 없는
-CLI + `mcpServerStatus()`)으로 서버별 연결 상태·에러·도구 목록을 읽기 전용으로 보여준다(`src/main/claude-mcp.ts`). 서버 연결을
-최대 10초 기다린다. 재연결·켜기/끄기는 그 프로세스에만 적용되어 턴마다 새 프로세스를 띄우는 이 앱에선 의미가 없어 두지 않았고,
-OAuth 인증(needs-auth)은 터미널에서 해야 한다.
+`/mcp` returns only a one-line summary in SDK mode, so it isn't sent to the CLI; it opens the Settings → MCP servers screen instead. That screen reads each server's connection status, errors, and tool list
+read-only in the same way (a CLI without a prompt + `mcpServerStatus()`, `src/main/claude-mcp.ts`). It waits up to 10 seconds for servers to connect. Reconnecting and toggling on/off apply only to that
+process, which makes no sense in an app that starts a new process every turn, so they aren't offered, and OAuth sign-in (needs-auth) has to be done in a terminal.
 
-## 프롬프트 스니펫
+## Prompt snippets
 
-자주 붙이는 지시문을 이름으로 저장해 두고 입력창에서 `/이름` 으로 꺼낸다. "/" 팔레트에 스니펫이 슬래시 커맨드보다 먼저 나오고,
-고르면 본문이 입력창에 통째로 들어간다(커맨드는 이름만 들어감). 범위는 워크스페이스별 또는 전체("모든 워크스페이스"), 팔레트에는
-전체 + 현재 워크스페이스 것만 보인다. 저장은 두 곳: 입력창에 글이 있을 때 나타나는 "스니펫" 버튼(이름·범위만 정함), 설정 > 스니펫
-(목록·편집·삭제). Codex 탭처럼 슬래시 커맨드가 없어도 스니펫이 있으면 팔레트가 열린다. `userData/snippets.json` 에 저장하고,
-워크스페이스를 제거하면 그 범위의 스니펫도 지운다. 순수 로직은 `src/shared/snippets.ts`.
+Save instructions you paste often under a name, and pull them up in the input box with `/name`. In the "/" palette, snippets come before slash commands, and
+picking one inserts the whole body into the input box (a command inserts only its name). The scope is per workspace or global ("All workspaces"); the palette shows
+global ones plus those for the current workspace. There are two ways to save: the "Snippet" button that appears when the input box has text (you set only the name and scope), and Settings > Snippets
+(list, edit, delete). Even in a Codex tab with no slash commands, the palette opens if a snippet exists. They're stored in `userData/snippets.json`, and
+removing a workspace deletes the snippets of that scope. The pure logic is in `src/shared/snippets.ts`.
 
-## 프롬프트 큐
+## Prompt queue
 
-턴이 진행 중일 때도 입력창에 다음 지시를 쓰고 Enter(또는 "대기열에" 버튼)를 누르면 큐에 들어가고, 이 턴이 **정상 종료되면** 위에서부터
-자동으로 전송된다(`SessionManager.promptQueue`). 입력창 위에 "다음에 보낼 지시 N" 목록이 보이고 항목을 눌러 편집, × 로 삭제할 수 있다.
-턴이 오류로 끝나면 큐는 그대로 멈춰 두고(자동 전송 안 함), "중단" 은 큐와 한도 재시도 예약도 함께 비운다. 한도 재시도를 기다리는 동안 보낸
-지시는 큐 뒤에 붙고, 재시도가 성공한 뒤에야 이어서 나간다. 터미널 모드에서는 큐를 돌리지 않고 돌아오면 이어 간다. 큐는 20개까지.
-큐는 `userData/threads/<탭id>.queue.json` 에 바뀔 때마다 저장된다(이미지는 base64 대신 저장된 파일 경로만 두고 복원 때 다시 읽음).
-앱을 껐다 켜거나 탭을 닫았다 열어도 대기 지시가 그대로 보이고, 이때는 턴이 돌고 있지 않으므로 자동으로 나가지 않는다 — 헤더가
-"대기 중인 지시 N" 으로 바뀌고 "지금 보내기" 버튼으로 맨 앞 것을 보내거나, 새 지시를 보낸 턴이 끝나면 차례로 나간다.
-앱 종료·탭 닫기는 큐를 남기지만, "중단"·대화 비우기·탭 삭제는 지운다.
+Even while a turn is running, write your next instruction in the input box and press Enter (or the "Queue" button) to put it in the queue; when this turn **ends normally**, they're sent
+automatically from the top (`SessionManager.promptQueue`). A "N requests to send next" list appears above the input box, where you can click an item to edit it or × to delete it.
+If a turn ends with an error, the queue stays as it is and stops (no automatic sending), and "Stop" also clears the queue and any scheduled limit retry. Instructions sent
+while waiting for a limit retry go behind the queue and only go out after the retry succeeds. In terminal mode the queue doesn't run and resumes when you come back. The queue holds up to 20.
+The queue is saved to `userData/threads/<tabId>.queue.json` on every change (images store only the saved file path instead of base64, and are re-read on restore).
+Even if you quit and restart the app, or close and reopen the tab, the waiting instructions are still shown. No turn is running then, so they don't go out automatically: the header
+changes to "N queued requests · press Send now to start", and the "Send now" button sends the first one, or they go out in order once a turn you start with a new instruction ends.
+Quitting the app or closing a tab keeps the queue, while "Stop", clearing the conversation, and deleting the tab clear it.
 
-## 사용 한도 도달 시 자동 재시도 (Claude)
+## Automatic retry at usage limit (Claude)
 
-턴이 구독 한도 오류로 끝나면(오류 텍스트가 SDK 의 한도 메시지 접두로 시작하거나 `rate_limit_event` 가 rejected) 그 턴을 보관하고
-리셋 시각(rejected 의 resetsAt, 없으면 오류 텍스트 끝의 `|<epoch>`) + 5초에 자동으로 다시 보낸다 — 사용자 메시지는 다시 기록하지 않는다
-(`src/shared/usage-limit.ts`, `SessionManager.scheduleLimitRetry`). 입력창 위 배너가 남은 시간을 세며 "지금 재시도"·취소를 준다. 리셋 시각을 모르면
-배너만 띄우고, 연속 3회를 넘기면 멈춘다. 중단·대화 비우기는 예약도 지운다. Codex 는 대상이 아니다.
+When a turn ends with a subscription-limit error (the error text starts with the SDK's limit-message prefix, or a `rate_limit_event` is rejected), that turn is held
+and sent again automatically at the reset time (resetsAt from the rejection, or if absent the `|<epoch>` at the end of the error text) + 5 seconds. The user message isn't recorded again
+(`src/shared/usage-limit.ts`, `SessionManager.scheduleLimitRetry`). A banner above the input box counts down the time left and offers "Retry now" and cancel. If the reset time is unknown,
+only the banner shows, and it stops after 3 consecutive attempts. Stop and clearing the conversation also clear the schedule. Codex isn't covered.
 
-## 컨텍스트 창 경고
+## Context window warning
 
-마지막 턴의 **마지막 assistant 메시지**가 든 입력 토큰(입력 + 캐시 읽기/쓰기, `turn_result.contextTokens`)을 세션 모델의 컨텍스트 창으로 나눈 값이 80% 를 넘으면 입력창 위에 경고 배너, 95% 부터는 빨간 배너가 뜬다
-(`contextUsage`/`contextWarnLevel`, `src/shared/session-state.ts`; 컨텍스트 패널 게이지와 같은 숫자). "압축하기" 는 압축을 provider 에게 맡긴다 —
-Claude 면 SDK 로 `/compact` 를 보내고, 무엇을 남길지는 모델이 정한다. 압축은 세션 안의 경계라 세션이 끊기지 않고, SDK 의 `compact_boundary` 를 받아
-대화에 구분선(`압축 · 39k → 6k`)으로 남긴다. 무엇을 남길지 지시하고 싶으면 입력창에 `/compact 인증 리팩터링에 집중하고 테스트 디버깅은 버려라` 처럼
-직접 쳐도 된다(앱이 가로채지 않고 그대로 넘긴다). Codex 는 app-server 에 압축이 없어, 아래 handoff 요약을 만들어 같은 provider 의 새 세션으로 넘어간다.
-SDK `result.usage` 는 턴 안의 API 요청 누적치라(툴콜마다 대화를 다시 보냄) 컨텍스트 크기로 쓰면 크게 과대 계산된다 — 그래서 메시지 하나의 usage 를 따로 든다.
-`contextTokens` 가 없는 옛 기록은 누적치를 요청 수로 나눈 근사치. 닫음은 탭별로 기억되어 탭을 오가도 유지되고, 5%p 더 차거나 warn 에서 critical 로
-넘어가면 다시 뜨며, 80% 아래로 내려가면 초기화된다. 압축하면 `compacted`(폴백은 `session_reset`) 이벤트로 게이지도 함께 비운다. Codex 는 컨텍스트 창 크기를 주지 않아 경고가 없다.
+Take the input tokens in the **last assistant message** of the last turn (input + cache read/write, `turn_result.contextTokens`) and divide by the session model's context window. Above 80%, a warning banner appears
+above the input box, and from 95% it turns red (`contextUsage` / `contextWarnLevel`, `src/shared/session-state.ts`; the same number as the context panel gauge). "Compact" leaves compaction to the provider:
+for Claude it sends `/compact` through the SDK, and the model decides what to keep. Compaction is a boundary inside the session, so the session isn't cut, and the SDK's `compact_boundary` is received and
+left in the conversation as a divider (`Compact · 39k → 6k`). If you want to say what to keep, you can type something like `/compact focus on the auth refactor and drop test debugging`
+in the input box yourself (the app doesn't intercept it and passes it along as is). Codex's app-server has no compaction, so it builds the handoff summary below and moves to a new session on the same provider.
+SDK `result.usage` is the cumulative total of API requests within a turn (every tool call resends the conversation), so using it as the context size would greatly overcount. That's why it takes the usage of a single message.
+Old records without `contextTokens` use an approximation: the cumulative total divided by the number of requests. Dismissal is remembered per tab and holds as you switch tabs; the banner returns when the context fills 5 percentage points more or goes from warn to critical,
+and resets when it falls below 80%. Compacting clears the gauge too, via a `compacted` event (fallback: `session_reset`). Codex doesn't report a context window size, so it has no warning.
 
-## provider 전환과 인계 (handoff)
+## Switching providers and handoff
 
-Claude 와 Codex 는 서로의 세션을 이어받지 못한다. 그래서 전환할 때 맥락은 텍스트로만 넘어간다. 전환 모달에서 "대화 요약을 첫 메시지로 전달" 을 켜면
-그 텍스트를 만드는데, **떠나는 쪽이 직접 쓰게 하는 것이 기본값**이다(`HANDOFF_BRIEF_PROMPT`, `src/shared/handoff.ts`). 무엇이 중요했는지 아는 쪽이
-쓰기 때문이다 — 원래 요청, 내린 결정과 버린 선택지, 해 봤다가 안 된 것, 건드린 파일, 지금 상태, 다음에 할 일 순으로 받는다. 턴 하나가 더 들어
-십수 초 걸리고, 실패하거나 3분을 넘기면 조용히 아래 기계 요약으로 돌아간다(전환 자체는 막지 않는다).
+Claude and Codex can't pick up each other's sessions, so when you switch, context passes only as text. If you turn on "Pass a conversation summary as the first message" in the switch modal,
+it builds that text, and **by default the side being left writes it itself** (`HANDOFF_BRIEF_PROMPT`, `src/shared/handoff.ts`). The side that knows what mattered
+writes it: the original request, decisions made and options dropped, what was tried and didn't work, files touched, the current state, and what to do next, in that order. It takes one more turn,
+about ten-odd seconds, and if it fails or runs past 3 minutes, it quietly falls back to the mechanical summary below (the switch itself isn't blocked).
 
-인계서는 이 대화에만 해당하는 이야기다. **이 저장소에 오래 남아야 할 것**(프로젝트 규칙, 굳은 관례, 되풀이되는 함정)은 대화가 아니라 파일에 있어야
-요약에서 살아남는다. 그래서 인계서를 쓸 때 그런 것이 있으면 떠나는 쪽이 자기 규약 파일 — Claude 면 `CLAUDE.md`, Codex 면 `AGENTS.md` — **끝에
-덧붙이게** 한다. 앱이 새 규약을 만들지 않고 각 CLI 가 이미 읽는 파일을 쓴다. 이 턴은 사람이 보고 있지 않으므로 권한은 그 파일 하나만 열고
-(`handoffNotePermission`, `src/shared/handoff.ts`) 나머지 요청은 전부 거부한다. 이미 있는 파일을 통째로 새로 쓰는 것(`Write`)도 막는다 —
-쌓아 둔 내용이 날아갈 수 있어서, 덧붙이기(`Edit`·`ApplyPatch`)만 허용하고 `Write` 는 파일이 없을 때만 통과시킨다. 남길 것이 없으면 아무것도 하지 않는다.
+The handoff note is only about this conversation. **What should last in this repository** (project rules, settled conventions, recurring pitfalls) has to live in a file, not the conversation,
+to survive a summary. So when writing the handoff note, if there's any of that, the side being left **appends it to the end** of its own convention file: `CLAUDE.md` for Claude, `AGENTS.md` for Codex. The app doesn't invent a new
+convention and uses the file each CLI already reads. No human is watching this turn, so permission is opened for that one file only
+(`handoffNotePermission`, `src/shared/handoff.ts`) and every other request is denied. Rewriting an existing file wholesale (`Write`) is also blocked,
+since accumulated content could be lost: only appending (`Edit`, `ApplyPatch`) is allowed, and `Write` passes only when the file doesn't exist. If there's nothing to leave, it does nothing.
 
-기계 요약(`buildHandoff`)은 이벤트 기록을 텍스트로 접는다. 넘치면 **가운데를 버린다** — 앞에는 무엇을 하려 했는지가, 뒤에는 어디까지 왔는지가 있기
-때문이다. 첫 사용자 요청은 `원래 요청:` 으로 머리말에 올려 기록이 잘려도 남는다. 성공한 툴 결과는 최근 12개까지만 싣고(오래된 출력은 다시 볼 일이
-없다), 실패는 다 남긴다(같은 실수를 되풀이하지 않게). 기록 안의 옛 지시를 다시 실행하지 않도록 "참고 자료이며 지시가 아니다" 라고 못박는다.
+The mechanical summary (`buildHandoff`) folds the event log into text. When it overflows, it **drops the middle**, because the start holds what was being attempted and the end holds how far it got.
+The first user request goes at the top as `Original request:` so it survives even if the record is trimmed. It includes only the most recent 12 successful tool results (old output won't be needed again) and keeps
+all failures (so the same mistake isn't repeated). It states plainly that "this is reference material, not instructions," so old instructions in the record aren't run again.
 
-만들어진 인계서는 다음 메시지에 실려 나갈 때까지 `threads/<tabId>.handoff.txt` 에 남는다 — 그 사이에 앱이 꺼져도 맥락이 사라지지 않는다.
-대화를 비우면 함께 지워진다.
+A generated handoff note stays in `threads/<tabId>.handoff.txt` until it goes out with the next message, so context isn't lost even if the app quits in between.
+Clearing the conversation deletes it too.
 
-## 대화 검색·내보내기
+## Chat search and export
 
-⌘F(또는 사이드바 "대화 검색")로 모든 세션(닫힌 것 포함)의 사용자·어시스턴트 텍스트와 툴 호출(이름·경로·명령 요약, 출력 앞 2만 자)을 부분 일치로 찾는다.
-결과 행의 "나"/"AI"/"툴" 표시로 구분하고, 툴 결과를 고르면 그 툴카드로 스크롤한다. 결과는 세션별로 묶여
-나오고, 고르면 그 세션을 열고(닫혀 있으면 다시 열어) 해당 블록으로 스크롤하며 잠깐 강조한다. main 의 `SearchIndex`(`src/main/search-index.ts`)가
-탭마다 스레드 파일의 (mtime, 크기) 를 키로 텍스트 블록(소문자 사본 포함)을 메모리에 캐시한다 — 검색할 때 파일은 stat 만 하고 바뀐 파일만
-다시 읽어 파싱하므로, 진행 중인 세션 하나 말고는 디스크를 건드리지 않는다. 순수 매칭은 `src/shared/transcript-search.ts`. 세션은 사이드바 우클릭 "마크다운으로 내보내기…" 또는 컨텍스트
-패널 "내보내기" 로 `.md` 파일로 저장한다 — 사용자/어시스턴트 헤더, 툴 호출 한 줄과 출력(1,500자 초과는 자름), 턴 통계를 담는다.
+⌘F (or "Search chats" in the sidebar) searches the user and assistant text and tool calls (name, path, command summary, the first 20,000 characters of output) of all sessions, including closed ones, by partial match.
+Results are labeled "Me" / "AI" / "Tool" on each row, and picking a tool result scrolls to that tool card. Results are grouped by session,
+and picking one opens that session (reopening it if closed), scrolls to the block, and briefly highlights it. Main's `SearchIndex` (`src/main/search-index.ts`)
+caches each tab's text blocks (including a lowercase copy) in memory, keyed by the thread file's (mtime, size). A search only stats files and re-reads and parses only the ones that changed,
+so apart from the one session in progress, it doesn't touch the disk. The pure matching is in `src/shared/transcript-search.ts`. Save a session as a `.md` file with "Export as Markdown…" in the sidebar right-click menu, or "Export" in the context
+panel. It includes user/assistant headers, one line per tool call with its output (truncated beyond 1,500 characters), and turn stats.
 
-## ⌘W 가 무엇을 닫는가
+## What ⌘W closes
 
-코드나 웹페이지를 보고 있는데 세션이 통째로 닫히면 놀란다. 그래서 ⌘W 는 포커스를 보고 갈라진다 —
-포커스가 에디터 패널 안이면(CodeMirror·브라우저 `<webview>`·도구막대) **그 에디터/브라우저 탭**을, 아니면 **채팅 세션**을 닫는다.
-포커스만으로는 부족하다 — 오른쪽 패널의 변경 파일이나 툴카드의 경로를 눌러 파일을 열면 에디터는 떴는데 포커스는 누른 그 버튼에 남는다.
-그래서 "마지막으로 쓴 영역"도 같이 본다. 파일을 여는 것 자체가 에디터를 쓰겠다는 신호다. 애매하면 에디터 쪽으로 기운다 —
-탭 하나를 다시 여는 것이 세션을 잃는 것보다 싸다.
-넓게 보기 중에는 채팅이 화면에 없으므로 포커스와 무관하게 에디터 탭을 닫는다. 닫을 에디터 탭이 없으면 늘 세션이다.
+If a session closes entirely while you're looking at code or a web page, it's a surprise. So ⌘W decides by focus:
+if focus is inside the editor panel (CodeMirror, the browser `<webview>`, the toolbar), it closes **that editor/browser tab**; otherwise it closes the **chat session**.
+Focus alone isn't enough: if you click a changed file in the right panel or a path in a tool card to open a file, the editor appears but focus stays on the button you clicked.
+So it also looks at the "last used area". Opening a file is itself a signal that you're using the editor. When in doubt, it leans toward the editor,
+since reopening a tab costs less than losing a session.
+While the view is widened, the chat isn't on screen, so it closes the editor tab regardless of focus. If there's no editor tab to close, it's always the session.
 
-판단은 `src/renderer/src/close-target.ts` 의 순수 함수이고, 실제 닫기는 탭의 × 와 같은 경로를 타므로
-저장하지 않은 변경이 있으면 확인 배너가 뜬다. 브라우저 페이지 안을 클릭하면 호스트의 `activeElement` 가 그 `<webview>` 요소가 되어 이 검사에 잡힌다.
+The decision is a pure function in `src/renderer/src/close-target.ts`, and the actual closing takes the same path as the tab's ×, so
+if there are unsaved changes, a confirmation banner appears. Clicking inside a browser page makes the host's `activeElement` that `<webview>` element, which this check catches.
 
-## 넓게 보기
+## Widen view
 
-코드 에디터와 브라우저는 오른쪽에 붙어 있어 좁은 화면에서는 자리가 모자란다. 패널 머리말의 넓히기 버튼(또는 ⌘⇧E)을 누르면
-채팅 칼럼과 오른쪽 패널을 **감춰서** 창 전체를 쓴다. 감추기만 하고 내리지 않으므로 채팅 스크롤 위치·쓰다 만 입력,
-에디터의 커서·undo, 브라우저가 보던 페이지가 그대로 살아 있다. 같은 버튼으로 되돌린다.
+The code editor and browser sit on the right, so there isn't enough room on a narrow screen. Click the widen button in the panel header (or ⌘⇧E) and
+the chat column and the right panel are **hidden**, so the whole window is used. They're only hidden, not torn down, so the chat scroll position and half-written input,
+the editor's cursor and undo, and the page the browser was viewing all stay alive. The same button restores it.
 
-채팅 탭마다 따로 기억하고(`editor-tabs.ts` 의 `maximized`, renderer-state.json 에 저장) 패널을 접거나 마지막 파일을
-닫으면 함께 풀린다 — 다음에 펼쳤을 때 채팅이 사라진 화면으로 돌아오지 않게.
+It's remembered separately per chat tab (`maximized` in `editor-tabs.ts`, saved to renderer-state.json), and collapsing the panel or closing the last file
+releases it too, so that when you next expand it you don't return to a screen where the chat is gone.
 
-## 코드 에디터 (분할 패널)
+## Code editor (split panel)
 
-컨텍스트 패널의 변경 파일(더블클릭·열기 아이콘), 파일 트리, 툴카드(Read/Edit/Write/MultiEdit/NotebookEdit)의 경로를 누르면 채팅 오른쪽에
-에디터 패널이 열린다(`EditorPane.tsx`). 파일마다 탭이 생기고(최대 12개, 같은 이름은 상위 폴더까지 표시) 숨은 탭도 마운트를 유지해 커서·undo 가 남는다.
-왼쪽 가장자리를 끌어 폭을 바꾸고(360~1200px, 저장), 패널의 접기 버튼이나 헤더의 "코드 N" 으로 접었다 펼친다. 열린 파일 목록은 채팅 탭마다 기억된다
-(`editor-tabs.ts`). 각 파일은 CodeMirror 6(`CodeEditor.tsx`, `FileEditor.tsx`)로 바로 고치고 ⌘S 또는 "저장" 으로 쓴다. HEAD 와 다른 파일은
-`@codemirror/merge` 의 unified 보기로 지워진 줄을 빨강으로 끼우고 바뀐 줄을 초록으로 칠한 채 편집한다. 저장은 에디터를 재생성하지 않아
-커서·undo 가 유지된다. 저장하지 않은 탭은 점으로 표시되고, 닫으면 "저장 후 닫기 / 버리고 닫기 / 계속 편집" 을 묻는다. 읽은 뒤 파일이 밖에서 바뀌었으면
-저장 시 충돌 배너로 "내 내용으로 덮어쓰기 / 디스크 내용으로 다시 읽기" 를 준다. 저장은 세션의 저장소(없으면 작업 경로) 안으로만 허용된다.
-언어는 파일 이름으로 지연 로드. 바이너리·1MB 초과는 읽기 전용 안내만. 이미지(png/jpg/gif/webp/bmp/ico/avif/svg, 12MB 까지)는 main 이 data URL 로
-주고 에디터가 체크무늬 위에 미리보기로 띄운다(크기·용량 표시, 화면 맞춤/원본 크기 전환, SVG 도 `<img>` 로만 그림). 마크다운(`.md/.markdown/.mdx`)은
-채팅과 같은 렌더러에 문서용 스타일(`.md-doc` — 큰 제목과 구분선, 780px 읽기 폭, 줄무늬 표)을 입힌 미리보기가 먼저 뜨고 헤더의 "편집" 으로 전환한다(편집 중인 내용이 그대로 미리보기에 반영, 에디터는 숨겨만 둬 undo 유지). Read 툴카드의 경로를 누르면 그 호출의 `offset`/`limit` 줄 범위를
-선택하고 가운데로 스크롤한 채 연다(이미 열려 있어도 이동만 한다).
+Click a changed file in the context panel (double-click or the open icon), the file tree, or a path in a tool card (Read/Edit/Write/MultiEdit/NotebookEdit), and
+an editor panel opens to the right of the chat (`EditorPane.tsx`). Each file gets a tab (up to 12; files with the same name show their parent folder), and hidden tabs stay mounted so the cursor and undo remain.
+Drag the left edge to change the width (360~1200px, saved), and collapse or expand with the panel's collapse button or "Code N" in the header. The list of open files is remembered per chat tab
+(`editor-tabs.ts`). Each file is edited right in CodeMirror 6 (`CodeEditor.tsx`, `FileEditor.tsx`) and written with ⌘S or "Save". A file that differs from HEAD is edited in
+`@codemirror/merge`'s unified view, with deleted lines slotted in as red and changed lines painted green. Saving doesn't recreate the editor, so
+the cursor and undo are kept. Unsaved tabs are marked with a dot, and closing one asks "Save and close / Discard and close / Keep editing". If the file was changed outside after you read it,
+saving shows a conflict banner offering "Overwrite with my content / Reload from disk". Saving is allowed only inside the session's repository (or the working directory if there's none).
+The language is lazy-loaded by file name. Binary files and files over 1MB get a read-only notice only. Images (png/jpg/gif/webp/bmp/ico/avif/svg, up to 12MB) are
+passed by main as a data URL, and the editor shows a preview on a checkerboard (with size and file weight, toggling between fit-to-screen and actual size; SVG is also drawn only as an `<img>`). Markdown (`.md/.markdown/.mdx`) first opens as a preview
+rendered by the same renderer as the chat with document styling (`.md-doc`: large headings and dividers, a 780px reading width, striped tables), and you switch with "Edit" in the header (what you're editing is reflected in the preview as is, and the editor is only hidden so undo stays). Clicking the path of a Read tool card
+selects that call's `offset`/`limit` line range and opens it scrolled to the center (if it's already open, it just moves).
 
-**언어 서버**: 서버 명세는 `src/shared/lsp-servers.ts` 에 있다 — TypeScript/JavaScript(`typescript-language-server --stdio`, `.ts/.tsx/.js/.jsx/.mjs/.cjs`)와
-Python(`pyright-langserver --stdio`, `.py/.pyi`). 새 언어는 명세 항목 하나로 늘린다(실행 파일·인자·확장자·설치 안내). 담당 파일을 열면 (서버, 저장소 루트)마다 프로세스를 하나 띄워
-(`src/main/lsp.ts`, Content-Length 프레임을 IPC 로 중계) CodeMirror 의 `@codemirror/lsp-client` 가 붙는다(`src/renderer/src/lsp-client.ts`).
-자동완성(타입 기반)·오류 진단(거터·밑줄·툴팁)·hover·시그니처 도움·정의로 이동(F12)·참조 찾기·이름 바꾸기가 켜지고 상태 줄에 "LSP" 배지가 뜬다.
-서버는 PATH(절대 경로 항목만)에서 찾고(설정 > CLI 탐지 > 언어 서버 카드에서 서버마다 실행 파일 경로를 직접 지정할 수도, `lspServerPaths`), 없으면 배지 없이 문법 하이라이트만 한다.
-설치는 `npm i -g typescript-language-server typescript`, `npm i -g pyright`. typescript 패키지는 서버 동봉 → PATH 의 `tsserver` → 프로젝트 `node_modules` 순으로 찾아
-initialize 요청의 `tsserver.path` 에 끼워 준다(없으면 서버가 "valid TypeScript installation" 오류). 프로젝트 것을 맨 뒤에 두는 이유는 저장소를 여는 것만으로
-그 안의 `tsserver.js` 가 실행되는 일을 피하기 위해서다(VS Code 도 기본은 동봉 버전). 서버 자식에는 PATH·HOME 등 최소 env 만 넘긴다.
-서버 루트는 렌더러가 아니라 main 이 탭 cwd 에서 정하고(저장소 최상위), 파일 읽기·쓰기·조작·목록, git, MCP 상태, 서버 시작은 실제 탭/워크스페이스 cwd(또는 그 안)에서만 받는다.
-탭 cwd 와 워크스페이스 경로 자체는 사용자가 디렉토리 선택 창으로 고른 루트(와 지난 실행에서 쓰던 경로, worktree 루트) 안만 받으므로 렌더러가 경계를 넓힐 수 없다
-(`ATELIER_APPROVED_ROOTS=경로:경로` 로 검증용 루트를 더할 수 있다).
-서버가 죽으면 배지가 꺼지고 다음 파일부터 다시 띄운다. 열린 TS/JS 문서가 하나도 없는 상태(`didOpen`/`didClose` 를 main 이 센다)가 3분 이어지면
-서버를 끄고, 다음에 파일을 열 때 다시 띄운다(`ATELIER_LSP_IDLE_MS` 로 조정). 앱을 끄면 서버도 끝난다.
-`ATELIER_DEBUG_LSP=1` 로 띄우면 JSON-RPC 왕복이 main 로그에 남는다.
+**Language servers**: The server specs are in `src/shared/lsp-servers.ts`: TypeScript/JavaScript (`typescript-language-server --stdio`, `.ts/.tsx/.js/.jsx/.mjs/.cjs`) and
+Python (`pyright-langserver --stdio`, `.py/.pyi`). A new language is added with one spec entry (executable, arguments, extensions, install notes). When you open a file a server handles, one process starts per (server, repository root)
+(`src/main/lsp.ts`, relaying Content-Length frames over IPC), and CodeMirror's `@codemirror/lsp-client` attaches to it (`src/renderer/src/lsp-client.ts`).
+You get type-based autocomplete, error diagnostics (gutter, underline, tooltip), hover, signature help, go to definition (F12), find references, and rename, and an "LSP" badge appears in the status line.
+Servers are found on PATH (absolute-path entries only; you can also set each server's executable path directly in Settings > Find CLIs > the Language servers card, `lspServerPaths`), and if one isn't found, you get syntax highlighting only, with no badge.
+Install with `npm i -g typescript-language-server typescript` and `npm i -g pyright`. The typescript package is looked up in this order: bundled with the server → `tsserver` on PATH → the project's `node_modules`, and it's slotted into
+the initialize request's `tsserver.path` (without it, the server errors with "valid TypeScript installation"). The project's copy goes last so that just opening a repository
+doesn't run the `tsserver.js` inside it (VS Code also defaults to the bundled version). Server children get only a minimal env such as PATH and HOME.
+The server root is decided not by the renderer but by main, from the tab's cwd (the top level of the repository), and file read/write/operations/listing, git, MCP status, and server start are accepted only from the actual tab/workspace cwd (or inside it).
+The tab cwd and the workspace path itself are accepted only inside roots the user picked in the directory picker (plus paths used in previous runs, and worktree roots), so the renderer can't widen the boundary
+(you can add a root for verification with `ATELIER_APPROVED_ROOTS=path:path`).
+If a server dies, the badge goes off and it's started again from the next file. When no TS/JS document is open (main counts `didOpen`/`didClose`) for 3 minutes,
+the server is shut down, and started again the next time a file opens (adjust with `ATELIER_LSP_IDLE_MS`). Quitting the app ends the servers too.
+Launch with `ATELIER_DEBUG_LSP=1` and the JSON-RPC round trips are written to the main log.
 
-**파일 트리 조작**: 우측 "파일" 탭에서 항목을 우클릭하면 열기 / 새 파일 / 새 폴더 / 이름 변경 / 휴지통으로 이동 메뉴가 나오고(빈 곳 우클릭·헤더 + 는 루트에
-새 파일·폴더), 이름은 그 자리에서 입력한다(Enter 확정, Esc 취소, 파일은 확장자 앞까지 선택). 만들기·이름 변경은 세션 저장소 안에서만, 덮어쓰기 없음
-(대소문자만 바꾸는 이름 변경은 같은 inode 일 때만 허용 — 대소문자 구분 볼륨에서는 다른 파일이라 거부). 심링크는 링크 자체를 옮기거나 지우고
-가리키는 원본은 건드리지 않는다(저장소 밖을 가리키는 링크도 이름 변경·삭제는 되지만, 그 위에 만들거나 쓰는 것은 거부). 삭제는 확인 뒤 macOS 휴지통으로 보내 되돌릴 수 있다(`shell.trashItem`). 이름이 바뀌거나 지워진 파일이
-에디터 패널에 열려 있으면 탭 경로가 따라 바뀌거나 닫히되, 저장하지 않은 변경이 있는 파일(폴더면 하위 포함)은 이름 변경·삭제를 거부한다 —
-먼저 저장하거나 닫아야 한다. 에디터 탭 상한(12개)을 넘어 오래된 탭을 닫을 때도 저장 안 된 탭은 건너뛴다. 바뀐 디렉토리만 다시 읽어 펼침 상태가 유지된다.
+**File tree operations**: Right-click an item in the right-hand "Files" tab for a menu of Open / New file / New folder / Rename / Move to Trash (right-click on empty space or the + in the header makes a
+new file or folder at the root), and the name is typed in place (Enter to confirm, Esc to cancel, and for files everything before the extension is selected). Creating and renaming are allowed only inside the session's repository, with no overwriting
+(a rename that only changes case is allowed only when it's the same inode; on a case-sensitive volume it's a different file, so it's refused). For symlinks, the link itself is moved or deleted
+and the target is left alone (a link pointing outside the repository can still be renamed or deleted, but creating or writing through it is refused). Deleting sends the item to the macOS Trash after confirmation, so it can be undone (`shell.trashItem`). If a file that was renamed or deleted is
+open in the editor panel, the tab path follows the rename or the tab closes, but a file with unsaved changes (including any under a folder) can't be renamed or deleted:
+save or close it first. When the 12-tab editor limit forces an old tab to close, tabs with unsaved changes are skipped too. Only changed directories are re-read, so the expanded state is kept.
 
-## 앱 안 Git 커밋
+## Git commits in the app
 
-우측 컨텍스트 패널의 "변경 파일" 은 체크박스로 커밋 대상을 고른다(기본 전부, 새로 생긴 파일은 자동 선택). 아래 메시지 상자에 쓰고
-"커밋 N" 을 누르면(⌘⏎ 도 됨) `git add -A -- <고른 파일>` 뒤 `git commit -- <고른 파일>` 로 **그 파일들만** 커밋한다 — 다른 파일의
-스테이징 상태는 건드리지 않고, 목록을 본 뒤 사라진 파일은 건너뛴다. 턴이 실행 중일 때는 파일이 편집 중일 수 있어 커밋 버튼을 잠근다.
-"초안" 은 고른 파일의 diff(최대 40KB)와 최근 커밋 제목 8개를 Claude haiku 에 한 번 보내 메시지를 받아 상자에 채운다
-(`src/main/git-draft.ts`: 세션 기록·사용자 설정·MCP 없이 일회성 query, 툴 없음). push 는 하지 않는다.
+The "Changed files" in the right context panel use checkboxes to choose what to commit (everything by default, and new files are selected automatically). Write in the message box below
+and press "Commit N" (⌘⏎ works too), and it commits **only those files** with `git add -A -- <chosen files>` then `git commit -- <chosen files>`. The staging state of other files
+isn't touched, and files that disappeared after you looked at the list are skipped. While a turn is running, files may be mid-edit, so the commit button is locked.
+"Draft" sends the chosen files' diff (up to 40KB) and the 8 most recent commit titles to Claude haiku once, and fills the box with the message it returns
+(`src/main/git-draft.ts`: a one-off query with no session history, user settings, or MCP, and no tools). It doesn't push.
 
-**변경 리뷰**: 섹션 머리의 "리뷰" 를 누르면 채팅을 덮는 오버레이(`ChangeReview.tsx`)가 열린다. 왼쪽은 파일 목록(체크박스 = 커밋 대상,
-종류·+/-), 오른쪽은 고른 파일의 HEAD 대비 diff(파일 뷰어와 같은 hunk 접기; 새 파일·삭제는 전체 내용). 파일 행에 마우스를 올리면 나오는
-되돌리기 버튼은 두 단계 확인 뒤 `git checkout HEAD -- 파일`(수정·삭제), 파일 삭제 또는 `git rm`(새 파일), 옛 경로 복원 + 새 경로 제거(이름 변경)를
-한다 — 되돌릴 수 없다(`gitRevert`). 아래 커밋 바는 패널의 커밋 폼과 같은 상태(`useGitChanges`)를 공유한다. 턴 실행 중엔 커밋·되돌리기를 잠근다.
+**Review changes**: Click "Review" in the section header and an overlay covering the chat opens (`ChangeReview.tsx`). On the left is the file list (checkbox = commit target,
+kind, +/-), and on the right is the chosen file's diff against HEAD (the same hunk folding as the file viewer; new and deleted files show the full content). The revert button that appears when you hover over a file row
+takes a two-step confirmation, then does `git checkout HEAD -- file` (modified, deleted), deletes the file or `git rm` (new file), or restores the old path and removes the new one (renamed).
+It can't be undone (`gitRevert`). The commit bar below shares the same state (`useGitChanges`) as the panel's commit form. While a turn is running, commit and revert are locked.
 
-**브라우저 탭**: 헤더의 "브라우저" 로 에디터 패널에 브라우저 탭이 열린다. 채팅·마크다운 미리보기의 링크를 클릭하면 "인앱 브라우저 / 기본 브라우저"
-선택 팝업이 뜨고 "다음부터 묻지 않기" 로 기억할 수 있다(`localStorage` `workbench.linkOpenMode`; ⇧클릭이면 다시 묻고, ⌘클릭·가운데 클릭은 바로 기본
-브라우저, ⌥클릭은 바로 인앱 브라우저).
-주소창(스킴 없으면 localhost/IP 는 http, 나머지는 https, 공백이 있으면 검색)·뒤로/앞으로/새로고침·기본 브라우저로 열기. Electron `<webview>` 를 쓰며
-main 의 `will-attach-webview` 가 preload 없음·node 없음·샌드박스·http(s) 만으로 고정하고, 웹뷰의 새 창은 같은 웹뷰에서 연다. 쿠키·저장소는
-`persist:atelier-browser` 파티션으로 앱과 분리된다.
+**Browser tab**: "Browser" in the header opens a browser tab in the editor panel. Clicking a link in the chat or a Markdown preview shows an "In-app browser / Default browser"
+choice popup, and "Don't ask again" remembers it (`localStorage` `workbench.linkOpenMode`; ⇧-click asks again, ⌘-click or middle-click goes straight to the default
+browser, and ⌥-click goes straight to the in-app browser).
+The address bar (without a scheme, localhost/IPs get http and everything else gets https; anything with a space is a search), back/forward/reload, and open in default browser. It uses an Electron `<webview>`, and
+main's `will-attach-webview` locks it to no preload, no node, sandboxed, and http(s) only, and a new window from the webview opens in the same webview. Cookies and storage are separated from the app by the
+`persist:atelier-browser` partition.
 
-**앱을 껐다 켜도 로그인이 유지된다.** 만료가 있는 쿠키는 파티션이 `persist:` 라 원래 디스크에 남지만, 로그인 세션은 대개 만료가 없는 세션 쿠키라
-Chromium 이 종료할 때 버린다(메모리에만 둔다). 그래서 끌 때 세션 쿠키를 받아 적고 켤 때 되돌려 놓는다 — 크롬의 "이전 세션 계속하기" 와 같은 장치다
-(`src/main/browser-cookies.ts`). 되돌릴 때 만료를 붙이지 않아 성질은 그대로 세션 쿠키이고, 호스트 한정 쿠키에는 `domain` 을 주지 않아 하위 도메인으로
-퍼지지 않는다. 복원은 창(=웹뷰)을 띄우기 전에 끝내므로 첫 페이지부터 로그인 상태다.
+**Logins survive quitting and restarting the app.** Cookies with an expiry already stay on disk because the partition is `persist:`, but login sessions are usually session cookies with no expiry, and
+Chromium throws them away on quit (it keeps them only in memory). So on quit it writes down the session cookies and puts them back on launch, the same mechanism as Chrome's "Continue where you left off"
+(`src/main/browser-cookies.ts`). It adds no expiry when restoring, so they stay session cookies by nature, and host-only cookies get no `domain`, so they
+don't spread to subdomains. Restoring finishes before the window (the webview) is shown, so you're logged in from the first page.
 
-로그인 증표를 앱 데이터 디렉토리(`browser-session-cookies.json`, 소유자만 읽기)에 **평문으로** 두는 일이다. 한때 `safeStorage`(키체인)로 암호화했지만
-되돌렸다 — 키체인을 쓰면 macOS 가 접근 허용을 묻고, 이 앱은 ad-hoc 서명이라 빌드가 바뀔 때마다 다시 묻는다. 이 파일을 읽을 수 있는 주체에게 세션
-인증정보가 노출되는 위험을 **받아들인 것**이다(보호가 같아서가 아니라, 혼자 쓰는 로컬 도구에서 그 위험보다 프롬프트 부담이 크다고 판단했다).
-암호화하던 시절의 `.enc` 파일이 남아 있으면 풀지 않고 지운다 — 푸는 순간 없애려던 그 프롬프트가 뜨기 때문이고, 그 한 번은 로그인이 풀린다.
-설정 > 일반에서 끌 수 있고, 끄면 적어 둔 것을 바로 지운다. 메인 창 자체의 이동은 `will-navigate` 로 막고 외부 브라우저로 보낸다.
+This keeps login credentials in the app data directory (`browser-session-cookies.json`, readable by the owner only) **in plaintext**. It was once encrypted with `safeStorage` (Keychain), but
+that was reverted: using the Keychain makes macOS ask for access permission, and since this app is ad-hoc signed, it asks again with every build change. This **accepts** the risk of exposing session
+credentials to anyone who can read this file (not because the protection is the same, but because for a local tool used by one person, the prompt burden was judged greater than that risk).
+If an `.enc` file from the encrypted days is still there, it's deleted without decrypting, because decrypting is the moment the prompt we wanted to get rid of would appear, and logins are dropped that one time.
+You can turn it off in Settings > General, and turning it off deletes what was written down right away. Navigation of the main window itself is blocked with `will-navigate` and sent to the external browser.
 
-**탭에는 파비콘과 페이지 제목이 나온다** — 크롬과 같다. 파비콘은 원격 주소라 화면이 그대로 쓸 수 없다: 렌더러 CSP 가 `img-src 'self' data:` 이고,
-그걸 풀면 앱 화면이 임의의 원격 이미지를 받게 된다. 그래서 main 이 브라우저 파티션으로 받아 data URL 로 바꿔 넘긴다
-(`src/main/browser-favicon.ts`; http(s) 만, `image/*` 만, 128KB 까지, 주소별로 기억). 못 받거나 그 사이트가 안 주면 지구본으로 돌아간다.
+**Tabs show a favicon and the page title**, like Chrome. A favicon is a remote address, so the screen can't use it as is: the renderer CSP is `img-src 'self' data:`,
+and loosening that would let the app screen fetch arbitrary remote images. So main fetches it through the browser partition and passes it over as a data URL
+(`src/main/browser-favicon.ts`; http(s) only, `image/*` only, up to 128KB, remembered per address). If it can't be fetched or the site doesn't provide one, it falls back to a globe.
 
-**주소창은 지난 방문을 기억한다.** 치는 동안 기록에서 맞는 주소를 보여 주고(↑↓ 로 고르고 ⏎ 로 간다), 호스트 첫머리가 맞는 것을 가장 위에 둔다 —
-`loc` 만 쳐도 `localhost:3000` 이 나온다. 같은 정도면 자주 간 곳이, 그다음 최근 것이 위다. 개발 중에는 같은 주소를 반복해 열기 때문이다.
-기록은 앱 전체가 하나를 쓰고(어느 탭에서 열었든 다음에 찾을 수 있게) 200개까지 남는다. 순위 계산은 `src/shared/browser-history.ts` 의 순수 함수다.
+**The address bar remembers past visits.** As you type, it shows matching addresses from history (pick with ↑↓ and go with ⏎), with ones whose host starts with your text at the top:
+typing just `loc` brings up `localhost:3000`. At equal rank, places you visit often come first, then recent ones, because during development you open the same address over and over.
+History is one shared by the whole app (so you can find it next time whichever tab you opened it in) and keeps up to 200 entries. The ranking is a pure function in `src/shared/browser-history.ts`.
 
-**강력 새로고침(⌘⇧R, 또는 새로고침 버튼을 ⇧ 누르고 클릭)** 은 캐시를 무시하고 다시 받는다. 고쳤는데 화면이 그대로일 때 쓴다. 보통 새로고침(⌘R)은
-서버에 `max-age=0` 으로 물어보기만 하고, 강력 새로고침은 `no-cache` 를 붙여 받아 온다.
+**Hard reload (⌘⇧R, or ⇧-click the reload button)** ignores the cache and fetches again. Use it when you fixed something but the screen looks the same. A normal reload (⌘R) only
+asks the server with `max-age=0`, while a hard reload fetches with `no-cache`.
 
-**닫은 탭 다시 열기(⌘⇧T)** 는 방금 닫은 코드·브라우저 탭을 되살린다. 브라우저 탭이면 보던 주소까지 되살아난다 — 키만 되살리면 빈 탭이 되기 때문이다.
-채팅 탭마다 따로 10개까지 기억한다(닫힌 채팅 세션은 사이드바에 남으므로 여기 대상이 아니다).
+**Reopen closed tab (⌘⇧T)** brings back the code or browser tab you just closed. For a browser tab, the address it was viewing comes back too, because restoring only the key would leave a blank tab.
+It remembers up to 10 per chat tab (a closed chat session stays in the sidebar, so it isn't covered here).
 
-**단축키는 브라우저를 보고 있을 때만 가져간다** — `⌘F` 는 대화 검색 대신 **이 페이지에서 찾기**, `⌘L` 은 주소창, `⌘R` 은 새로고침, `⌘⇧R` 은 강력 새로고침.
-⌘W 와 같은 판단(`browser-active.ts`)을 쓰므로 채팅을 쓰는 중이면 원래 동작 그대로다. (창 새로고침은 ⌘R 을 양보하고 메뉴에만 남겼다.)
+**Shortcuts are taken over only while you're looking at the browser**: `⌘F` becomes **Find in page** instead of chat search, `⌘L` goes to the address bar, `⌘R` reloads, and `⌘⇧R` hard-reloads.
+It uses the same decision as ⌘W (`browser-active.ts`), so while you're using the chat, the original behavior stays. (The window reload gives up ⌘R and remains only in the menu.)
 
-**보기 폭 프리셋** 으로 창을 줄이지 않고 좁은 화면을 확인한다 — 전체·폰(390)·태블릿(834)·데스크톱(1280).
-패널보다 넓은 프리셋은 패널 폭을 따르므로 넓게 보기(⌘⇧E)와 같이 쓴다. **확대·축소** 는 도구막대의 −/배율/+ 로, 배율을 누르면 100% 로 돌아온다.
+**Viewport width presets** let you check a narrow screen without shrinking the window: Full, Phone (390), Tablet (834), and Desktop (1280).
+A preset wider than the panel follows the panel width, so use it together with widen view (⌘⇧E). **Zoom** is the −/percentage/+ in the toolbar, and clicking the percentage returns to 100%.
 
-**에이전트가 브라우저를 직접 조작한다.** 모델은 화면을 볼 수 없으므로 지금까지는 사람이 "진단 첨부" 로 넘겨 줘야 했다. 이제 `atelier` CLI 로 직접 읽고 누른다.
+**Agents operate the browser directly.** Models can't see the screen, so until now a person had to hand it over with "Attach diagnostics". Now they read and click through the `atelier` CLI directly.
 
 ```bash
-atelier browser read                                  # 보이는 글 + 누를 만한 것(선택자 포함)
-atelier browser click --text "저장"                    # 또는 --selector "#save"
+atelier browser read                                  # visible text + clickable items (with selectors)
+atelier browser click --text "Save"                    # or --selector "#save"
 atelier browser fill --selector "#email" --value a@b.c
 ```
 
-`read` 는 본문 텍스트(2만 자까지)와 버튼·링크·입력을 선택자·라벨과 함께 60개까지 준다 — 모델이 다음에 무엇을 누를지 정할 수 있게. `click --text` 는
-보이는 것 중 **글이 가장 짧은 것**을 고른다(바깥 컨테이너가 아니라 실제 버튼이 잡히게). `fill` 은 프로토타입의 네이티브 setter 로 값을 넣고 input·change 를
-쏘므로 React 처럼 값을 가로채는 프레임워크도 상태가 갱신된다. 주입 스크립트는 `src/shared/browser-control.ts` 의 순수 함수이고, 선택자·입력값은 반드시
-`JSON.stringify` 로 실어 따옴표·역슬래시가 코드를 깨뜨리지 않는다.
+`read` returns the body text (up to 20,000 characters) and up to 60 buttons, links, and inputs with their selectors and labels, so the model can decide what to click next. `click --text`
+picks the **one with the shortest text** among the visible matches (so it catches the actual button rather than an outer container). `fill` sets the value with the prototype's native setter and
+fires input and change, so frameworks that intercept values, like React, update their state too. The injected scripts are pure functions in `src/shared/browser-control.ts`, and selectors and input values are always
+carried through `JSON.stringify` so quotes and backslashes can't break the code.
 
-조작 대상은 **그 채팅 탭에서 지금 보이는 브라우저 하나**다. 렌더러가 `dom-ready` 때 웹뷰의 webContentsId 를 main 에 등록하고(요소만 생긴 시점에는
-아직 붙지 않아 id 를 물으면 던진다), 숨은 탭은 등록하지 않는다 — 에이전트가 안 보이는 화면을 조작하면 안 되기 때문이다. 브라우저가 없으면
-"먼저 `atelier browser open --url …` 으로 여세요" 라고 알려 준다.
+The target is **the one browser currently visible in that chat tab**. The renderer registers the webview's webContentsId with main on `dom-ready` (when only the element exists it
+isn't attached yet, and asking for the id throws), and hidden tabs aren't registered, because an agent shouldn't operate a screen you can't see. If there's no browser, it says
+"Open one first with `atelier browser open --url …`".
 
-도구막대에는 세 가지가 더 있다. **요소 선택** 은 페이지에 스크립트를 주입해 클릭한 요소의 HTML·스타일과 그 영역 스크린샷을 채팅 입력창에 붙인다.
-**개발자 도구** 는 그 웹뷰의 콘솔·네트워크·요소 검사를 연다. **진단 첨부** 는 지금 화면 캡처와 콘솔 경고·오류, 실패한 요청을 한 덩어리로 붙인다 —
-모델은 브라우저 상태를 볼 수 없으므로 이게 유일한 통로다. 콘솔은 렌더러가 `console-message` 로 모으고(페이지가 바뀌면 비운다),
-실패한 요청은 main 이 모은다(`src/main/browser-net.ts`; webRequest 리스너는 세션에 하나뿐이라 한 곳에서 걸고 `webContentsId` 로 탭을 가른다).
-통신 오류와 4xx·5xx 를 나눠 적고, 오류가 하나도 없으면 "없음" 이라고 분명히 적는다 — 모델이 "못 봤다" 와 "봤는데 깨끗했다" 를 구분해야 한다.
-탭 안에서 이동한 주소는 밖에 들고 있다가(`editor-tabs.ts` 의 `browserUrls`) 채팅 탭을 옮기거나 패널을 접었다 펴도 그 페이지로 돌아온다.
+The toolbar has three more tools. **Pick element** injects a script into the page and pastes the clicked element's HTML and styles plus a screenshot of its area into the chat input box.
+**Developer tools** opens that webview's console, network, and element inspector. **Attach diagnostics** attaches the current screen capture, console warnings and errors, and failed requests in one bundle,
+which is the only channel, since the model can't see the browser's state. The renderer collects the console with `console-message` (cleared when the page changes),
+and main collects failed requests (`src/main/browser-net.ts`; there's only one webRequest listener per session, so it's hooked in one place and tabs are told apart by `webContentsId`).
+It lists network errors and 4xx/5xx separately, and if there are no errors at all it says "none" clearly, because the model has to tell "I couldn't see" from "I looked and it was clean".
+The address you navigated to within a tab is kept outside (`browserUrls` in `editor-tabs.ts`), so even if you switch chat tabs or collapse and expand the panel, it returns to that page.
 
-## 검증 (테스트·빌드)
+## Verify (tests and builds)
 
-헤더의 "검증" 은 워크스페이스에 저장해 둔 명령(예: `yarn typecheck`, `yarn test`)을 이 세션의 작업 경로에서 차례로 돌리고
-결과를 대화에 카드로 남긴다(`src/main/verify.ts` 의 `VerifyRunner`). 옆의 편집 버튼으로 명령을 정하는데, 처음이면 cwd 의
-매니페스트를 보고 추천을 채워 준다. 명령마다 종료 코드와 출력 꼬리가 카드에 쌓이고, 실패한 명령이 있으면 카드가 붉게 남아
-모델에게 "이 결과를 고쳐" 라고 이어 시킬 수 있다. 모델이 스스로 테스트를 돌리는 것과 달리 승인 없이 정해진 명령만 돈다.
+"Verify" in the header runs the commands saved for the workspace (for example `yarn typecheck`, `yarn test`) one after another in this session's working directory, and
+leaves the results in the conversation as a card (`VerifyRunner` in `src/main/verify.ts`). You set the commands with the edit button next to it, and the first time it fills in suggestions from the manifest
+in the cwd. Each command's exit code and output tail pile up on the card, and if any command failed, the card stays red so
+you can follow up by telling the model to "fix this result". Unlike when the model runs tests itself, only the commands you set run, with no approval.
 
-## 팬아웃 (같은 지시를 여러 모델에)
+## Fan-out (the same instruction to several models)
 
-헤더 "더보기" → "팬아웃" 은 같은 지시를 격리 세션 2~4개에 동시에 보낸다. 세션마다 격리 worktree 와 탭을 새로 만들어
-(`fanout-a-claude-…`) 서로 파일을 건드리지 않게 하고, provider 와 모델을 세션별로 고를 수 있다 — Claude 와 Codex 에 같은 일을
-시켜 놓고 고르는 것이 원래 목적이다. 원래 탭에는 팬아웃 카드가 하나 남아 세션별 진행 상태·변경 통계·답변 요약을 1초마다 갱신한다.
+"More" → "Fan-out" in the header sends the same instruction to 2 to 4 isolated sessions at once. Each session gets its own new isolated worktree and tab
+(`fanout-a-claude-…`) so they don't touch each other's files, and you can pick the provider and model per session. The original purpose is to give Claude and Codex the same job
+and pick between them. A fan-out card stays in the original tab and updates each session's progress, change stats, and answer summary every second.
 
-끝나면 카드의 "비교" 로 세션별 diff 를 나란히 놓고 본다(왼쪽에 파일 합집합, 열마다 세션). "채택" 은 그 세션의 worktree 를
-merge-base 기준 패치 하나로 떠서 원래 작업 트리에 적용한다(커밋·작업 트리·새 파일을 함께, 인덱스는 건드리지 않음).
-팬아웃을 만든 저장소가 아니면 거부하고, 원래 탭의 턴이 돌고 있으면 끝난 뒤에 적용한다.
+When they finish, "Compare" on the card lays each session's diff side by side (the union of files on the left, a column per session). "Adopt" takes that session's worktree,
+makes it into one patch against the merge-base, and applies it to the original working tree (commits, working tree, and new files together, without touching the index).
+It refuses if this isn't the repository the fan-out was created from, and if the original tab has a turn running, it applies after it finishes.
 
-**정리는 자동이 아니다.** 카드의 "worktree 삭제"를 눌러야 각 세션의 worktree를 지우고 탭을 닫는다(확인 한 번 거침). 채택해도 정리되지 않으므로
-비교를 더 볼 수 있지만, 누르지 않으면 worktree 폴더(기본 `~/atelier/worktrees/`)에 계속 남는다.
+**Cleanup isn't automatic.** Only pressing "Delete worktrees" on the card deletes each session's worktree and closes its tab (with one confirmation). Adopting doesn't clean up,
+so you can keep looking at the comparison, but if you don't press it, the worktree folder (by default `~/atelier/worktrees/`) stays.
 
-## 교차 리뷰 (Claude ↔ Codex)
+## Cross-review (Claude ↔ Codex)
 
-"더보기" → "교차 리뷰" 는 작업 트리의 변경(diff)을 **다른 provider** 새 탭에 보내 독립 리뷰를 받는다. Claude 로 짠 것은 Codex 가,
-Codex 로 짠 것은 Claude 가 본다. 리뷰 탭은 같은 워크스페이스에 ask 정책으로 열리고 활성 탭은 원래 자리로 돌아오므로 하던 일이
-끊기지 않는다. 원래 탭에는 리뷰 카드가 남아 진행 상태를 보여 주고, 리뷰 탭의 턴이 끝나면(최대 30분) 답을 카드에 옮겨 적는다.
-작업 트리가 깨끗하면 보낼 것이 없으므로 거절한다.
+"More" → "Cross-review" sends the working tree's changes (diff) to a new tab on the **other provider** for an independent review. Codex looks at what was written with Claude, and
+Claude looks at what was written with Codex. The review tab opens in the same workspace with the ask policy, and the active tab returns to where it was, so what you were doing
+isn't interrupted. A review card stays in the original tab showing progress, and when the review tab's turn ends (up to 30 minutes), the answer is copied to the card.
+If the working tree is clean, there's nothing to send, so it refuses.
 
-## 오케스트레이션 (코디네이터와 워커)
+## Orchestration (coordinator and workers)
 
-여러 세션을 하나의 목표 아래 묶어 돌린다. Run 안에 Task 를 두고, Task 마다 Dispatch(= 워커 탭)를 띄워 일을 맡긴다.
-워커는 격리 worktree 에서 돌고, 코디네이터에게 질문(ask)하거나 보고(worker_done)할 수 있으며, 코디네이터는 답(reply)이나
-후속 지시(send)를 보낸다. Task 에 선행 조건(deps)을 걸면 앞의 것이 끝나야 다음이 시작하고, 게이트(gate)로 사람의 결정을 기다리게 할 수 있다.
-기록은 Run 별 `userData/orchestration/<runId>.jsonl` 에 append 되고, 앱을 껐다 켜도 재생으로 복구한다.
+Run several sessions under one goal. Put Tasks inside a Run, and for each Task launch a Dispatch (= a worker tab) to hand the work to.
+Workers run in isolated worktrees and can ask the coordinator (ask) or report (worker_done), and the coordinator sends an answer (reply) or
+a follow-up instruction (send). Put a prerequisite (deps) on a Task and the next one starts only when the earlier one finishes, and a gate lets you make it wait for a human decision.
+The record is appended to `userData/orchestration/<runId>.jsonl` per Run, and recovered by replay even if you quit and restart the app.
 
-코디네이터는 사람일 수도 있고 **탭(Claude·Codex)** 일 수도 있다. 탭 코디네이터가 `atelier orch …` 로 Run 을 만들고 워커를 부리는 것이
-원래 쓰임이다. "더보기" → "오케스트레이션" 패널에서는 Run 의 Task·워커·인박스를 보고, 워커의 질문에 직접 답하고, 게이트를 결정하고,
-끝난 워커를 정리한다. 코디네이터를 사람이 가져오는 "인수" 도 여기서 한다.
+The coordinator can be a person or a **tab (Claude, Codex)**. The original use is for a tab coordinator to create a Run with `atelier orch …` and direct workers.
+In the "More" → "Orchestration" panel you see a Run's Tasks, workers, and inbox, answer a worker's question yourself, decide gates,
+and clean up finished workers. "Take over", where a person takes the coordinator role, is also done here.
 
-**Run 을 만드는 UI 는 아직 없다.** 지금은 `atelier orch run-create …` 로 시작해야 하고, 패널은 만들어진 Run 을 다루는 곳이다.
+**There's no UI for creating a Run yet.** For now you start with `atelier orch run-create …`, and the panel is where you handle a Run that already exists.
 
-## 앱 밖에서 조종하기 (atelier CLI)
+## Controlling from outside the app (atelier CLI)
 
-설정 > 일반의 "CLI와 에이전트 스킬" 에서 atelier CLI 를 설치하면 `~/.local/bin/atelier` 가 생긴다. 실행 중인 앱에 유닉스 소켓(`userData/control.sock`, 0600)으로
-붙어 워크스페이스·탭·세션을 조종한다 — `atelier tab new --prompt …`, `tab send --wait`, `tab read`, `tab verify`, `tab fanout`,
-`orch …`, `file open`, `browser open`. 탭 선택자는 `active`·id·정확한 제목·유일한 접두사를 받는다.
-같은 화면의 "스킬 설치" 는 Claude Code(`~/.claude/skills`)와 Codex(`$CODEX_HOME/skills`)에 사용법 가이드를 깔아 준다.
-그래서 **앱 안의 에이전트가 자기가 사는 앱을 조종할 수 있다** — 탭을 새로 열어 일을 넘기거나, 워커를 띄우거나, 결과를 읽어 온다.
+Install the atelier CLI under Settings > General > "CLI and agent skills" and `~/.local/bin/atelier` is created. It connects to the running app over a Unix socket (`userData/control.sock`, 0600)
+to control workspaces, tabs, and sessions: `atelier tab new --prompt …`, `tab send --wait`, `tab read`, `tab verify`, `tab fanout`,
+`orch …`, `file open`, `browser open`. A tab selector takes `active`, an id, an exact title, or a unique prefix.
+"Install skill" on the same screen installs a usage guide into Claude Code (`~/.claude/skills`) and Codex (`$CODEX_HOME/skills`).
+That's how **an agent inside the app can control the app it lives in**: open a new tab and hand off work, launch workers, or read back results.
 
-## 백그라운드 작업 표시
+## Background task indicator
 
-턴이 끝나 탭이 "대기" 여도 일이 남아 있을 수 있다. 백그라운드로 맡긴 Codex 작업이 그렇다 — 그 프로세스는 앱에서 떨어져 나가고
-(부모가 launchd) 턴이 끝나면 하위 에이전트 미러도 꺼져서, 예전에는 10분을 도는 동안 화면에 아무것도 없었고 끝나도 알림이 없었다.
-지금은 Claude Code 플러그인이 남기는 작업 목록(`<claude>/plugins/data/*/state/*/state.json` 의 jobs)을 읽어 `sessionId` 로 탭을 찾고,
-진행 중이면 대화 아래에 한 줄(종류·경과·지시 요약)로 보여 준다(`src/main/background-jobs.ts`). 끝나면 줄이 사라지고 알림이 뜬다.
-남의 파일 형식에 기대는 기능이라, 형식이 바뀌면 표시만 조용히 사라지고 앱은 그대로 돈다.
+Even after a turn ends and the tab shows "idle", work may remain. That's the case for a Codex task handed off to the background: that process is detached from the app
+(its parent is launchd), and when the turn ends the sub-agent mirror is shut down too, so it used to show nothing on screen for the 10 minutes it ran, and there was no notification when it finished.
+Now it reads the job list that Claude Code plugins leave behind (the jobs in `<claude>/plugins/data/*/state/*/state.json`), finds the tab by `sessionId`, and,
+while a job is running, shows one line below the conversation (kind, elapsed time, instruction summary) (`src/main/background-jobs.ts`). When it ends, the line disappears and a notification appears.
+Because this feature relies on someone else's file format, if the format changes only the indicator quietly goes away, and the app keeps running as before.
 
-## 격리 세션 (git worktree)
+## Isolated sessions (git worktree)
 
-같은 저장소에서 세션 여러 개를 돌리면 서로 파일을 건드린다. 사이드바에서 워크스페이스를 우클릭 → "격리 세션 (git worktree)" 을 고르면
-저장소(활성 탭의 작업 경로 또는 워크스페이스 기본 경로)에서 브랜치 `atelier/<slug>` 와 worktree 를 만들어 그 경로를 작업 경로로 하는 새 세션을
-연다(`src/main/worktree.ts`). worktree 는 저장소 밖 `<worktree 폴더>/<repo>/<slug>`(기본 `~/atelier/worktrees`, 설정 > 일반 > 저장 위치에서 변경)에 두어 원본에 untracked 로 보이지 않는다. 저장소 안의 폴더는 고를 수 없다. 세션 헤더의
-브랜치 칩을 누르면 base 대비 커밋 수·미커밋 수가 보이고, "변경 가져오기" 는 원본 저장소에서 `git merge --no-edit <branch>` 를 한다(원본이 base
-브랜치에 있고 양쪽에 미커밋 변경이 없을 때만; 충돌이면 `merge --abort` 로 되돌리고 알림). "worktree 정리" 는 폴더를 지우고 탭을 원본 경로로 돌린다
-(미커밋 변경이 있으면 확인 뒤 강제; 브랜치는 base 에 합쳐졌을 때만 `-d` 로 지운다). 격리 세션 탭을 삭제하면 턴·터미널을 먼저 멈춘 뒤 worktree 를 지우고,
-미커밋 변경이 있으면 탭을 남기고 알린다. 원본이 detached HEAD 이거나 base 브랜치가 사라졌으면 만들기·가져오기를 거부한다.
+Running several sessions in the same repository makes them step on each other's files. In the sidebar, right-click a workspace → "Isolated session (git worktree)" and it creates a branch `atelier/<slug>` and a worktree
+from the repository (the active tab's working directory or the workspace's default path), then opens a new session with that path as its working directory
+(`src/main/worktree.ts`). The worktree goes outside the repository at `<worktree folder>/<repo>/<slug>` (by default `~/atelier/worktrees`, changeable in Settings > General > Storage location), so it doesn't show up as untracked in the original. You can't pick a folder inside the repository. Click
+the branch chip in the session header to see the number of commits and uncommitted changes against base, and "Merge changes" runs `git merge --no-edit <branch>` in the original repository (only when the original is on the base
+branch and neither side has uncommitted changes; on a conflict it rolls back with `merge --abort` and notifies you). "Clean up worktree" deletes the folder and returns the tab to the original path
+(if there are uncommitted changes, it forces after confirmation; the branch is deleted with `-d` only if it has been merged into base). Deleting an isolated session tab stops its turn and terminal first and then deletes the worktree,
+and if there are uncommitted changes, it keeps the tab and notifies you. If the original is in a detached HEAD or the base branch is gone, creating and merging are refused.
 
-## 예약 (정해진 시각에)
+## Schedules (at set times)
 
-설정 → **예약** 에서 만든다. 정해진 시각에 새 세션을 열어 프롬프트를 보내고, 회차마다 결과를 남긴다
-(`src/main/schedule-engine.ts`, `src/main/schedule-store.ts`). 30초마다 깨어나 볼 뿐이라 앱이 떠 있어야 돈다.
+Create them under Settings → **Schedules**. At the set time, a new session opens and the prompt is sent, and each run leaves a result
+(`src/main/schedule-engine.ts`, `src/main/schedule-store.ts`). It only wakes up and looks every 30 seconds, so the app has to be open for it to run.
 
-반복은 프리셋(매시·매일·평일·매주)으로 고르고, 그 밖의 주기는 "직접" 을 골라 5칸 cron 을 적는다. 시간대는 IANA 이름으로
-박아 두므로 맥의 시간대가 바뀌어도 예약은 움직이지 않는다(`src/shared/cron.ts`). 저장하기 전에 다음 실행 시각을 계산해 보여 준다 —
-고른 것이 정말 언제 도는지 거기서 확인한다. 이름·보낼 말·cron·대상이 없으면 저장하지 않는다(화면과 CLI 가 같은 검증을 쓴다).
+Pick the repeat from presets (Every hour, Every day, Weekdays, Every week), and for anything else choose "Custom" and write a 5-field cron. The time zone is
+pinned by IANA name, so the schedule doesn't move if the Mac's time zone changes (`src/shared/cron.ts`). Before you save, it calculates and shows the next run time,
+so that's where you confirm when your choice really runs. It won't save if the name, the message to send, the cron, or the target is missing (the screen and the CLI use the same validation).
 
-**회차 상태는 성공/실패 둘이 아니다.** "안 돌았다" 의 이유가 서로 다르고 그 이유가 곧 알아야 할 정보다 —
-`완료`·`실패`·`승인 대기`·`중단`, 그리고 건너뜀 넷(`할 일 없음`·`시각 놓침`·`실행 불가`·`앞 회차 진행 중`).
-끝 판정은 SDK 신호로 한다(`src/shared/run-completion.ts`): 백그라운드 작업이 남아 있거나 CLI 가 스스로 이어갈 턴이 예정돼
-있으면 아직 끝난 것이 아니다. 앱이 죽어 끝을 못 본 회차는 재시작 때 `중단` 으로 남는다 — 성공으로 바꾸지 않는다.
+**A run's status isn't just success or failure.** The reasons it "didn't run" differ, and the reason is itself the information you need:
+`Completed`, `Failed`, `Waiting for approval`, `Interrupted`, plus four kinds of skip (`nothing to do`, `missed its time`, `couldn't run`, `previous run still going`).
+The end is judged from SDK signals (`src/shared/run-completion.ts`): if background tasks remain, or the CLI has a turn scheduled to continue on its own,
+it isn't over yet. A run whose end couldn't be seen because the app died is left as `Interrupted` on restart, and is never turned into a success.
 
-- **격리 세션**: 켜면 회차마다 worktree 를 만들어 그 안에서 돈다. 사람이 안 보는 사이에 도는 일이라 "전부 자동" 권한과 함께 쓸 때 특히 권한다.
-- **권한·모델·provider** 는 예약에 박힌 값을 쓴다. 낮에 탭을 "전부 자동" 으로 바꿨다고 새벽 예약의 권한까지 올라가면 안 되기 때문이다.
-- **유예**: 예정 시각을 이만큼 넘겨 깨어났으면 그 회차는 건너뛴다(기본 120분, CLI `--grace`, 최대 720분). 앱이 꺼져 있던 회차를 몰아서 돌리지 않는다.
-- **선조건(precheck)**: 셸 명령 하나를 먼저 돌려 종료 코드 0 이면 실행, 1 이면 "할 일 없음" 으로 건너뛴다. 그 밖의 코드·시간 초과는 *실패* 로 구분해 남긴다 — "변경 없음" 과 "명령이 고장 남" 은 다른 일이다.
-- **예산**: 월 예산을 넘겼으면 조용히 멈춘다.
+- **Isolated session**: When on, each run creates a worktree and runs inside it. Since this runs while no one is watching, it's especially recommended together with "Fully automatic" permissions.
+- **Permissions, model, and provider** use the values fixed in the schedule. If you switch a tab to "Fully automatic" during the day, that shouldn't raise the permissions of a schedule that runs at dawn.
+- **Grace**: If it wakes up this far past the scheduled time, that run is skipped (120 minutes by default, CLI `--grace`, up to 720 minutes). It doesn't run in a batch the runs missed while the app was off.
+- **Precheck**: One shell command runs first; exit code 0 means run, and 1 means skip as "nothing to do". Any other code or a timeout is recorded as a *failure*, kept distinct: "no changes" and "the command is broken" are different things.
+- **Budget**: If the monthly budget is exceeded, it quietly stops.
 
-터미널에서도 된다:
+It works from the terminal too:
 
 ```bash
-atelier schedule add --name 아침점검 --cron "30 9 * * *" --prompt "…" --ws repo [--worktree] [--policy full]
+atelier schedule add --name morning-check --cron "30 9 * * *" --prompt "…" --ws repo [--worktree] [--policy full]
 atelier schedule list | runs --id <id> | run --id <id> | set --id <id> --enabled false | rm --id <id>
 ```
 
-## 터미널
+## Terminal
 
-⌘J 또는 채팅 헤더의 "터미널" 버튼으로 채팅 아래에 터미널 패널이 열린다(`src/renderer/src/components/TerminalPanel.tsx`, xterm).
-패널 안에 터미널 탭을 여러 개 둘 수 있다(+ 로 추가, 탭의 × 로 종료). 셸은 세션의 작업 경로에서 로그인 셸(`$SHELL -l`)로 뜨며,
-PATH 는 앱이 CLI 탐지에 쓰는 셸 환경을 그대로 받아 `claude`/`codex` 를 바로 실행할 수 있다. "−" 로 패널을 접어도 프로세스와
-스크롤백은 유지되고, 헤더의 "×" 는 그 세션의 터미널을 모두 종료한다. 프로세스는 main 의 `src/main/terminals.ts`(node-pty)가
-"<세션 id>:<이름>" 으로 관리하고 최근 출력 200KB 를 백로그로 들고 있어, 다른 세션에 갔다 돌아와도 화면이 복원된다.
-하이브리드 모드의 CLI 는 `cli` 탭으로 들어온다. 패널 상단 가장자리를 끌어 높이를 바꿀 수 있다.
+⌘J or the "Terminal" button in the chat header opens a terminal panel below the chat (`src/renderer/src/components/TerminalPanel.tsx`, xterm).
+You can have several terminal tabs in the panel (add with +, quit with the tab's ×). The shell starts as a login shell (`$SHELL -l`) in the session's working directory, and
+it gets PATH from the same shell environment the app uses for CLI detection, so you can run `claude`/`codex` right away. Collapsing the panel with "−" keeps the processes and
+scrollback, and the "×" in the header quits all of that session's terminals. The processes are managed by main's `src/main/terminals.ts` (node-pty)
+as "<session id>:<name>", with the most recent 200KB of output kept as a backlog, so the screen is restored even if you go to another session and come back.
+The CLI in hybrid mode comes in as the `cli` tab. Drag the top edge of the panel to change the height.
 
-## 터미널에서 이어가기 (하이브리드)
+## Continue in terminal (hybrid)
 
-세션 헤더의 "터미널에서 이어가기" 를 누르면 같은 세션 id 로 CLI 를 터미널 패널에 띄운다(Claude 는 `claude --resume <id>`, 새 세션이면
-`--session-id <id>`; Codex 는 `codex resume <id>`). 그동안 채팅 입력은 잠기고, CLI 가 남기는 기록 파일(`~/.claude/projects/**/<id>.jsonl`,
-`~/.codex/sessions/**/rollout-*.jsonl`)을 tail 해서 대화를 채팅 화면에 따라 그린다(`src/main/transcript-mirror.ts`). CLI 를 종료(/exit)하거나
-"채팅으로 돌아가기" 를 누르면 제어가 앱으로 돌아오고, 다음 메시지는 SDK 가 같은 세션을 resume 한다. /resume, /login, 플랜 모드 같은 CLI 전용 기능은
-터미널 구간에서 쓰고, 스트리밍·앱 안 권한 카드는 채팅 구간에서 쓴다. 미러된 턴은 비용 정보가 없어 통계 줄에 시간과 토큰만 나온다.
-CLI 가 첫 메시지 전에 끝나 기록 파일이 없으면 세션 id 를 버리고 새 세션으로 시작한다.
+Click "Continue in terminal" in the session header and it launches the CLI in the terminal panel with the same session id (for Claude `claude --resume <id>`, or `--session-id <id>` for a new session;
+for Codex `codex resume <id>`). Meanwhile the chat input is locked, and it tails the record file the CLI leaves (`~/.claude/projects/**/<id>.jsonl`,
+`~/.codex/sessions/**/rollout-*.jsonl`) and draws the conversation into the chat screen as it goes (`src/main/transcript-mirror.ts`). When you quit the CLI (/exit) or
+click "Back to chat", control returns to the app, and the next message has the SDK resume the same session. Use CLI-only features like /resume, /login, and plan mode
+in the terminal stretch, and streaming and the in-app permission cards in the chat stretch. Mirrored turns have no cost information, so the stats line shows only time and tokens.
+If the CLI ends before the first message and there's no record file, the session id is discarded and it starts as a new session.
 
-**권한 대기 힌트**: 터미널 모드로 `claude` 를 띄울 때 `--settings` 로 훅(PermissionRequest/Stop)을 주입해
-`userData/hooks/<세션 id>.jsonl` 에 stdin JSON 을 남기게 한다(사용자 설정의 훅에 더해지며 결정은 내리지 않음; 로그 경로는 명령에
-직접 박고 시작 시 디렉토리를 비운다). 앱이 이 파일을 tail 해서
-권한 다이얼로그가 뜨면 채팅 배너를 경고색 "터미널에서 권한 승인을 기다리고 있습니다: Bash `git push`" 로 바꾸고 "터미널 보기" 버튼을 준다.
-훅은 "떴다" 만 알려 주므로, CLI pty 에 Enter/단독 Esc/번호/y/n 을 치면 답한 것으로 보고 힌트를 내리고(방향키 같은 ESC 시퀀스는 무시),
-그 툴의 tool_result 가 기록에 남거나 턴이 끝나면(Stop) 그때도 내린다. 로그 파일은 CLI 종료 시 지운다.
-Codex 는 훅을 실행 단위로 주입할 길이 없어(`~/.codex/hooks.json` + trust 필요) pty 출력 문구로 판단한다(`src/main/codex-approval.ts`):
-ANSI 를 벗긴 최근 출력을 이어 붙여 선택지 앞의 "$ <명령> › 1. Yes, proceed (y)" 또는 "Allow Codex to run `…`"(명령 실행),
-"Codex wants to edit …"(파일 수정), "grant these permissions"(권한 요청), MCP 도구 승인 문구(도구 실행), 그 밖의 "Yes, proceed (y) … Press enter to confirm"
-선택지 틀(승인 요청)을 찾으면 힌트를 켜고, "Approved action:" 이나 위와 같은 키 입력이 오면 내린다. TUI 문구에 기대므로 Codex 가
-문구를 바꾸면 조용히 동작하지 않을 수 있다(codex-cli 0.153 기준).
+**Permission-waiting hint**: When launching `claude` in terminal mode, it injects hooks (PermissionRequest/Stop) with `--settings` so
+the stdin JSON is left in `userData/hooks/<session id>.jsonl` (in addition to the hooks in the user's settings, and making no decisions; the log path is
+written directly into the command, and the directory is emptied at startup). The app tails this file, and
+when a permission dialog appears, it changes the chat banner to a warning color, "Waiting for permission approval in the terminal: Bash `git push`", and gives a "Show terminal" button.
+The hook only says "it appeared", so if Enter / a lone Esc / a number / y / n is typed into the CLI pty, it counts as answered and takes the hint down (ESC sequences like arrow keys are ignored),
+and it also takes it down when that tool's tool_result is left in the record or the turn ends (Stop). The log file is deleted when the CLI exits.
+For Codex there's no way to inject hooks per run (it needs `~/.codex/hooks.json` + trust), so it judges from the pty output text (`src/main/codex-approval.ts`):
+it joins the recent ANSI-stripped output and looks for "$ <command> › 1. Yes, proceed (y)" or "Allow Codex to run `…`" (command execution) before the choices,
+"Codex wants to edit …" (file edit), "grant these permissions" (permission request), MCP tool approval text (tool execution), and for anything else the "Yes, proceed (y) … Press enter to confirm"
+choice frame (approval request), and turns on the hint; "Approved action:" or the same key inputs as above take it down. It relies on TUI text, so if Codex
+changes the text, it may quietly stop working (as of codex-cli 0.153).
 
-## 사용량 대시보드
+## Usage dashboard
 
-`~/.claude/projects/**/*.jsonl` 과 `~/.codex/sessions/**/*.jsonl` 을 읽어 터미널·앱 사용량을 합산한다.
-비용은 모델 단가표(USD/MTok) 기반 **API 환산 추정**이며 구독(OAuth) 청구와 다르다. 파일 변경은 `fs.watch` 로 감지해
-2초 뒤 증분 스캔한다(터미널에서 `claude` 를 쓰면 보통 15초 안에 반영).
+It reads `~/.claude/projects/**/*.jsonl` and `~/.codex/sessions/**/*.jsonl` and totals terminal and app usage.
+Cost is an **API-equivalent estimate** based on a model price table (USD/MTok) and differs from subscription (OAuth) billing. File changes are detected with `fs.watch` and
+scanned incrementally after 2 seconds (using `claude` in a terminal usually shows up within 15 seconds).
 
-## 저장 위치
+## Storage location
 
-`~/Library/Application Support/Atelier/` (이전 `ai-workbench/` 폴더가 있으면 첫 실행 때 자동으로 옮긴다). 설정 > 일반 > 저장 위치에서 폴더를 바로 열 수 있다.
-- `workspaces.json` — 워크스페이스·탭 메타(제목, provider, 정책, provider 세션 id)
-- `threads/<tabId>.jsonl` — 탭별 이벤트 로그(재시작 시 재생, 닫힌 탭 다시 열기) · `threads/<tabId>.queue.json` — 작업 중에 써 둔 대기 지시
-- `renderer-state.json` — 입력창 초안·열린 에디터 파일·분할 화면·터미널 배치(바뀌는 즉시 기록) · `schedules.json` — 예약 프롬프트
-- `browser-session-cookies.json` — 인앱 브라우저 로그인 유지용 쿠키(설정에서 끄면 지운다)
-- `cli-overrides.json` — CLI 실행 파일 수동 지정
-- `attachments/` — 붙여넣은 이미지
-- `usage-cache.json` — 트랜스크립트 스캔 캐시(파일 mtime/size 기준 증분)
-- `inapp-sessions.json` — 앱에서 시작한 provider 세션 id(사용량의 인앱/터미널 구분)
-- `settings.json` — 월 예산 등 · `pricing.json`(선택) — 모델 단가표 덮어쓰기. 형식은 `src/shared/usage.ts` 의 `DEFAULT_PRICING`
-- `logs/main.log` — main 콘솔(SDK 오류, renderer 의 처리되지 않은 예외, 프로세스 크래시). 5MB 마다 `main.1.log`, `main.2.log` 로 회전.
-  설정 화면 하단 "폴더 열기" 로 바로 연다.
-- `slash-commands.json` — 워크스페이스(cwd)별 Claude 슬래시 커맨드 목록 캐시
-- `snippets.json` — 프롬프트 스니펫 · `rate-limits.json` — 마지막으로 관측한 구독 한도
-- `worktrees/<repo>/<slug>/` — 예전 버전이 만든 worktree(계속 쓸 수 있다). 새 worktree 는 worktree 폴더(기본 `~/atelier/worktrees/`)에 만든다.
-- `orchestration/<runId>.jsonl` — Run 의 이벤트 원본(재시작 복구)
-- `control.sock` · `control.json` — atelier CLI 가 붙는 소켓과 그 위치
-- `hooks/<세션 id>.jsonl` — 터미널 모드 권한 대기 힌트용 훅 로그(CLI 종료 시 삭제)
-
+`~/Library/Application Support/Atelier/` (if the old `ai-workbench/` folder exists, it's moved automatically on first launch). You can open the folder directly from Settings > General > Storage location.
+- `workspaces.json` — workspace and tab metadata (title, provider, policy, provider session id)
+- `threads/<tabId>.jsonl` — per-tab event log (replayed on restart, reopening closed tabs) · `threads/<tabId>.queue.json` — instructions queued while working
+- `renderer-state.json` — input box drafts, open editor files, split view, terminal layout (written the moment they change) · `schedules.json` — scheduled prompts
+- `browser-session-cookies.json` — cookies for keeping in-app browser logins (deleted if you turn it off in settings)
+- `cli-overrides.json` — manual CLI executable paths
+- `attachments/` — pasted images
+- `usage-cache.json` — transcript scan cache (incremental by file mtime/size)
+- `inapp-sessions.json` — provider session ids started in the app (to tell in-app from terminal in usage)
+- `settings.json` — monthly budget and so on · `pricing.json` (optional) — overrides the model price table. The format is `DEFAULT_PRICING` in `src/shared/usage.ts`
+- `logs/main.log` — main console (SDK errors, unhandled renderer exceptions, process crashes). It rotates to `main.1.log` and `main.2.log` every 5MB.
+  Open it directly with "Open folder" at the bottom of the settings screen.
+- `slash-commands.json` — cache of the Claude slash command list per workspace (cwd)
+- `snippets.json` — prompt snippets · `rate-limits.json` — the last observed subscription limits
+- `worktrees/<repo>/<slug>/` — worktrees created by older versions (still usable). New worktrees go in the worktree folder (by default `~/atelier/worktrees/`).
+- `orchestration/<runId>.jsonl` — the raw events of a Run (restart recovery)
+- `control.sock` · `control.json` — the socket the atelier CLI connects to, and its location
+- `hooks/<session id>.jsonl` — hook log for the terminal-mode permission-waiting hint (deleted when the CLI exits)
