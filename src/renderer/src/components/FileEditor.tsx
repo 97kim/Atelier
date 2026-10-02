@@ -29,7 +29,7 @@ export function FileEditor({
   path: string;
   /** 숨은 탭도 마운트를 유지해(undo·스크롤 보존) visible 로만 표시를 끈다. */
   visible: boolean;
-  /** HTML 파일의 "브라우저에서 보기": 미리보기 URL 을 앱 안 브라우저 탭으로 연다. */
+  /** HTML 파일의 "브라우저에서 보기": 미리보기 URL 을 인앱 브라우저 탭으로 연다. */
   onOpenBrowser?: (url: string) => void;
   /** "채팅에 첨부": 선택 영역을 경로:줄 머리말과 코드 펜스로 입력창에 잇는다. */
   onAttach?: (block: string) => void;
@@ -54,7 +54,7 @@ export function FileEditor({
   // 마크다운은 미리보기로 열고, "편집" 으로 전환한다. 에디터는 숨겨 둘 뿐 내리지 않아 전환해도 커서·undo 가 남는다.
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(path);
   const [mdView, setMdView] = useState<"preview" | "edit">("preview");
-  // HTML(·SVG)은 앱 안 브라우저 탭에서 렌더해 본다. 저장하면 열려 있는 미리보기 탭이 새로고침된다.
+  // HTML(·SVG)은 인앱 브라우저 탭에서 렌더해 본다. 저장하면 열려 있는 미리보기 탭이 새로고침된다.
   const isHtml = /\.(html?|xhtml|svg)$/i.test(path);
   const [attachNonce, setAttachNonce] = useState(0);
   const [attachMsg, setAttachMsg] = useState<string | null>(null);

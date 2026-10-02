@@ -1,4 +1,4 @@
-// 에이전트가 앱 안 브라우저를 직접 조작한다: atelier browser read / click / fill.
+// 에이전트가 인앱 브라우저를 직접 조작한다: atelier browser read / click / fill.
 // CLI 로만 부른다 — 모델이 실제로 쓰게 될 통로가 그것이기 때문이다.
 const path = require("path"), http = require("http"), { execFileSync } = require("child_process");
 const E2E = __dirname;

@@ -105,7 +105,7 @@ export interface AppSettingsDto {
   /** 응답이 끝났을 때 macOS 알림: always = 항상, unfocused = 창이 포커스 밖이거나 다른 탭을 볼 때, off = 안 함. */
   notifyOnDone: NotifyOnDone;
   /**
-   * 앱 안 브라우저의 로그인을 앱을 껐다 켜도 유지한다. 로그인 세션은 대개 만료 없는 세션 쿠키라
+   * 인앱 브라우저의 로그인을 앱을 껐다 켜도 유지한다. 로그인 세션은 대개 만료 없는 세션 쿠키라
    * Chromium 이 종료할 때 버린다 — 끌 때 받아 적고 켤 때 되돌려 놓는다(크롬의 "이전 세션 계속하기").
    * 로그인 증표를 앱 데이터 디렉토리에 두는 일이므로 끌 수 있고, 끄면 적어 둔 것을 지운다.
    */
@@ -949,9 +949,9 @@ export interface WorkbenchApi {
     onChanged(cb: (jobs: BackgroundJobDto[]) => void): () => void;
   };
   browser: {
-    /** 기본 브라우저로 연다(http/https/mailto 만). 앱 안 브라우저 탭은 렌더러의 <webview> 가 맡는다. */
+    /** 기본 브라우저로 연다(http/https/mailto 만). 인앱 브라우저 탭은 렌더러의 <webview> 가 맡는다. */
     openExternal(url: string): Promise<boolean>;
-    /** 에디터의 HTML 을 앱 안 브라우저로 볼 로컬 미리보기 URL(저장소 루트를 서비스하는 127.0.0.1 서버). 루트 밖이면 error. */
+    /** 에디터의 HTML 을 인앱 브라우저로 볼 로컬 미리보기 URL(저장소 루트를 서비스하는 127.0.0.1 서버). 루트 밖이면 error. */
     previewUrl(cwd: string, path: string): Promise<{ ok: true; url: string } | { ok: false; error: string }>;
     /** 이 브라우저 탭(webview 의 webContents id)에서 최근 실패한 요청. 진단 첨부가 읽고 비운다. */
     /** 이 채팅 탭에서 지금 보고 있는 브라우저를 main 에 알린다(에이전트 조작용). 없어지면 null. */

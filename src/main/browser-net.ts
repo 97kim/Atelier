@@ -1,4 +1,4 @@
-// 앱 안 브라우저(<webview>, partition "persist:atelier-browser")의 실패한 요청을 모은다.
+// 인앱 브라우저(<webview>, partition "persist:atelier-browser")의 실패한 요청을 모은다.
 // webRequest 는 session 에 하나뿐이고 같은 이벤트에 마지막 리스너만 살아남는다 — 그래서 여기 한 곳에서만 건다.
 // 어느 브라우저 탭의 요청인지는 details.webContentsId 로 갈라 담는다(탭마다 링 버퍼).
 import { session, type Session } from "electron";

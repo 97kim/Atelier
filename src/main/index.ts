@@ -592,7 +592,7 @@ const UNAPPROVED_DIR = "디렉토리 선택 창으로 고른 경로만 쓸 수 �
  * 탭 cwd·워크스페이스 경로를 바꾸는 IPC 는 이 안의 경로만 받는다 — 그래야 knownCwds() 가 렌더러 마음대로 늘어나지 않는다.
  */
 const approvedRoots = new Set<string>();
-/** 에디터의 HTML 을 앱 안 브라우저로 보여 주는 로컬 정적 서버(처음 쓸 때 뜬다). */
+/** 에디터의 HTML 을 인앱 브라우저로 보여 주는 로컬 정적 서버(처음 쓸 때 뜬다). */
 const previewServer = new PreviewServer();
 /** 검증 실행기 — 결과는 verify 이벤트로 탭 기록에 남는다(sessions 가 준비된 뒤 note 로 이어진다). */
 const verifyRunner = new VerifyRunner((tabId, event) => sessions?.note(tabId, event));
@@ -2589,7 +2589,7 @@ function createWindow(): BrowserWindow {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      // 앱 안 브라우저 탭(<webview>). 붙을 때의 제한은 아래 web-contents-created 의 will-attach-webview 에서 건다.
+      // 인앱 브라우저 탭(<webview>). 붙을 때의 제한은 아래 web-contents-created 의 will-attach-webview 에서 건다.
       webviewTag: true,
     },
   });
