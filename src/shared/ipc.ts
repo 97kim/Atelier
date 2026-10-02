@@ -93,10 +93,15 @@ export type WarmTarget = "active" | "off";
 
 /** 앱 동작 설정(userData/settings.json). 링크 열기 방식은 renderer 의 localStorage 에 있어 여기 없다. */
 import type { ThemeMode } from "./theme";
+import type { LanguageSetting, Locale } from "./i18n/locale";
 
 export interface AppSettingsDto {
   /** 화면 테마. system 이면 macOS 화면 모드를 따른다. */
   theme: ThemeMode;
+  /** 표시 언어 설정. system 이면 macOS 의 선호 언어를 따른다. */
+  language: LanguageSetting;
+  /** language 를 해석한 실제 표시 언어(읽기 전용 — main 이 정한다). */
+  resolvedLocale: Locale;
   warmTarget: WarmTarget;
   /** 턴 없이 이만큼(분) 지나면 provider 프로세스를 내린다. */
   sessionIdleMinutes: number;
@@ -162,6 +167,7 @@ export const IPC = {
   appPickWorktreeDir: "app:pick-worktree-dir",
   appSettingsGet: "app:settings-get",
   appSettingsSet: "app:settings-set",
+  appSettingsChanged: "app:settings-changed",
   appUpdateCheck: "app:update-check",
   appUpdateRun: "app:update-run",
   appUpdateStatus: "app:update-status",
@@ -765,6 +771,8 @@ export interface WorkbenchApi {
     getSettings(): Promise<AppSettingsDto>;
     /** 바꾼 값은 바로 적용된다(유휴 시간은 지금 놀고 있는 프로세스에도). */
     setSettings(patch: Partial<AppSettingsDto>): Promise<AppSettingsDto>;
+    /** 설정이 바뀌면(어느 창에서 바꿨든) 새 값을 받는다. 표시 언어를 따라가는 데 쓴다. */
+    onSettingsChanged(listener: (settings: AppSettingsDto) => void): () => void;
     /** `atelier` CLI(제어 소켓)가 "이 탭에서 파일/브라우저를 열어라" 를 밀어 넣을 때. */
     onControlOpen(listener: (req: ControlOpenDto) => void): () => void;
     /** `atelier` 명령을 ~/.local/bin 에 설치한다(앱 동봉 스크립트를 앱의 node 로 실행하는 셸 스크립트). */

@@ -63,6 +63,9 @@ export function emptyModel(): WorkbenchModel {
   return { version: 1, workspaces: [], tabs: [], openTabIds: [], activeTabId: null };
 }
 
+/** 이름 없는 탭에 보이는 제목. 제목이 "없는지"는 이 문구와 비교하지 말고 tab.title 로 판단한다. */
+export const UNTITLED_TAB = "새 세션";
+
 /**
  * 이 경로를 작업 경로로 쓰는 탭 전부. worktree 탭에서 분기하면 분기 탭도 같은 폴더를 쓰지만 worktree 정보는 없다 —
  * 하나만 찾으면(닫힌 원본을 먼저 만나면) 열린 분기 탭을 놓쳐 쓰는 중인 폴더를 지운다. 열린 탭을 앞에 둔다.
@@ -73,7 +76,7 @@ export function tabsUsingPath(model: WorkbenchModel, path: string): TabMeta[] {
 }
 
 export function tabTitle(tab: TabMeta): string {
-  return tab.title?.trim() || "새 세션";
+  return tab.title?.trim() || UNTITLED_TAB;
 }
 
 export function workspaceOf(m: WorkbenchModel, tabId: string): Workspace | null {

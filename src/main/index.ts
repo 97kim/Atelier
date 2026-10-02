@@ -18,6 +18,8 @@ import {
 } from "electron";
 import type { PermissionAnswer } from "@shared/chat-events";
 import { isThemeMode } from "@shared/theme";
+import { isLanguageSetting, resolveLocale, LANGUAGE_SETTING_DEFAULT } from "@shared/i18n/locale";
+import { setMainLocale } from "./i18n";
 import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type UpdateCheckDto, type UpdateRunResult, type UpdateStatusDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type CompactResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, type ManagedWorktreeDto, SearchResultDto } from "@shared/ipc";
 import {
   DEFAULT_PRICING,
@@ -1155,8 +1157,12 @@ function appSettings(): AppSettingsDto {
     const n = Number(v);
     return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
   };
+  const language = isLanguageSetting(raw.language) ? raw.language : LANGUAGE_SETTING_DEFAULT;
   return {
     theme: isThemeMode(raw.theme) ? raw.theme : "system",
+    language,
+    // "시스템 따라가기"는 앱 로케일(app.getLocale)이 아니라 macOS 의 선호 언어 목록을 본다
+    resolvedLocale: resolveLocale(language, app.getPreferredSystemLanguages()),
     warmTarget: raw.warmTarget === "off" ? "off" : "active",
     sessionIdleMinutes: clamp(raw.sessionIdleMinutes, SESSION_IDLE_MINUTES_MIN, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_DEFAULT),
     // 환경변수는 설정 파일에 값이 없을 때의 기본값으로만 쓴다.
@@ -1172,6 +1178,7 @@ function appSettings(): AppSettingsDto {
 function applyAppSettings(s: AppSettingsDto) {
   // 네이티브 UI(다이얼로그·컨텍스트 메뉴·스크롤바)도 같은 테마로. 렌더러는 자기 설정값으로 따로 칠한다.
   nativeTheme.themeSource = s.theme;
+  setMainLocale(s.resolvedLocale);
   setClaudeSessionIdleMs(s.sessionIdleMinutes * 60_000);
   setCodexSessionIdleMs(s.sessionIdleMinutes * 60_000);
   sessions.setMaxConcurrent(s.maxConcurrent);
@@ -1676,6 +1683,10 @@ function registerIpc() {
       if (!isThemeMode(patch.theme)) throw new Error("잘못된 테마");
       next.theme = patch.theme;
     }
+    if (patch.language !== undefined) {
+      if (!isLanguageSetting(patch.language)) throw new Error("잘못된 언어");
+      next.language = patch.language;
+    }
     if (patch.warmTarget !== undefined) {
       if (patch.warmTarget !== "active" && patch.warmTarget !== "off") throw new Error("잘못된 예열 대상");
       next.warmTarget = patch.warmTarget;
@@ -1704,6 +1715,8 @@ function registerIpc() {
     store.saveSettings(next);
     const applied = appSettings();
     applyAppSettings(applied);
+    // 다른 창과 설정 화면 밖의 화면도 새 값을 받는다(표시 언어를 따라가게)
+    sendAll(IPC.appSettingsChanged, applied);
     // 예열을 켰으면 보고 있는 탭을 지금 띄워 둔다
     if (patch.warmTarget === "active") {
       const active = workspaces.state().model.activeTabId;

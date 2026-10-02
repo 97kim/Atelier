@@ -19,6 +19,7 @@ import {
   type SessionSnapshotDto,
   type TerminalInfoDto,
   type SwitchProviderDto,
+  type AppSettingsDto,
   type WorkbenchApi,
 } from "@shared/ipc";
 
@@ -43,6 +44,11 @@ const api: WorkbenchApi = {
       ipcRenderer.send(IPC.rendererError, error),
     getSettings: () => ipcRenderer.invoke(IPC.appSettingsGet),
     setSettings: (patch) => ipcRenderer.invoke(IPC.appSettingsSet, patch),
+    onSettingsChanged: (listener) => {
+      const handler = (_e: IpcRendererEvent, settings: AppSettingsDto) => listener(settings);
+      ipcRenderer.on(IPC.appSettingsChanged, handler);
+      return () => ipcRenderer.removeListener(IPC.appSettingsChanged, handler);
+    },
     onControlOpen: (listener) => {
       const handler = (_e: IpcRendererEvent, req: ControlOpenDto) => listener(req);
       ipcRenderer.on(IPC.controlOpen, handler);

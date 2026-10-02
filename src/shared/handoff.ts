@@ -3,6 +3,9 @@
 
 import type { ChatEvent } from "./chat-events";
 
+/** 인계서에서 어시스턴트 발화 단락의 머리말(모델에게 보내는 글이라 번역 대상이 아니다). */
+const ASSISTANT_HEADING = "### 어시스턴트";
+
 export interface HandoffStats {
   /** 사용자 메시지 + 완료된 어시스턴트 턴 수. */
   messages: number;
@@ -136,10 +139,11 @@ export function buildHandoff(
     })
     .map((l) =>
       l.startsWith(" text:")
-        ? `### 어시스턴트\n${clip((textBlocks.get(l.slice(6)) ?? "").trim(), 1600)}`
+        ? `${ASSISTANT_HEADING}\n${clip((textBlocks.get(l.slice(6)) ?? "").trim(), 1600)}`
         : l,
     )
-    .filter((l) => l.trim() !== "### 어시스턴트")
+    // 내용이 빈 단락은 머리말만 남는다 — 버린다
+    .filter((l) => l.trim() !== ASSISTANT_HEADING)
     // 성공한 툴 결과는 마지막 RECENT_RESULTS 개만 남긴다.
     .filter((l) => {
       if (!l.startsWith(" result:")) return true;

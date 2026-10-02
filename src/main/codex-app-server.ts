@@ -27,6 +27,22 @@ interface Pending {
 
 const REQUEST_TIMEOUT_MS = 120_000;
 
+/**
+ * app-server 프로세스 자체의 실패. 문구는 표시용이고(번역될 수 있다) 판단은 code 로 한다 —
+ * 어댑터가 "app-server 를 못 쓰니 exec 로 폴백" 을 문구 정규식이 아니라 이 값으로 정한다.
+ */
+export class AppServerError extends Error {
+  constructor(
+    readonly code: "exited" | "no_response",
+    message: string,
+    /** no_response 일 때 답이 없던 요청. */
+    readonly method?: string,
+  ) {
+    super(message);
+    this.name = "AppServerError";
+  }
+}
+
 export class CodexAppServer {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private buffer = "";
@@ -53,7 +69,7 @@ export class CodexAppServer {
       this.ended = true;
       for (const p of this.pending.values()) {
         clearTimeout(p.timer);
-        p.reject(new Error(error ?? `codex app-server 가 끝났습니다 (${code ?? "?"})`));
+        p.reject(new AppServerError("exited", error ?? `codex app-server 가 끝났습니다 (${code ?? "?"})`));
       }
       this.pending.clear();
       this.handlers.onExit(code, error);
@@ -73,7 +89,7 @@ export class CodexAppServer {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`codex app-server 응답 없음: ${method}`));
+        reject(new AppServerError("no_response", `codex app-server 응답 없음: ${method}`, method));
       }, timeoutMs);
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       this.write({ jsonrpc: "2.0", id, method, params });

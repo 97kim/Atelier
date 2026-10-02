@@ -5,7 +5,7 @@
 import type { ChatEvent, PermissionAnswer, PermissionPolicy, PermissionRequestEvent } from "@shared/chat-events";
 import { buildCodexInput, type StoredChatImage } from "./chat-attachments";
 import { mapCodexEvent } from "./codex-events";
-import { CodexAppServer, classifyResumeFailure, mapAppServerNotification, normalizeFileChanges, resumeConflictMessage, type AppServerTurnContext, type FileChangeDto } from "./codex-app-server";
+import { AppServerError, CodexAppServer, classifyResumeFailure, mapAppServerNotification, normalizeFileChanges, resumeConflictMessage, type AppServerTurnContext, type FileChangeDto } from "./codex-app-server";
 import { importCodexSdk } from "./esm";
 
 type ThreadOptions = import("@openai/codex-sdk").ThreadOptions;
@@ -310,7 +310,9 @@ export async function warmCodexSession(runtime: CodexRuntime, req: CodexWarmRequ
 function markUnavailableIfStartupFailure(e: unknown, log?: (line: string) => void) {
   const msg = e instanceof Error ? e.message : String(e);
   // 서브커맨드가 없거나(옛 CLI) 프로세스를 못 띄운 경우만 폴백으로 고정. 스레드/턴 오류는 그때그때.
-  if (/unrecognized subcommand|unexpected argument|ENOENT|spawn|app-server 가 끝났습니다|응답 없음: initialize/i.test(msg)) {
+  // 우리 쪽 실패는 code 로, CLI·OS 가 낸 원문은 문구로 판독한다.
+  const startup = e instanceof AppServerError && (e.code === "exited" || (e.code === "no_response" && e.method === "initialize"));
+  if (startup || /unrecognized subcommand|unexpected argument|ENOENT|spawn/i.test(msg)) {
     appServerUnavailable = msg;
     log?.(`[codex] app-server 를 쓸 수 없어 exec 로 폴백합니다: ${msg}`);
   }

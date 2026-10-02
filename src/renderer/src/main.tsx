@@ -8,6 +8,7 @@ import { EDITOR_STORAGE_KEY, flushEditorTabsStorage } from "./editor-tabs";
 import { flushComposerDrafts } from "./composer-draft";
 import { hydrateKv, kvGet, kvSet } from "./kv-store";
 import { applyThemeMode } from "./theme";
+import { applyLocale, initI18n } from "./i18n";
 
 // 종료 직전: 모아 두었던 초안 저장을 지금 쓴다(마지막 300ms 안의 입력·버린 초안이 유실·재등장하지 않게).
 window.addEventListener("beforeunload", () => {
@@ -59,6 +60,9 @@ async function start() {
   if (stateResult.status === "fulfilled") entries = stateResult.value;
   else console.error("[state] load 실패:", stateResult.reason);
   applyThemeMode(settingsResult.status === "fulfilled" ? settingsResult.value.theme : "system");
+  // 번역도 첫 렌더 전에 준비한다. 설정을 못 읽으면 한국어로(지금까지의 동작).
+  initI18n(settingsResult.status === "fulfilled" ? settingsResult.value.resolvedLocale : "ko");
+  window.workbench.app.onSettingsChanged((s) => applyLocale(s.resolvedLocale));
   hydrateKv(entries, (key, value) => window.workbench.state.set(key, value));
   migrateLocalStorageDrafts();
   createRoot(document.getElementById("root")!).render(

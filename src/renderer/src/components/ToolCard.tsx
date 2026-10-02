@@ -1,5 +1,7 @@
 import { useContext, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ToolBlock } from "@shared/session-state";
+import { isToolActive, isToolFailed, isToolWaiting, toolState } from "@shared/tool-state";
 import { DiffView } from "./DiffView";
 import { useOpenFile } from "./FileViewer";
 import { FileChangeList, questionsOf } from "./PermissionPrompt";
@@ -133,29 +135,12 @@ export function ToolCard({ block }: { block: ToolBlock }) {
     const line = Math.max(1, offset ?? 1);
     return { line, endLine: limit !== null && limit > 0 ? line + limit - 1 : undefined };
   })();
-  // 입력을 만들다 턴이 끝난 도구는 partial 인 채로 결과(오류)가 붙는다 — 그때는 "실패" 로
-  const state = block.partial && !block.result
-    ? "입력 생성 중"
-    : block.permission === "pending"
-      ? block.name === "AskUserQuestion" ? "답변 대기" : "권한 대기"
-      : block.permission === "denied"
-        ? block.name === "AskUserQuestion" ? "건너뜀" : "거부됨"
-        : block.result
-          ? block.result.isError
-            ? "실패"
-            : "완료"
-          : "실행 중";
-  const waiting = state === "권한 대기" || state === "답변 대기";
-  const tone =
-    state === "실패" || state === "거부됨"
-      ? "text-err"
-      : state === "완료"
-        ? "text-ok"
-        : waiting
-          ? "text-warn"
-          : "text-accent";
-  // 진행 중(입력 생성·실행·권한 대기)이면 라벨에 shimmer 를 흘리고 경과 시간을 센다
-  const active = state === "입력 생성 중" || state === "실행 중" || waiting;
+  const { t } = useTranslation();
+  const state = toolState(block);
+  const waiting = isToolWaiting(state);
+  const failed = isToolFailed(state);
+  const tone = failed ? "text-err" : state === "done" ? "text-ok" : waiting ? "text-warn" : "text-accent";
+  const active = isToolActive(state);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!active) return;
@@ -173,16 +158,16 @@ export function ToolCard({ block }: { block: ToolBlock }) {
       >
         <span
           className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-            state === "완료"
+            state === "done"
               ? "border-ok/40 bg-ok-bg text-ok"
-              : state === "실패" || state === "거부됨"
+              : failed
                 ? "border-err/40 bg-err-bg text-err"
                 : active
                   ? "border-accent/40 bg-accent-tint text-accent"
                   : "border-line bg-panel-2 text-muted"
           }`}
         >
-          {state === "완료" ? (
+          {state === "done" ? (
             <Icon name="check" size={11} strokeWidth={2.4} />
           ) : (
             <Icon name={iconFor(block.name)} size={11} />
@@ -232,7 +217,7 @@ export function ToolCard({ block }: { block: ToolBlock }) {
             className={active ? "shimmer" : ""}
             style={active ? ({ "--shimmer-base": waiting ? "var(--color-warn)" : "var(--color-accent)", "--shimmer-hi": "var(--color-fg)" } as React.CSSProperties) : undefined}
           >
-            {state}
+            {t(`toolCard.state.${state}`)}
           </span>
           {active && elapsed >= 2 && (
             <span className="mono normal-case tracking-normal text-muted-2" data-tool-elapsed>

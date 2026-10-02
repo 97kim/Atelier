@@ -1,0 +1,84 @@
+#!/usr/bin/env node
+// 코드에 직접 들어 있는 한국어 문구를 찾는다(주석은 세지 않는다). 번역 사전으로 옮길 대상을 가늠하고,
+// 옮긴 영역에 새 하드코딩이 생기지 않았는지 볼 때 쓴다. 실행 중에는 한국어 fallback 이 영어 누락을 가리므로 정적으로 본다.
+//
+//   node scripts/check-i18n.mjs                 영역별 개수와 파일별 상위 목록
+//   node scripts/check-i18n.mjs --list <경로>    그 경로 아래의 문구를 위치와 함께 나열
+//   node scripts/check-i18n.mjs --strict <경로>… 그 경로들에 문구가 하나라도 있으면 실패(옮긴 영역 지키기)
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import ts from "typescript";
+
+const ROOT = join(import.meta.dirname, "..");
+const AREAS = ["src/renderer", "src/main", "src/shared", "src/preload", "cli"];
+// 번역 대상이 아닌 곳: 사전 자체, 테스트, 모델에게 보내는 프롬프트(4단계에서 응답 언어 정책으로 다룬다)
+const SKIP = [/\.test\.tsx?$/, /^src\/shared\/i18n\//, /\.d\.ts$/];
+const HANGUL = /[가-힣]/;
+
+function files(dir) {
+  const out = [];
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) out.push(...files(p));
+    else if (/\.(tsx?|cjs|mjs)$/.test(name)) out.push(p);
+  }
+  return out;
+}
+
+function scan(file) {
+  const text = readFileSync(file, "utf8");
+  const kind = file.endsWith("x") ? ts.ScriptKind.TSX : /\.(cjs|mjs)$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
+  const hits = [];
+  const add = (node, value) => {
+    if (!HANGUL.test(value)) return;
+    const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
+    hits.push({ line: line + 1, text: value.replace(/\s+/g, " ").trim().slice(0, 80) });
+  };
+  const visit = (node) => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) add(node, node.text);
+    else if (ts.isTemplateExpression(node)) add(node, node.head.text + node.templateSpans.map((s) => s.literal.text).join("…"));
+    else if (ts.isJsxText(node)) add(node, node.text);
+    else if (ts.isRegularExpressionLiteral(node)) add(node, node.text);
+    // 템플릿은 통째로 한 번만 센다
+    if (!ts.isTemplateExpression(node)) ts.forEachChild(node, visit);
+    else for (const s of node.templateSpans) ts.forEachChild(s.expression, visit), visit(s.expression);
+  };
+  visit(sf);
+  return hits;
+}
+
+const args = process.argv.slice(2);
+const mode = args[0] === "--list" ? "list" : args[0] === "--strict" ? "strict" : "summary";
+const targets = mode === "summary" ? AREAS : args.slice(1);
+if (mode !== "summary" && targets.length === 0) {
+  console.error("경로를 주세요.");
+  process.exit(2);
+}
+
+let total = 0;
+const perFile = [];
+for (const target of targets) {
+  const abs = join(ROOT, target);
+  const list = statSync(abs).isDirectory() ? files(abs) : [abs];
+  let areaCount = 0;
+  for (const f of list) {
+    const rel = relative(ROOT, f);
+    if (SKIP.some((re) => re.test(rel))) continue;
+    const hits = scan(f);
+    if (hits.length === 0) continue;
+    areaCount += hits.length;
+    perFile.push({ rel, hits });
+  }
+  total += areaCount;
+  if (mode === "summary") console.log(`${String(areaCount).padStart(5)}  ${target}`);
+}
+
+if (mode === "summary") {
+  console.log(`${String(total).padStart(5)}  합계\n\n파일별 상위 15개`);
+  for (const f of perFile.sort((a, b) => b.hits.length - a.hits.length).slice(0, 15)) console.log(`${String(f.hits.length).padStart(5)}  ${f.rel}`);
+} else {
+  for (const f of perFile) for (const h of f.hits) console.log(`${f.rel}:${h.line}  ${h.text}`);
+  console.log(`\n${total}개`);
+  if (mode === "strict" && total > 0) process.exit(1);
+}

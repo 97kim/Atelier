@@ -1,6 +1,7 @@
 // 팬아웃(지시 하나 → 격리 세션 N개)의 순수 부분 — 세션 이름·제목·요약·비교용 파일 합집합. 실행은 main/index.ts startFanout.
 import type { FanoutVariant } from "./chat-events";
 import type { GitChangeDto } from "./ipc";
+import { UNTITLED_TAB } from "./workspace-model";
 
 export const FANOUT_MAX_VARIANTS = 4;
 export const FANOUT_MIN_VARIANTS = 2;
@@ -17,7 +18,7 @@ export function variantLabel(index: number): string {
 /** 세션 탭 제목: "팬아웃 A · Codex". 원래 탭 제목이 있으면 뒤에 붙인다. */
 export function fanoutTabTitle(label: string, provider: "claude" | "codex", originTitle?: string | null): string {
   const base = `팬아웃 ${label} · ${PROVIDER_NAME[provider]}`;
-  return originTitle && originTitle !== "새 세션" ? `${base} · ${originTitle.slice(0, 24)}` : base;
+  return originTitle && originTitle !== UNTITLED_TAB ? `${base} · ${originTitle.slice(0, 24)}` : base;
 }
 
 export function excerpt(text: string, max: number): string {

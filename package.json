@@ -19,6 +19,7 @@
     "test": "TSX_TSCONFIG_PATH=tsconfig.node.json node --import tsx --test --test-force-exit 'src/**/*.test.ts'",
     "package": "yarn build && electron-builder --config electron-builder.config.cjs --publish never",
     "release": "scripts/release.sh",
+    "i18n:check": "node scripts/check-i18n.mjs",
     "postinstall": "node node_modules/electron/install.js && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper"
   },
   "dependencies": {
@@ -43,9 +44,11 @@
     "codemirror": "^6.0.2",
     "diff": "^9.0.0",
     "highlight.js": "^11.12.0",
+    "i18next": "^26.4.2",
     "node-pty": "1.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.15",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
