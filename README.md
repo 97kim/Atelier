@@ -1,28 +1,157 @@
-# Atelier
+<h1 align="center">
+  <img src="build/icon-1024.png" alt="" width="72" /><br/>
+  Atelier
+</h1>
 
-**에이전트가 다른 에이전트에게 일을 맡기고, 결과를 받아 와요.**
+<p align="center">
+  <a href="https://github.com/97kim/Atelier/releases"><img src="https://img.shields.io/github/v/release/97kim/Atelier?label=release&color=4f5bd5" alt="최신 릴리즈" /></a>
+  <img src="https://img.shields.io/badge/license-MIT-4f5bd5" alt="라이선스: MIT" />
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-4f5bd5" alt="지원 환경: macOS Apple Silicon" />
+</p>
 
-Atelier는 Claude Code와 Codex를 워크스페이스의 탭으로 띄우는 macOS 앱이에요.
-한 탭의 에이전트가 다른 탭을 열어 일을 넘기고 결과를 읽어 오고, 그 과정을 CLI 출력 대신 권한 카드·diff·툴 카드로 한눈에 보여 줘요.
+<p align="center">
+  <strong>에이전트가 다른 에이전트에게 일을 맡기고, 결과를 받아 와요.</strong><br/>
+  Claude Code와 Codex를 워크스페이스의 탭으로 띄우는 macOS 앱이에요.
+</p>
 
-[왜 Atelier인가요](#왜-터미널-대신-atelier인가요) · [설치](#설치) · [첫 작업 시작하기](#첫-작업-시작하기) · [기능 안내](docs/GUIDE.md) · [릴리즈](https://github.com/97kim/Atelier/releases) · [문제 신고](https://github.com/97kim/Atelier/issues)
+<p align="center">
+  <a href="#설치"><strong>설치</strong></a> · <a href="#첫-작업-시작하기">첫 작업 시작하기</a> · <a href="docs/GUIDE.md">기능 안내</a> · <a href="https://github.com/97kim/Atelier/releases">릴리즈</a> · <a href="https://github.com/97kim/Atelier/issues">문제 신고</a>
+</p>
 
-![Claude가 버그를 고친 뒤 atelier CLI로 Codex 탭을 직접 열어 남은 수정과 테스트 추가를 맡기고, Codex가 끝내면 결과를 받아 테스트하고 정리하는 장면](docs/images/demo-delegate.gif)
+<p align="center">
+  <img src="docs/images/demo-delegate.gif" alt="Claude가 버그를 고친 뒤 atelier CLI로 Codex 탭을 직접 열어 남은 수정과 테스트 추가를 맡기고, Codex가 끝내면 결과를 받아 테스트하고 정리하는 장면" width="960" />
+</p>
 
-*Claude에게 "고친 다음, 수량이 없을 때 처리와 그 테스트는 Codex에게 맡겨 줘"라고만 했어요. Claude가 직접 Codex 탭을 열어 일을 넘기고(오른쪽), Codex가 끝내면 결과를 받아 테스트하고 정리해요. (기다리는 구간은 빠르게 감았어요)*
+<p align="center">
+  <sub>Claude에게 "고친 다음, 수량이 없을 때 처리와 그 테스트는 Codex에게 맡겨 줘"라고만 했어요. Claude가 직접 Codex 탭을 열어 일을 넘기고, 끝나면 결과를 받아 테스트하고 정리해요. (기다리는 구간은 빠르게 감았어요)</sub>
+</p>
 
-Atelier 전용 계정은 필요 없어요. 로그인해 둔 `claude`·`codex` CLI를 앱이 찾아서 쓰고, 모델과의 통신은 Claude Code·Codex가 평소처럼 처리해요.
+Atelier 전용 계정은 필요 없어요. 로그인해 둔 `claude`·`codex` CLI를 앱이 찾아서 쓰니, `CLAUDE.md`·스킬·MCP 서버 같은 설정이 터미널에서 쓸 때와 똑같이 적용돼요.
 
-## 왜 터미널 대신 Atelier인가요
+## 에이전트가 직접 일을 맡겨요
 
-터미널에서 `claude`와 `codex`를 따로 띄워 써도 되지만, 둘을 함께 쓰기 시작하면 창을 오가는 일이 많아져요.
+앱 안의 Claude Code·Codex가 `atelier` CLI로 새 탭을 열어 일을 넘기고, 끝나면 결과를 읽어 와요. 사람은 처음 요청만 하면 돼요.
+설정 → 일반 → **CLI와 에이전트 스킬**에서 CLI와 스킬을 설치해 두면 에이전트가 이 사용법을 알게 돼요. 같은 명령을 터미널에서 직접 써도 돼요.
 
-- **탭끼리 일을 주고받아요**: 터미널 창 두 개를 오가며 복사해 붙이지 않아도, 에이전트가 직접 다른 탭에 일을 맡기고 결과를 받아 와요.
-- **CLI 대신 보기 좋은 화면**: 권한 요청은 카드로, 바뀐 코드는 diff로, 실행한 명령은 툴 카드로 쌓여서 흘러가는 터미널 출력을 쫓지 않아도 돼요.
-- **기다리는 세션을 한눈에**: 여러 세션이 권한 승인이나 답을 기다리면 사이드바와 알림으로 모아 보여 주고, 승인은 카드에서 바로 해요.
-- **서로 부딪히지 않게**: 같은 저장소에서 여러 세션을 돌려도 격리 세션(git worktree)으로 파일이 섞이지 않아요.
-- **확인까지 한 창에서**: diff, 테스트, 커밋, 브라우저가 같은 창에 있어서 결과를 확인하느라 다른 앱으로 넘어가지 않아요.
-- **쓰던 설정 그대로**: 내 CLI를 그대로 실행하니 `CLAUDE.md`, 스킬, MCP 서버 같은 설정이 터미널에서 쓸 때와 똑같이 적용돼요.
+```
+atelier tab new --provider codex --title "리뷰" --prompt "방금 바꾼 코드를 리뷰해 줘"
+atelier tab send --tab 리뷰 --text "테스트도 돌려 줘" --wait
+atelier tab read --tab 리뷰 --last 3
+```
+
+## 기능
+
+<table>
+<tr>
+<td width="42%" valign="middle">
+
+### 버튼 하나로 교차 리뷰
+
+헤더의 `···` → "교차 리뷰"를 누르면 지금 탭의 변경을 반대쪽 에이전트의 새 탭에 보내요. 리뷰 결과는 원래 탭에 카드로 돌아와요.
+
+</td>
+<td width="58%"><img src="docs/images/demo-cross-review.gif" alt="Claude가 고친 뒤 교차 리뷰를 누르면 Codex 리뷰 탭이 변경을 리뷰하고 결과가 원래 탭의 카드로 돌아오는 장면" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 큰 작업은 워커들에게 나눠 맡겨요
+
+코디네이터 탭이 작업을 나눠 워커 탭들에 맡겨요. 워커는 막히면 묻고, 끝나면 보고해요. 작업 순서와 사람이 결정할 지점도 정해 둘 수 있어요.
+
+</td>
+<td width="58%"><img src="docs/images/orchestration.png" alt="코디네이터 탭의 오케스트레이션 카드에 Claude 워커는 성공, Codex 워커는 진행 중으로 표시된 화면" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 같은 요청을 여러 에이전트에 보내고 비교해요
+
+팬아웃은 같은 요청을 격리된 git worktree의 여러 세션에 동시에 보내요. 결과 diff를 나란히 비교하고 마음에 드는 것만 원본에 가져와요.
+
+</td>
+<td width="58%"><img src="docs/images/fanout.png" alt="같은 버그 수정 요청에 대한 Claude Code와 Codex의 diff를 나란히 비교하는 화면" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 무엇을 하려는지 먼저 보여 줘요
+
+파일을 바꾸거나 명령을 실행하기 전에 권한 카드로 물어봐요. 읽은 파일, 실행한 명령, 바꾼 코드는 툴 카드로 쌓여서 터미널 출력을 쫓지 않아도 돼요.
+
+</td>
+<td width="58%"><img src="docs/images/hero.png" alt="Claude가 테스트를 돌리기 전에 명령 실행 권한을 묻는 화면" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 바뀐 걸 확인하고 커밋해요
+
+테스트·빌드 명령을 버튼 하나로 돌리면 결과가 대화에 카드로 남아요. 바뀐 파일을 diff로 보고, 커밋 메시지 초안을 받아 앱 안에서 바로 커밋해요.
+
+</td>
+<td width="58%"><img src="docs/images/review.png" alt="채팅에 검증 통과 카드가 있고 오른쪽 패널에 변경 파일과 커밋 버튼이 있는 화면" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 파일을 열어 바로 고쳐요
+
+답변 속 파일 이름을 누르면 코드 에디터가 그 줄로 열려요. 에이전트가 바꾼 줄은 diff 색으로 표시돼요. 언어 서버(LSP)를 설치하면 자동완성과 정의로 이동도 써요.
+
+</td>
+<td width="58%"><img src="docs/images/editor.png" alt="Claude가 고친 src/cart.js를 에디터로 열어 바뀐 줄이 표시된 화면" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 마크다운은 문서처럼 읽어요
+
+마크다운 파일은 표·인용·코드·체크리스트까지 정리된 미리보기로 열려요. "편집"을 누르면 바로 고칠 수 있어요.
+
+</td>
+<td width="58%"><img src="docs/images/markdown.png" alt="배송비 정책 마크다운 문서를 표와 코드 블록까지 정리된 미리보기로 연 화면" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 터미널이 옆에 있어요
+
+터미널을 채팅 아래나 오른쪽에 열고 좌우·상하로 나눠요. 툴 카드의 명령을 터미널에 바로 넣고, 출력의 주소나 파일 경로를 누르면 브라우저·에디터로 열려요.
+
+</td>
+<td width="58%"><img src="docs/images/terminal.png" alt="채팅에는 Claude가 고친 diff, 오른쪽 터미널에는 테스트 통과 결과" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 터미널에서 이어가기
+
+`···` → "터미널에서 이어가기"를 누르면 같은 대화를 터미널의 Claude·Codex CLI에서 이어 가요. CLI에서 주고받은 내용은 채팅에도 따라 그려지고, CLI를 끝내면 채팅으로 돌아와요.
+
+</td>
+<td width="58%"><img src="docs/images/attach.png" alt="아래 터미널의 Claude CLI에서 주고받은 대화가 위 채팅 화면에도 그대로 보이는 화면" width="100%" /></td>
+</tr>
+<tr>
+<td width="42%" valign="middle">
+
+### 고친 화면을 인앱 브라우저로 확인해요
+
+개발 중인 화면을 채팅 옆에 띄우고, 폰·태블릿 폭으로 바꿔 봐요. 에이전트도 `atelier browser`로 그 페이지를 읽고 눌러 보며 고친 화면을 스스로 확인해요.
+
+</td>
+<td width="58%"><img src="docs/images/browser.png" alt="채팅 옆 인앱 브라우저에 개발 중인 장바구니 페이지가 떠 있는 화면" width="100%" /></td>
+</tr>
+</table>
+
+## 지원하는 에이전트
+
+| 에이전트 | 필요한 것 |
+|---|---|
+| Claude Code | 로그인을 마친 `claude` CLI |
+| Codex | 로그인을 마친 `codex` CLI |
+
+둘 중 하나만 있어도 쓸 수 있어요. 대화 도중에 에이전트를 바꾸면 지금까지의 대화를 요약해서 넘겨줘요.
 
 ## 설치
 
@@ -65,73 +194,10 @@ Homebrew 없이 설치하려면 [릴리즈](https://github.com/97kim/Atelier/rel
 
 처음에는 권한이 "변경 전 물어보기"로 되어 있어서, 파일을 바꾸거나 명령을 실행하기 전에 무엇을 하려는지 보여 주고 물어봐요.
 
-## 이렇게 써요
-
-### 탭끼리 일을 주고받아요
-
-- **에이전트가 직접 맡겨요**: 앱 안의 Claude Code·Codex가 같은 워크스페이스에 새 탭을 열어 일을 넘기고, 끝나면 결과를 읽어 와요. 사람은 처음 요청만 하면 돼요.
-- **버튼 하나로 교차 리뷰**: 헤더의 `···` → "교차 리뷰"를 누르면 지금 탭의 변경을 반대쪽 에이전트의 새 탭에 보내고, 리뷰 결과를 원래 탭에 카드로 돌려줘요.
-- **대화 도중 갈아타기**: Claude Code와 Codex를 바꾸면 지금까지의 대화를 요약해서 넘겨줘요.
-- **큰 작업은 나눠 맡기기**: 여러 작업으로 나눠 워커 탭들에 맡겨요. 워커는 각자 격리 worktree에서 일하고, 막히면 묻고, 끝나면 보고해요. 작업 순서와 사람이 결정할 지점도 정해 둘 수 있어요.
-
-![Claude가 버그를 고친 뒤 교차 리뷰를 누르면, Codex 리뷰 탭이 변경을 읽어 리뷰하고 결과가 원래 탭의 카드로 돌아오는 장면](docs/images/demo-cross-review.gif)
-
-*Claude가 고친 뒤 "교차 리뷰"를 누르면, Codex 리뷰 탭(오른쪽)이 변경을 읽고 리뷰해서 결과를 원래 탭의 카드로 돌려줘요. (기다리는 구간은 빠르게 감았어요)*
-
-같은 일을 터미널에서도 `atelier` CLI로 해요. 설정 → 일반 → **CLI와 에이전트 스킬**에서 CLI를 설치하면 워크스페이스와 탭을 열고, 지시를 보내고, 답을 읽을 수 있어요. 같은 화면에서 스킬을 설치하면 앱 안의 에이전트도 이 사용법을 알게 돼요.
-
-```
-atelier tab new --provider codex --title "리뷰" --prompt "방금 바꾼 코드를 리뷰해 줘"
-atelier tab send --tab 리뷰 --text "테스트도 돌려 줘" --wait
-atelier tab read --tab 리뷰 --last 3
-```
-
-### CLI 대신 화면으로 보여 줘요
-
-- **권한 카드**: 고른 권한 모드에 따라, 파일을 바꾸거나 명령을 실행하기 전에 무엇을 왜 하려는지 카드로 보여 주고 물어봐요. "변경 전 물어보기", "편집 자동 승인", "전부 자동" 중에서 골라요.
-- **툴 카드**: 에이전트가 읽은 파일, 실행한 명령, 바꾼 코드가 카드로 쌓여요. 펼치면 출력과 diff를 보고, 하위 에이전트가 무엇을 하는지도 보여요.
-- **진행 상황**: 생각 중인지, 어떤 도구를 몇 초째 실행하는지, 도구 사이에 무엇을 하려는지 설명까지 보여 줘요.
-
-![Claude가 테스트를 돌리기 전에 명령 실행 권한을 묻는 화면](docs/images/hero.png)
-
-*명령을 실행하기 전에, 무엇을 왜 실행하려는지 보여 주고 허용할지 물어봐요.*
-
-### 여러 방법을 격리해서 비교해요
-
-- 격리 세션을 만들면 별도 git worktree에서 작업해요. 같은 저장소에서 여러 세션을 돌려도 서로의 파일을 덮어쓰지 않아요.
-- 같은 요청을 여러 격리 세션에 동시에 보내고, 결과 diff를 비교해 마음에 드는 것만 원본에 가져와요.
-- 끝난 대화의 한 지점에서 새 탭으로 갈라, 원래 대화는 그대로 둔 채 다른 방향을 시도해요.
-
-### 바뀐 걸 확인하고 테스트해요
-
-- 바뀐 파일을 diff로 보고 되돌리거나, 커밋 메시지 초안을 받아 앱 안에서 바로 커밋해요.
-- 테스트·빌드 명령을 저장해 두고 버튼 하나로 돌려요. 결과가 대화에 카드로 남아서, 실패하면 그대로 "이거 고쳐 줘"라고 이어 갈 수 있어요.
-- 터미널을 채팅 아래나 오른쪽에 열고, 좌우·상하로 나눠요.
-- **터미널에서 이어가기**: 헤더의 `···` → "터미널에서 이어가기"를 누르면 같은 대화를 터미널의 Claude·Codex CLI에서 이어 가요. CLI에서 주고받은 내용은 채팅 화면에도 그대로 따라 그려지고, CLI를 끝내면 채팅으로 돌아와 이어서 써요. `/resume`이나 플랜 모드 같은 CLI 전용 기능이 필요할 때 써요.
-- 툴 카드에 나온 명령을 터미널에 바로 넣어 실행하고, 터미널 출력의 주소나 파일 경로를 누르면 브라우저·에디터로 열어요.
-- 앱 안 브라우저로 개발 중인 화면을 띄우고, 폰·태블릿 폭으로 바꿔 봐요. 앱을 껐다 켜도 로그인이 유지돼요.
-- 에이전트도 `atelier browser`로 그 페이지의 글을 읽고 버튼을 눌러 보며, 고친 화면을 스스로 확인해요.
-
-![채팅에는 Claude가 고친 diff, 오른쪽 터미널에는 테스트 통과 결과](docs/images/terminal.png)
-
-*Claude가 고친 코드를 보면서, 오른쪽 터미널에서 테스트를 바로 돌려 봐요.*
-
-### 파일을 열어 보고 고쳐요
-
-- 코드 에디터로 파일을 열어 고쳐요. 에이전트가 바꾼 줄은 diff 색으로 표시되고, 답변 속 파일 이름을 누르면 그 줄로 바로 열려요. 언어 서버(LSP)를 설치하면 TypeScript·Python 자동완성과 정의로 이동도 쓸 수 있어요.
-- 마크다운 파일은 문서처럼 정리된 미리보기로 열리고, "편집"을 누르면 바로 고칠 수 있어요.
-
-![Claude가 고친 src/cart.js를 에디터로 연 화면. 바뀐 줄이 표시되고 오른쪽 패널에 커밋 버튼이 있는 화면](docs/images/editor.png)
-
-*Claude가 고친 파일을 에디터로 열면 바뀐 줄이 표시되고, 오른쪽 패널에서 바로 커밋할 수 있어요.*
-
-![배송비 정책 마크다운 문서를 표와 코드 블록까지 정리된 미리보기로 연 화면](docs/images/markdown.png)
-
-*마크다운 문서는 표·인용·코드·체크리스트까지 읽기 좋게 보여 줘요.*
-
 ## 그 밖에
 
 - **화면 분할**: 두 탭을 좌우로 나란히 보고, ⌘⌥←/→로 오가요.
+- **격리 세션**: 별도 git worktree에서 작업해서, 같은 저장소에서 여러 세션을 돌려도 파일이 섞이지 않아요. 끝난 대화의 한 지점에서 새 탭으로 갈라 다른 방향도 시도해요.
 - **프롬프트 큐**: 작업 중에 다음 요청을 써 두면 끝난 뒤에 보내요. Codex에는 진행 중인 작업에 바로 끼워 넣을 수도 있어요.
 - **예약**: 매시·매일·평일·매주, 또는 cron으로 정한 시각에 새 세션을 열어 요청을 보내요. 앱이 켜져 있을 때 돌아요.
 - **슬래시 커맨드와 스니펫**: `/`를 치면 Claude의 커맨드·스킬이 뜨고, 자주 쓰는 요청은 스니펫으로 저장해 꺼내 써요.
