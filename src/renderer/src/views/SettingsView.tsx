@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { LANGUAGE_SETTINGS } from "@shared/i18n/locale";
 import {
   MAX_CONCURRENT_MAX,
   MAX_CONCURRENT_MIN,
@@ -315,29 +317,11 @@ export function SettingsView({
 
 // ===== 일반 =====
 
-const LINK_MODE_OPTIONS: { value: LinkOpenMode; label: string; hint: string }[] = [
-  { value: "ask", label: "클릭할 때마다 묻기", hint: "링크를 누를 때 열 위치를 고릅니다. 선택창에서 '기억'을 켜면 다음부터 같은 방식으로 엽니다." },
-  { value: "app", label: "인앱 브라우저", hint: "오른쪽 패널의 브라우저 탭에서 엽니다." },
-  { value: "external", label: "기본 브라우저", hint: "macOS 기본 브라우저에서 엽니다." },
-];
-
-const WARM_OPTIONS: { value: WarmTarget; label: string; hint: string }[] = [
-  { value: "active", label: "보고 있는 탭", hint: "탭을 열거나 이동하면 Claude·Codex를 미리 실행해 첫 응답의 준비 시간을 줄입니다." },
-  { value: "off", label: "끄기", hint: "메시지를 보낼 때 실행합니다. 대기 중 메모리 사용은 줄지만 첫 응답을 준비하는 시간이 필요합니다." },
-];
-
-/** 링크 열기 방식(renderer localStorage) · 예열 · 유휴 시간(main settings.json). 바꾸면 바로 저장·적용된다. */
-const THEME_OPTIONS: { value: ThemeMode; label: string; hint: string }[] = [
-  { value: "system", label: "시스템 따라가기", hint: "macOS 화면 모드가 바뀌면 함께 바뀝니다." },
-  { value: "light", label: "밝게", hint: "항상 밝은 배경." },
-  { value: "dark", label: "어둡게", hint: "항상 어두운 배경." },
-];
-
-const NOTIFY_OPTIONS: { value: NotifyOnDone; label: string; hint: string }[] = [
-  { value: "always", label: "항상", hint: "응답이 끝나면 macOS 알림을 보냅니다. 알림을 누르면 해당 탭으로 이동합니다." },
-  { value: "unfocused", label: "안 보고 있을 때만", hint: "다른 앱이나 다른 채팅 탭을 보고 있을 때 알립니다." },
-  { value: "off", label: "끄기", hint: "응답 완료는 알리지 않습니다. 작업 승인 요청은 계속 알립니다." },
-];
+// 선택지는 값만 든다. 문구는 사전(settings.<카드>.options.<값>)에서 그릴 때 가져온다 — 언어를 바꾸면 따라오게.
+const LINK_MODE_OPTIONS: LinkOpenMode[] = ["ask", "app", "external"];
+const WARM_OPTIONS: WarmTarget[] = ["active", "off"];
+const THEME_OPTIONS: ThemeMode[] = ["system", "light", "dark"];
+const NOTIFY_OPTIONS: NotifyOnDone[] = ["always", "unfocused", "off"];
 
 type UpdateState =
   | { kind: "idle" }
@@ -349,6 +333,7 @@ type UpdateState =
 
 /** GitHub 최신 릴리즈와 비교하고, Homebrew 로 설치한 앱이면 brew 로 올린 뒤 다시 시작한다. */
 function UpdateCard() {
+  const { t } = useTranslation();
   const [version, setVersion] = useState<string | null>(null);
   const [st, setSt] = useState<UpdateState>({ kind: "idle" });
   /** 진행 중인 업데이트에 붙는다. 이미 도는 중이면 main 이 같은 작업의 결과를 돌려준다. */
@@ -371,7 +356,7 @@ function UpdateCard() {
     try {
       setSt({ kind: "checked", r: await window.workbench.app.checkUpdate() });
     } catch (e) {
-      setSt({ kind: "error", text: `확인하지 못했습니다: ${e instanceof Error ? e.message : String(e)}` });
+      setSt({ kind: "error", text: t("settings.update.checkFailed", { error: e instanceof Error ? e.message : String(e) }) });
     }
   };
   const openRelease = (url: string) => void window.workbench.browser.openExternal(url);
@@ -383,42 +368,41 @@ function UpdateCard() {
     <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="update">
       <div className="mb-1 flex items-center gap-2 font-medium">
         <Icon name="refresh" size={14} className="text-accent" />
-        업데이트
+        {t("settings.update.title")}
       </div>
-      <p className="mb-3 text-[12px] leading-5 text-muted">
-        GitHub에 올라온 최신 버전과 비교합니다. Homebrew로 설치했다면 여기서 바로 업데이트할 수 있습니다.
-      </p>
+      <p className="mb-3 text-[12px] leading-5 text-muted">{t("settings.update.description")}</p>
       <div className="flex items-center gap-3 rounded-md border border-line px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="font-medium">현재 버전</span>
+            <span className="font-medium">{t("settings.update.currentVersion")}</span>
             <span className="mono text-[11.5px] text-muted">{version ?? "…"}</span>
           </div>
-          <div className="text-[11.5px] text-muted" data-update-state>
-            {st.kind === "idle" && "아직 확인하지 않았습니다."}
-            {st.kind === "checking" && "확인하는 중…"}
-            {st.kind === "checked" && (st.r.available ? <span className="text-warn">새 버전이 있습니다: {st.r.latest}</span> : <span className="text-ok">최신 버전입니다.</span>)}
-            {st.kind === "checked" && st.r.available && !st.r.brew && " Homebrew로 설치한 앱이 아니어서 릴리즈 페이지에서 DMG를 받아야 합니다."}
-            {st.kind === "upgrading" && `새 버전(${st.target})으로 업데이트하는 중… 1~2분 걸릴 수 있습니다.`}
-            {st.kind === "done" && <span className="text-ok">업데이트했습니다({st.version}). 다시 시작하면 새 버전이 열립니다.</span>}
+          {/* data-update-state 의 값으로 상태를 본다(e2e 가 문구에 기대지 않게) */}
+          <div className="text-[11.5px] text-muted" data-update-state={st.kind}>
+            {st.kind === "idle" && t("settings.update.idle")}
+            {st.kind === "checking" && t("settings.update.checking")}
+            {st.kind === "checked" && (st.r.available ? <span className="text-warn">{t("settings.update.available", { version: st.r.latest })}</span> : <span className="text-ok">{t("settings.update.latest")}</span>)}
+            {st.kind === "checked" && st.r.available && !st.r.brew && ` ${t("settings.update.notBrew")}`}
+            {st.kind === "upgrading" && t("settings.update.upgrading", { version: st.target })}
+            {st.kind === "done" && <span className="text-ok">{t("settings.update.done", { version: st.version })}</span>}
           </div>
         </div>
         {r?.available && (
           <button onClick={() => openRelease(r.releaseUrl)} className={btn} data-update-notes>
-            {r.brew ? "변경 사항" : "릴리즈 페이지"}
+            {r.brew ? t("settings.update.notes") : t("settings.update.releasePage")}
           </button>
         )}
         {st.kind === "done" ? (
           <button onClick={() => void window.workbench.app.relaunch()} className={btn} data-update-relaunch>
-            다시 시작
+            {t("settings.update.relaunch")}
           </button>
         ) : st.kind === "upgrading" || (r?.available && r.brew) ? (
           <button onClick={() => r && void follow(r.latest, r)} disabled={st.kind === "upgrading"} className={btn} data-update-run>
-            업데이트
+            {t("settings.update.run")}
           </button>
         ) : (
           <button onClick={() => void check()} disabled={st.kind === "checking"} className={btn} data-update-check>
-            업데이트 확인
+            {t("settings.update.check")}
           </button>
         )}
       </div>
@@ -432,6 +416,7 @@ function UpdateCard() {
 }
 
 function GeneralSection() {
+  const { t } = useTranslation();
   const [linkMode, setLinkModeState] = useState<LinkOpenMode>(() => getLinkOpenMode());
   const [settings, setSettings] = useState<AppSettingsDto | null>(null);
   const [idleDraft, setIdleDraft] = useState("");
@@ -526,36 +511,55 @@ function GeneralSection() {
   return (
     <>
       <div className="mb-5">
-        <h1 className="text-[20px] font-semibold">일반</h1>
-        <p className="mt-1 text-muted">화면과 알림, 브라우저, Claude·Codex의 실행 방식을 설정합니다.</p>
+        <h1 className="text-[20px] font-semibold">{t("settings.general.title")}</h1>
+        <p className="mt-1 text-muted">{t("settings.general.description")}</p>
       </div>
 
       <UpdateCard />
 
+      <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="language">
+        <div className="mb-1 flex items-center gap-2 font-medium">
+          <Icon name="globe" size={14} className="text-accent" />
+          {t("settings.language.title")}
+        </div>
+        <p className="mb-3 text-[12px] leading-5 text-muted">{t("settings.language.description")}</p>
+        <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
+          {LANGUAGE_SETTINGS.map((v) => (
+            <label key={v} className={radioCls(settings?.language === v)}>
+              <input type="radio" name="language" value={v} checked={settings?.language === v} disabled={!settings} onChange={() => void save({ language: v })} className="mt-0.5" />
+              <span>
+                <span className="block font-medium">{t(`settings.language.options.${v}.label`)}</span>
+                <span className="block text-[12px] leading-5 text-muted">{t(`settings.language.options.${v}.hint`)}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
       <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="theme">
         <div className="mb-1 flex items-center gap-2 font-medium">
           <Icon name="sparkles" size={14} className="text-accent" />
-          화면 테마
+          {t("settings.theme.title")}
         </div>
-        <p className="mb-3 text-[12px] leading-5 text-muted">인앱 브라우저에 표시되는 웹사이트에는 적용되지 않습니다.</p>
+        <p className="mb-3 text-[12px] leading-5 text-muted">{t("settings.theme.description")}</p>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
-          {THEME_OPTIONS.map((o) => (
-            <label key={o.value} className={radioCls(settings?.theme === o.value)}>
+          {THEME_OPTIONS.map((v) => (
+            <label key={v} className={radioCls(settings?.theme === v)}>
               <input
                 type="radio"
                 name="theme"
-                value={o.value}
-                checked={settings?.theme === o.value}
+                value={v}
+                checked={settings?.theme === v}
                 disabled={!settings}
                 onChange={() => {
-                  applyThemeMode(o.value); // 저장 응답을 기다리지 않고 바로 칠한다
-                  void save({ theme: o.value });
+                  applyThemeMode(v); // 저장 응답을 기다리지 않고 바로 칠한다
+                  void save({ theme: v });
                 }}
                 className="mt-0.5"
               />
               <span>
-                <span className="block font-medium">{o.label}</span>
-                <span className="block text-[12px] leading-5 text-muted">{o.hint}</span>
+                <span className="block font-medium">{t(`settings.theme.options.${v}.label`)}</span>
+                <span className="block text-[12px] leading-5 text-muted">{t(`settings.theme.options.${v}.hint`)}</span>
               </span>
             </label>
           ))}
@@ -569,12 +573,12 @@ function GeneralSection() {
         </div>
         <p className="mb-3 text-[12px] leading-5 text-muted">응답이 끝났을 때 알림을 받을지 정합니다. 다른 앱을 보고 있을 때 작업 승인이 필요하면 이 설정과 관계없이 알립니다.</p>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
-          {NOTIFY_OPTIONS.map((o) => (
-            <label key={o.value} className={radioCls(settings?.notifyOnDone === o.value)}>
-              <input type="radio" name="notifyOnDone" value={o.value} checked={settings?.notifyOnDone === o.value} disabled={!settings} onChange={() => void save({ notifyOnDone: o.value })} className="mt-0.5" />
+          {NOTIFY_OPTIONS.map((v) => (
+            <label key={v} className={radioCls(settings?.notifyOnDone === v)}>
+              <input type="radio" name="notifyOnDone" value={v} checked={settings?.notifyOnDone === v} disabled={!settings} onChange={() => void save({ notifyOnDone: v })} className="mt-0.5" />
               <span>
-                <span className="block font-medium">{o.label}</span>
-                <span className="block text-[12px] leading-5 text-muted">{o.hint}</span>
+                <span className="block font-medium">{t(`settings.notify.options.${v}.label`)}</span>
+                <span className="block text-[12px] leading-5 text-muted">{t(`settings.notify.options.${v}.hint`)}</span>
               </span>
             </label>
           ))}
@@ -699,22 +703,22 @@ function GeneralSection() {
           채팅에 있는 웹 링크를 어디에서 열지 정합니다. ⌘클릭은 기본 브라우저, ⌥클릭은 인앱 브라우저로 엽니다. ⇧클릭하면 다시 선택할 수 있습니다.
         </p>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
-          {LINK_MODE_OPTIONS.map((o) => (
-            <label key={o.value} className={radioCls(linkMode === o.value)}>
+          {LINK_MODE_OPTIONS.map((v) => (
+            <label key={v} className={radioCls(linkMode === v)}>
               <input
                 type="radio"
                 name="linkOpenMode"
-                value={o.value}
-                checked={linkMode === o.value}
+                value={v}
+                checked={linkMode === v}
                 onChange={() => {
-                  setLinkOpenMode(o.value);
-                  setLinkModeState(o.value);
+                  setLinkOpenMode(v);
+                  setLinkModeState(v);
                 }}
                 className="mt-0.5"
               />
               <span>
-                <span className="block font-medium">{o.label}</span>
-                <span className="block text-[12px] leading-5 text-muted">{o.hint}</span>
+                <span className="block font-medium">{t(`settings.link.options.${v}.label`)}</span>
+                <span className="block text-[12px] leading-5 text-muted">{t(`settings.link.options.${v}.hint`)}</span>
               </span>
             </label>
           ))}
@@ -730,20 +734,20 @@ function GeneralSection() {
           메시지를 보내기 전에 Claude·Codex를 실행해 둡니다. 첫 응답의 준비 시간을 줄이는 대신 대기 중에도 메모리를 사용합니다.
         </p>
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-          {WARM_OPTIONS.map((o) => (
-            <label key={o.value} className={radioCls(settings?.warmTarget === o.value)}>
+          {WARM_OPTIONS.map((v) => (
+            <label key={v} className={radioCls(settings?.warmTarget === v)}>
               <input
                 type="radio"
                 name="warmTarget"
-                value={o.value}
-                checked={settings?.warmTarget === o.value}
+                value={v}
+                checked={settings?.warmTarget === v}
                 disabled={!settings}
-                onChange={() => void save({ warmTarget: o.value })}
+                onChange={() => void save({ warmTarget: v })}
                 className="mt-0.5"
               />
               <span>
-                <span className="block font-medium">{o.label}</span>
-                <span className="block text-[12px] leading-5 text-muted">{o.hint}</span>
+                <span className="block font-medium">{t(`settings.warm.options.${v}.label`)}</span>
+                <span className="block text-[12px] leading-5 text-muted">{t(`settings.warm.options.${v}.hint`)}</span>
               </span>
             </label>
           ))}

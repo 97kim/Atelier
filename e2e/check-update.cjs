@@ -22,7 +22,7 @@ check("Claude 모델 목록을 CLI 에서",models.source==="cli"&&models.models.
 await page.click('button[title="설정"], [data-nav=settings]').catch(()=>{});await page.waitForTimeout(600);
 const before=await ev(()=>document.querySelector("[data-setting=update] [data-update-state]")?.textContent);
 await page.click("[data-update-check]");
-await page.waitForFunction(()=>!/확인하는 중/.test(document.querySelector("[data-update-state]")?.textContent??""),null,{timeout:30000});
+await page.waitForFunction(()=>document.querySelector("[data-update-state]")?.getAttribute("data-update-state")!=="checking",null,{timeout:30000});
 const after=await ev(()=>({state:document.querySelector("[data-update-state]")?.textContent,err:document.querySelector("[data-update-error]")?.textContent??null,buttons:[...document.querySelectorAll("[data-setting=update] button")].map(b=>b.textContent)}));
 const r=await ev(()=>window.workbench.app.checkUpdate());
 console.log("card:",before,"→",JSON.stringify(after),"| check:",JSON.stringify(r));
