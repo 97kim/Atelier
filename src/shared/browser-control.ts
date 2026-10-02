@@ -3,6 +3,9 @@
 //
 // 스크립트는 문자열로 페이지에 들어가므로 값은 반드시 JSON.stringify 로 싣는다 — 따옴표·역슬래시·
 // 줄바꿈이 든 선택자나 입력값이 코드를 깨뜨리지 않게. 결과는 항상 { ok } 또는 { error } 한 덩어리다.
+// 오류 문구는 번역해서 스크립트에 싣는다(t). 페이지 안에서야 알 수 있는 값은 {{이름}} 자리를 두고 스크립트가 채운다.
+
+import type { TFunction } from "i18next";
 
 /** read 가 돌려줄 페이지 요약. 모델이 화면을 볼 수 없으므로 글과 눌 만한 것을 같이 준다. */
 export interface PageRead {
@@ -84,26 +87,30 @@ export function readScript(): string {
  * 클릭. 선택자로 찾거나(selector), 보이는 글로 찾는다(text).
  * 글로 찾을 때는 보이는 것 중 글이 가장 짧은 것을 고른다 — 바깥 컨테이너가 아니라 실제 버튼이 잡히게.
  */
-export function clickScript(target: { selector?: string; text?: string }): string {
+export function clickScript(t: TFunction, target: { selector?: string; text?: string }): string {
   const bySel = JSON.stringify(target.selector ?? "");
   const byText = JSON.stringify(target.text ?? "");
+  const noElement = JSON.stringify(t("cli.browser.noElement", { selector: target.selector ?? "" }));
+  const noText = JSON.stringify(t("cli.browser.noText", { text: target.text ?? "" }));
+  const needTarget = JSON.stringify(t("cli.browser.needSelectorOrText"));
+  const notVisible = JSON.stringify(t("cli.browser.notVisible", { selector: "{{selector}}" }));
   return `(() => {${SELECTOR_FN}
   const wantSel = ${bySel}, wantText = ${byText};
   let el = null;
   if (wantSel) {
     el = document.querySelector(wantSel);
-    if (!el) return { error: "선택자에 맞는 요소가 없습니다: " + wantSel };
+    if (!el) return { error: ${noElement} };
   } else if (wantText) {
     const needle = wantText.toLowerCase();
     const cands = [...document.querySelectorAll('button, a[href], [role="button"], input[type="submit"], input[type="button"], label')]
       .filter((e) => visible(e) && label(e).toLowerCase().includes(needle));
-    if (cands.length === 0) return { error: "그 글이 든 누를 만한 것이 없습니다: " + wantText };
+    if (cands.length === 0) return { error: ${noText} };
     cands.sort((a, b) => label(a).length - label(b).length);
     el = cands[0];
   } else {
-    return { error: "--selector 나 --text 중 하나가 필요합니다." };
+    return { error: ${needTarget} };
   }
-  if (!visible(el)) return { error: "요소가 화면에 보이지 않습니다: " + sel(el) };
+  if (!visible(el)) return { error: ${notVisible}.replace("{{selector}}", () => sel(el)) };
   el.scrollIntoView({ block: "center" });
   el.click();
   return { ok: true, clicked: { selector: sel(el), label: label(el), tag: el.tagName.toLowerCase() } };
@@ -111,19 +118,21 @@ export function clickScript(target: { selector?: string; text?: string }): strin
 }
 
 /** 입력값 채우기. React 처럼 값 변경을 가로채는 프레임워크도 알아채도록 네이티브 setter 로 넣고 이벤트를 쏜다. */
-export function fillScript(selector: string, value: string): string {
+export function fillScript(t: TFunction, selector: string, value: string): string {
+  const noElement = JSON.stringify(t("cli.browser.noElement", { selector }));
+  const notFillable = JSON.stringify(t("cli.browser.notFillable", { tag: "{{tag}}" }));
   return `(() => {${SELECTOR_FN}
   const el = document.querySelector(${JSON.stringify(selector)});
-  if (!el) return { error: "선택자에 맞는 요소가 없습니다: " + ${JSON.stringify(selector)} };
+  if (!el) return { error: ${noElement} };
   const tag = el.tagName.toLowerCase();
   if (tag !== "input" && tag !== "textarea" && tag !== "select" && el.isContentEditable !== true)
-    return { error: "값을 넣을 수 있는 요소가 아닙니다: " + tag };
+    return { error: ${notFillable}.replace("{{tag}}", () => tag) };
   const v = ${JSON.stringify(value)};
   el.focus();
   if (el.isContentEditable) {
     el.textContent = v;
   } else {
-    // React 는 value 를 가로채므로 프로토타입의 setter 를 직접 부른다 — 안 그러면 화면만 바뀌고 상태는 그대로다.
+    // React intercepts value, so call the prototype setter directly — otherwise only the screen changes and the state stays.
     const proto = tag === "textarea" ? window.HTMLTextAreaElement.prototype : tag === "select" ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, "value");
     if (setter && setter.set) setter.set.call(el, v);

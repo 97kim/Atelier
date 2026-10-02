@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { basename, resolve } from "node:path";
 import type { GitChangeDto, GitCommitResult, GitInfoDto } from "@shared/ipc";
+import { mt } from "./i18n";
 
 interface GitRun {
   code: number;
@@ -101,13 +102,13 @@ export async function gitCommit(
 ): Promise<GitCommitResult> {
   const wanted = paths.filter((p) => p.trim().length > 0);
   const msg = message.trim();
-  if (wanted.length === 0) return { ok: false, error: "커밋할 파일을 고르세요." };
-  if (!msg) return { ok: false, error: "커밋 메시지를 입력하세요." };
+  if (wanted.length === 0) return { ok: false, error: mt("repo.git.pickFiles") };
+  if (!msg) return { ok: false, error: mt("repo.git.needMessage") };
   const top = (await git(cwd, ["rev-parse", "--show-toplevel"], env))?.trim();
-  if (!top) return { ok: false, error: "git 저장소가 아닙니다." };
+  if (!top) return { ok: false, error: mt("repo.git.notGitRepo") };
   // 목록을 본 뒤 사라진 파일(훅이 만든 임시 파일 등)은 건너뛴다 — pathspec 오류로 전체가 실패하지 않게.
   const files = await resolveChangePaths(top, env, wanted);
-  if (files.length === 0) return { ok: false, error: "고른 파일에 남은 변경이 없습니다." };
+  if (files.length === 0) return { ok: false, error: mt("repo.git.noChanges") };
   // add 에는 새 경로만: 이름 변경(R)의 옛 경로는 이미 인덱스에서 삭제돼 있어 add 가 pathspec 오류를 낸다.
   // commit 에는 옛 경로도 넣어야 삭제가 같은 커밋에 들어간다.
   // 삭제는 add 대신 rm --cached 로: `git rm` 으로 이미 스테이징된 삭제는 인덱스에도 작업 트리에도 없어 add 가 pathspec 오류를 낸다.
@@ -116,15 +117,15 @@ export async function gitCommit(
   const others = files.filter((f) => f.kind !== "deleted");
   if (others.length > 0) {
     const add = await gitRun(top, ["add", "-A", "--", ...literal(others.map((f) => f.path))], env);
-    if (add.code !== 0) return { ok: false, error: add.stderr.trim() || "git add 실패" };
+    if (add.code !== 0) return { ok: false, error: add.stderr.trim() || mt("repo.git.addFailed") };
   }
   if (deleted.length > 0) {
     const rm = await gitRun(top, ["rm", "--cached", "--quiet", "--ignore-unmatch", "--", ...literal(deleted.map((f) => f.path))], env);
-    if (rm.code !== 0) return { ok: false, error: rm.stderr.trim() || "git rm 실패" };
+    if (rm.code !== 0) return { ok: false, error: rm.stderr.trim() || mt("repo.git.rmFailed") };
   }
   const spec = literal(files.map((f) => f.path).concat(files.flatMap((f) => (f.oldPath ? [f.oldPath] : []))));
   const commit = await gitRun(top, ["commit", "-m", msg, "--", ...spec], env);
-  if (commit.code !== 0) return { ok: false, error: commit.stderr.trim() || commit.stdout.trim() || "git commit 실패" };
+  if (commit.code !== 0) return { ok: false, error: commit.stderr.trim() || commit.stdout.trim() || mt("repo.git.commitFailed") };
   const hash = (await git(top, ["rev-parse", "--short", "HEAD"], env))?.trim() ?? "";
   return { ok: true, hash, subject: msg.split("\n")[0], files: files.length };
 }
@@ -180,6 +181,7 @@ export async function gitDiffFor(cwd: string, env: NodeJS.ProcessEnv, paths: str
     if (d.stdout) parts.push(d.stdout);
   }
   const all = parts.join("\n");
+  // i18n-ignore: prompt
   return all.length > DIFF_MAX ? `${all.slice(0, DIFF_MAX)}\n... (diff 가 길어 ${all.length - DIFF_MAX}자 생략)` : all;
 }
 
@@ -201,12 +203,12 @@ export async function gitRevert(
   path: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const top = (await git(cwd, ["rev-parse", "--show-toplevel"], env))?.trim();
-  if (!top) return { ok: false, error: "git 저장소가 아닙니다." };
+  if (!top) return { ok: false, error: mt("repo.git.notGitRepo") };
   const [change] = await resolveChangePaths(top, env, [path]);
-  if (!change) return { ok: false, error: "변경 목록에 없는 파일입니다." };
+  if (!change) return { ok: false, error: mt("repo.git.notInChanges") };
   const run = async (args: string[]) => {
     const r = await gitRun(top, args, env);
-    return r.code === 0 ? null : r.stderr.trim() || `git ${args[0]} 실패`;
+    return r.code === 0 ? null : r.stderr.trim() || mt("repo.git.commandFailed", { command: args[0] });
   };
   let err: string | null = null;
   switch (change.kind) {

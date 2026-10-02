@@ -3,6 +3,10 @@
 
 import type { ToolBlock } from "./session-state";
 
+/** Codex 의 추가 권한 요청에 붙는 도구 이름. 기록과 교차 리뷰 판정이 이 값에 기대므로 바꾸지 않고, 화면에는 번역해서 보인다. */
+// i18n-ignore: 도구 식별자(예전 기록과 같은 이름)
+export const CODEX_PERMISSION_TOOL = "권한";
+
 export type ToolState = "partial" | "waiting_permission" | "waiting_answer" | "denied" | "skipped" | "failed" | "done" | "running";
 
 export function toolState(block: Pick<ToolBlock, "name" | "partial" | "result" | "permission">): ToolState {

@@ -5,6 +5,7 @@
 // 그려지도록 Bash / ApplyPatch / WebSearch / TodoWrite 로 맞춘다.
 
 import type { ChatEvent, ModelUsageEntry, TokenUsage } from "@shared/chat-events";
+import { appMsg } from "./i18n";
 
 type ThreadEvent = import("@openai/codex-sdk").ThreadEvent;
 type ThreadItem = import("@openai/codex-sdk").ThreadItem;
@@ -22,9 +23,9 @@ export function mapCodexEvent(event: ThreadEvent, ts: number, ctx: CodexTurnCont
     case "turn.completed":
       return [turnResult(event.usage, ts, ctx)];
     case "turn.failed":
-      return [{ type: "error", ts, message: event.error?.message || "Codex turn 실패" }];
+      return [{ type: "error", ts, ...(event.error?.message ? { message: event.error.message } : appMsg("session.msg.codexTurnFailed")) }];
     case "error":
-      return [{ type: "error", ts, message: event.message || "Codex 오류" }];
+      return [{ type: "error", ts, ...(event.message ? { message: event.message } : appMsg("session.msg.codexError")) }];
     case "item.started":
       return itemStarted(event.item, ts);
     case "item.completed":

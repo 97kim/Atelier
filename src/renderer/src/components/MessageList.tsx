@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { clearReveal, onReveal, pendingReveal } from "../reveal";
 import type { ForkPoint, SessionStatus } from "@shared/chat-events";
+import { msgText } from "@shared/i18n/msg";
 import type { Provider } from "@shared/ipc";
 import type { Block, ReviewBlock } from "@shared/session-state";
 import { Icon } from "./Icon";
@@ -351,7 +352,7 @@ function Group({
   onCompareFanout?: (fanoutId: string) => void;
   onOpenOrchestration?: (runId: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   if (group.kind === "orchestration") {
     const b = group.blocks[0];
     return b.kind === "orchestration" ? <OrchestrationCard block={b} onOpen={(id) => onOpenOrchestration?.(id)} /> : null;
@@ -391,12 +392,12 @@ function Group({
     return b.level === "notice" ? (
       <div className="content-indent flex items-center gap-2 px-1 text-[12px] text-muted-2" data-notice="notice">
         <Icon name="info" size={12} className="shrink-0" />
-        <span style={{ userSelect: "text" }}>{b.message}</span>
+        <span style={{ userSelect: "text" }}>{msgText(i18n, b.msg, b.message)}</span>
       </div>
     ) : (
       <div className="content-indent flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-muted" data-notice={b.level}>
         <Icon name="info" size={13} className={`shrink-0 ${b.level === "warning" ? "text-warn" : "text-accent"}`} />
-        <span style={{ userSelect: "text" }}>{b.message}</span>
+        <span style={{ userSelect: "text" }}>{msgText(i18n, b.msg, b.message)}</span>
       </div>
     );
   }
@@ -405,7 +406,7 @@ function Group({
     return b.kind === "error" ? (
       <div className="content-indent flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-muted">
         <Icon name="info" size={13} className="shrink-0 text-warn" />
-        <span style={{ userSelect: "text" }}>{b.message}</span>
+        <span style={{ userSelect: "text" }}>{msgText(i18n, b.msg, b.message)}</span>
       </div>
     ) : null;
   }
@@ -519,7 +520,7 @@ function LoadingConversation() {
 }
 
 function BlockView({ block }: { block: Block }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   switch (block.kind) {
     case "user":
       return (
@@ -575,7 +576,7 @@ function BlockView({ block }: { block: Block }) {
         <div className="mt-1 flex items-center gap-2 rounded-md border border-err/40 bg-err-bg px-3 py-2 text-err">
           <Icon name="alert" size={13} />
           <span className="flex-1">
-            {block.errorText ?? t("chat.messages.turnFailed")}
+            {block.errorText ? msgText(i18n, block.errorMsg, block.errorText) : t("chat.messages.turnFailed")}
           </span>
           <span className="opacity-80">{stats}</span>
         </div>
@@ -629,7 +630,7 @@ function fmt(n: number): string {
 
 /** 교차 리뷰 카드: 요청 중엔 shimmer + 경과, 끝나면 리뷰 본문(마크다운). 리뷰 탭으로 바로 갈 수 있다. */
 function ReviewCard({ block }: { block: ReviewBlock }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (block.status !== "requested") return;
@@ -643,7 +644,7 @@ function ReviewCard({ block }: { block: ReviewBlock }) {
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <ProviderLogo provider={block.reviewer} size={18} />
         <span className="font-medium">{t("chat.messages.review.title", { name })}</span>
-        {block.scope && <span className="mono text-[10.5px] text-muted-2">{block.scope}</span>}
+        {block.scope && <span className="mono text-[10.5px] text-muted-2">{msgText(i18n, block.scopeMsg, block.scope)}</span>}
         <span className="flex-1" />
         {block.status === "requested" && (
           <span className="label flex items-center gap-1.5 text-accent">
@@ -666,10 +667,10 @@ function ReviewCard({ block }: { block: ReviewBlock }) {
       </div>
       {block.status === "done" && (
         <div className="px-3 py-2.5" style={{ userSelect: "text" }}>
-          <Markdown text={block.text} />
+          <Markdown text={msgText(i18n, block.textMsg, block.text)} />
         </div>
       )}
-      {block.status === "failed" && <div className="px-3 py-2 text-[12px] text-err">{block.text}</div>}
+      {block.status === "failed" && <div className="px-3 py-2 text-[12px] text-err">{msgText(i18n, block.textMsg, block.text)}</div>}
       {block.status === "requested" && <div className="px-3 py-2 text-[12px] text-muted">{t("chat.messages.review.waiting", { name })}</div>}
     </div>
   );

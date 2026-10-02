@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { DirEntryDto, FileViewDto } from "@shared/ipc";
+import { mt } from "./i18n";
 
 /** 이 크기를 넘으면 내용을 보내지 않는다 (렌더러 하이라이트 비용·IPC 페이로드 제한). */
 export const MAX_FILE_BYTES = 1024 * 1024;
@@ -167,7 +168,7 @@ export async function writeFileView(
   const realTarget = await realishDeep(path);
   const rel = relative(base, realTarget);
   if (rel.startsWith("..") || isAbsolute(rel))
-    return { ok: false, error: `저장소(${base}) 밖에는 저장할 수 없습니다.` };
+    return { ok: false, error: mt("repo.files.outsideRepo", { base }) };
   if (!opts.force) {
     let current: { mtimeMs: number; size: number } | null = null;
     try {
@@ -178,12 +179,12 @@ export async function writeFileView(
     }
     const expected = opts.expectedMtimeMs;
     if (current !== null && expected !== null && Math.abs(current.mtimeMs - expected) > 1)
-      return { ok: false, conflict: true, error: "파일이 밖에서 바뀌었습니다." };
+      return { ok: false, conflict: true, error: mt("repo.files.changedOutside") };
     // 같은 밀리초 안에 바뀐 경우(mtime 이 같음)는 크기로 한 번 더 걸러 낸다
     if (current !== null && typeof opts.expectedSize === "number" && current.size !== opts.expectedSize)
-      return { ok: false, conflict: true, error: "파일이 밖에서 바뀌었습니다." };
+      return { ok: false, conflict: true, error: mt("repo.files.changedOutside") };
     if (current !== null && expected === null)
-      return { ok: false, conflict: true, error: "파일이 그 사이 새로 생겼습니다." };
+      return { ok: false, conflict: true, error: mt("repo.files.createdMeanwhile") };
   }
   try {
     await fs.mkdir(dirname(path), { recursive: true });
@@ -239,12 +240,12 @@ export async function createPath(
   kind: "file" | "dir",
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<FileOpResult> {
-  if (BAD_NAME.test(basename(requested))) return { ok: false, error: "쓸 수 없는 이름입니다." };
+  if (BAD_NAME.test(basename(requested))) return { ok: false, error: mt("repo.files.badName") };
   const t = await insideBase(cwd, requested, env);
-  if (!t) return { ok: false, error: "저장소 밖에는 만들 수 없습니다." };
+  if (!t) return { ok: false, error: mt("repo.files.cannotCreateOutside") };
   try {
     await fs.access(t.path);
-    return { ok: false, error: "같은 이름이 이미 있습니다." };
+    return { ok: false, error: mt("repo.files.nameExists") };
   } catch {
     /* 없어야 정상 */
   }
@@ -267,16 +268,16 @@ export async function renamePath(
   to: string,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<FileOpResult> {
-  if (BAD_NAME.test(basename(to))) return { ok: false, error: "쓸 수 없는 이름입니다." };
+  if (BAD_NAME.test(basename(to))) return { ok: false, error: mt("repo.files.badName") };
   const a = await insideBase(cwd, from, env);
   const b = await insideBase(cwd, to, env);
-  if (!a || !b) return { ok: false, error: "저장소 밖으로는 옮길 수 없습니다." };
+  if (!a || !b) return { ok: false, error: mt("repo.files.cannotMoveOutside") };
   if (a.path === b.path) return { ok: true, path: b.path };
   try {
     await fs.lstat(b.path);
     // 대소문자만 다른 이름은 대소문자 무시 볼륨(APFS 기본)에서 같은 파일로 보인다 — inode 가 같을 때만 허용.
     // 대소문자 구분 볼륨에서는 다른 파일이므로 덮어쓰지 않는다.
-    if (!(await sameInode(a.path, b.path))) return { ok: false, error: "같은 이름이 이미 있습니다." };
+    if (!(await sameInode(a.path, b.path))) return { ok: false, error: mt("repo.files.nameExists") };
   } catch {
     /* 없어야 정상 */
   }
@@ -292,12 +293,12 @@ export async function renamePath(
 /** 삭제 대상 검증만 한다 — 실제 삭제는 main 이 shell.trashItem 으로 휴지통에 보낸다(되돌릴 수 있게). */
 export async function resolveDeletable(cwd: string, requested: string, env: NodeJS.ProcessEnv = process.env): Promise<FileOpResult> {
   const t = await insideBase(cwd, requested, env);
-  if (!t) return { ok: false, error: "저장소 밖은 지울 수 없습니다." };
-  if (t.path === t.base || t.real === t.base) return { ok: false, error: "저장소 루트는 지울 수 없습니다." };
+  if (!t) return { ok: false, error: mt("repo.files.cannotDeleteOutside") };
+  if (t.path === t.base || t.real === t.base) return { ok: false, error: mt("repo.files.cannotDeleteRoot") };
   try {
     await fs.lstat(t.path);
   } catch {
-    return { ok: false, error: "이미 없는 경로입니다." };
+    return { ok: false, error: mt("repo.files.pathGone") };
   }
   return { ok: true, path: t.path };
 }

@@ -1,25 +1,29 @@
 // 교차 리뷰: 한 탭의 작업 트리 변경(diff)을 다른 provider 탭에 보내 독립 리뷰를 받는다. 프롬프트는 여기서 만든다.
+import type { TFunction } from "i18next";
+
 export const CROSS_REVIEW_DIFF_MAX = 120_000;
 
 export function otherProvider(p: "claude" | "codex"): "claude" | "codex" {
   return p === "claude" ? "codex" : "claude";
 }
 
-export function reviewTabTitle(originTitle: string): string {
-  return `교차 리뷰 · ${originTitle}`;
+export function reviewTabTitle(t: TFunction, originTitle: string): string {
+  return t("main.review.tabTitle", { title: originTitle });
 }
 
-/** 변경 요약 한 줄: "3개 파일 · +42 −7" */
-export function reviewScope(changes: { path: string; added: number; deleted: number }[]): string {
+/** 변경 요약 한 줄("3개 파일 · +42 −7")의 값. 문장은 `main.msg.reviewScope` 로 만들고 카드에도 키째 저장한다. */
+export function reviewScopeParams(changes: { path: string; added: number; deleted: number }[]): { count: number; added: number; deleted: number } {
   const added = changes.reduce((n, c) => n + c.added, 0);
   const deleted = changes.reduce((n, c) => n + c.deleted, 0);
-  return `${changes.length}개 파일 · +${added} −${deleted}`;
+  return { count: changes.length, added, deleted };
 }
 
 export function buildReviewPrompt(o: { originTitle: string; changes: { path: string; kind: string }[]; diff: string; author: "claude" | "codex" }): string {
+  // i18n-ignore: prompt
   const diff = o.diff.length > CROSS_REVIEW_DIFF_MAX ? `${o.diff.slice(0, CROSS_REVIEW_DIFF_MAX)}\n... (diff 가 길어 ${o.diff.length - CROSS_REVIEW_DIFF_MAX}자 생략 — 필요하면 파일을 직접 읽어)` : o.diff;
   const files = o.changes.map((c) => `- ${c.path} (${c.kind})`).join("\n");
   const authorLabel = o.author === "claude" ? "Claude Code" : "Codex";
+  // i18n-ignore: prompt
   return [
     `아래는 ${authorLabel} 와 함께 작업한 "${o.originTitle}" 의 저장소 변경(작업 트리 diff)입니다. 독립적인 코드 리뷰어로서 검토해 주세요.`,
     "",

@@ -1,4 +1,5 @@
 export const toolCard = {
+  permissionTool: "권한",
   state: {
     partial: "입력 생성 중",
     waiting_permission: "권한 대기",

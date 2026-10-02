@@ -4,6 +4,7 @@
 import type { McpServerStatusDto } from "@shared/ipc";
 import type { ClaudeRuntime } from "./claude-adapter";
 import { withControlQuery, withTimeout } from "./claude-control";
+import { mt } from "./i18n";
 
 type McpServerStatus = import("@anthropic-ai/claude-agent-sdk").McpServerStatus;
 
@@ -20,10 +21,10 @@ export async function fetchMcpStatus(
     cwd,
     async (q) => {
       const started = Date.now();
-      let servers = await withTimeout(q.mcpServerStatus(), 15_000, "mcp 상태 응답");
+      let servers = await withTimeout(q.mcpServerStatus(), 15_000, mt("session.error.label.mcpStatus"));
       while (servers.some((s) => s.status === "pending") && Date.now() - started < SETTLE_MS) {
         await new Promise((r) => setTimeout(r, POLL_MS));
-        servers = await withTimeout(q.mcpServerStatus(), 15_000, "mcp 상태 응답");
+        servers = await withTimeout(q.mcpServerStatus(), 15_000, mt("session.error.label.mcpStatus"));
       }
       return servers.map(toDto).sort((a, b) => a.name.localeCompare(b.name));
     },

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { intlLocale, type Locale } from "@shared/i18n/locale";
+import { msgText } from "@shared/i18n/msg";
 import type { OrchMessage, OrchRunState } from "@shared/orchestration";
 import { attention, runSummary, taskBlockers, taskWaves } from "@shared/orchestration";
 import { PROVIDER_NAME } from "@shared/fanout";
@@ -124,7 +125,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                 <button key={r.run.id} onClick={() => setSelected(r.run.id)} className={`flex flex-col gap-0.5 border-b border-line px-3 py-2 text-left ${run?.run.id === r.run.id ? "bg-accent-tint" : "hover:bg-panel-2"}`} data-orch-run={r.run.id}>
                   <span className="truncate text-[12px]">{r.run.objective}</span>
                   <span className="mono text-[10px] text-muted-2">
-                    {r.run.id} · {r.run.coordinator.kind === "tab" ? t("orchestration.panel.coordinatorTab") : t("orchestration.panel.coordinatorHuman")} · {r.run.status === "closed" ? t("orchestration.panel.runClosed") : runSummary(r)}
+                    {r.run.id} · {r.run.coordinator.kind === "tab" ? t("orchestration.panel.coordinatorTab") : t("orchestration.panel.coordinatorHuman")} · {r.run.status === "closed" ? t("orchestration.panel.runClosed") : runSummary(t, r)}
                     {at.questions.length > 0 ? ` · ${t("orchestration.panel.questionCount", { count: at.questions.length })}` : ""}
                   </span>
                 </button>
@@ -284,7 +285,7 @@ export function OrchestrationPanel({ initialRunId, onClose }: { initialRunId: st
                           <span className="mono">{new Date(m.ts).toLocaleTimeString(intlLocale(i18n.language as Locale), { hour: "2-digit", minute: "2-digit" })}</span>
                         </div>
                         <div className="mt-0.5 whitespace-pre-wrap text-[12px]" style={{ userSelect: "text" }}>
-                          {m.body || m.subject}
+                          {msgText(i18n, m.bodyMsg, m.body) || m.subject}
                         </div>
                         {m.filesModified && m.filesModified.length > 0 && <div className="mono mt-0.5 text-[10.5px] text-muted-2">{m.filesModified.join(", ")}</div>}
                         {m.type === "question" && !m.answer && (

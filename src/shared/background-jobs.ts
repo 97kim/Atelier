@@ -34,7 +34,7 @@ const STATUSES: BackgroundJobStatus[] = ["queued", "running", "completed", "fail
  * 플러그인 state.json 의 jobs 항목 하나를 읽는다. 우리가 못 읽는 형식이면 null.
  * 남이 쓰는 파일이라 필드가 없거나 형식이 바뀔 수 있다 — 모르는 값은 버리고 읽히는 것만 쓴다.
  */
-export function parseBackgroundJob(raw: unknown, root: string): BackgroundJobDto | null {
+export function parseBackgroundJob(t: TFunction, raw: unknown, root: string): BackgroundJobDto | null {
   if (!raw || typeof raw !== "object") return null;
   const j = raw as Record<string, unknown>;
   const id = str(j.id);
@@ -47,8 +47,8 @@ export function parseBackgroundJob(raw: unknown, root: string): BackgroundJobDto
   return {
     id,
     sessionId,
-    label: str(j.kindLabel) || str(j.kind) || "작업",
-    title: str(j.title) || "백그라운드 작업",
+    label: str(j.kindLabel) || str(j.kind) || t("session.bgJob.label"),
+    title: str(j.title) || t("session.bgJob.title"),
     status,
     summary: str(j.summary).replace(/\s+/g, " ").trim().slice(0, 200),
     startedAt: started,

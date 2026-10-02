@@ -34,7 +34,7 @@ const job = (over: Record<string, unknown> = {}) => ({
 });
 
 test("parseBackgroundJob: 읽히는 것만 쓰고, 모르는 형식은 버린다", () => {
-  const ok = parseBackgroundJob(job(), "/r/state.json");
+  const ok = parseBackgroundJob(t, job(), "/r/state.json");
   assert.equal(ok?.id, "task-1");
   assert.equal(ok?.label, "rescue");
   assert.equal(ok?.status, "running");
@@ -42,21 +42,21 @@ test("parseBackgroundJob: 읽히는 것만 쓰고, 모르는 형식은 버린다
   assert.equal(ok?.startedAt, Date.parse("2026-09-13T00:00:00.000Z"));
   assert.equal(ok?.completedAt, null);
 
-  assert.equal(parseBackgroundJob(null, "/r"), null);
-  assert.equal(parseBackgroundJob(job({ id: "" }), "/r"), null, "id 없으면 버린다");
-  assert.equal(parseBackgroundJob(job({ sessionId: undefined }), "/r"), null, "세션을 모르면 탭에 못 이으므로 버린다");
-  assert.equal(parseBackgroundJob(job({ status: "weird" }), "/r"), null, "모르는 상태는 버린다");
-  assert.equal(parseBackgroundJob(job({ createdAt: "nope" }), "/r"), null, "시각이 없으면 버린다");
+  assert.equal(parseBackgroundJob(t, null, "/r"), null);
+  assert.equal(parseBackgroundJob(t, job({ id: "" }), "/r"), null, "id 없으면 버린다");
+  assert.equal(parseBackgroundJob(t, job({ sessionId: undefined }), "/r"), null, "세션을 모르면 탭에 못 이으므로 버린다");
+  assert.equal(parseBackgroundJob(t, job({ status: "weird" }), "/r"), null, "모르는 상태는 버린다");
+  assert.equal(parseBackgroundJob(t, job({ createdAt: "nope" }), "/r"), null, "시각이 없으면 버린다");
   // kindLabel 이 없으면 kind 로, 그것도 없으면 기본 이름
-  assert.equal(parseBackgroundJob(job({ kindLabel: undefined, kind: "review" }), "/r")?.label, "review");
-  assert.equal(parseBackgroundJob(job({ kindLabel: undefined, kind: undefined }), "/r")?.label, "작업");
+  assert.equal(parseBackgroundJob(t, job({ kindLabel: undefined, kind: "review" }), "/r")?.label, "review");
+  assert.equal(parseBackgroundJob(t, job({ kindLabel: undefined, kind: undefined }), "/r")?.label, "작업");
 });
 
 test("mergeJobs: 같은 저장소의 같은 id 는 하나로, 시작 순으로", () => {
-  const a = parseBackgroundJob(job({ id: "a", createdAt: "2026-09-13T00:00:02.000Z" }), "/r")!;
-  const b = parseBackgroundJob(job({ id: "b", createdAt: "2026-09-13T00:00:01.000Z" }), "/r")!;
-  const aDup = parseBackgroundJob(job({ id: "a", status: "completed", createdAt: "2026-09-13T00:00:02.000Z" }), "/r")!;
-  const bOther = parseBackgroundJob(job({ id: "b", createdAt: "2026-09-13T00:00:01.000Z" }), "/other")!;
+  const a = parseBackgroundJob(t, job({ id: "a", createdAt: "2026-09-13T00:00:02.000Z" }), "/r")!;
+  const b = parseBackgroundJob(t, job({ id: "b", createdAt: "2026-09-13T00:00:01.000Z" }), "/r")!;
+  const aDup = parseBackgroundJob(t, job({ id: "a", status: "completed", createdAt: "2026-09-13T00:00:02.000Z" }), "/r")!;
+  const bOther = parseBackgroundJob(t, job({ id: "b", createdAt: "2026-09-13T00:00:01.000Z" }), "/other")!;
   const out = mergeJobs([a, b, aDup, bOther]);
   assert.deepEqual(
     out.map((j) => `${j.root}|${j.id}|${j.status}`),

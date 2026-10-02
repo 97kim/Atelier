@@ -3,6 +3,7 @@
 
 import type { VerifyCommandResult } from "./chat-events";
 import type { TFunction } from "i18next";
+import { msgText } from "./i18n/msg";
 
 /** 저장할 수 있는 명령 수·길이 상한. */
 export const VERIFY_MAX_COMMANDS = 20;
@@ -63,12 +64,30 @@ export function suggestVerifyCommands(repo: RepoProbe): string[] {
   return out;
 }
 
-/** 출력 버퍼의 꼬리만 남긴다. 잘렸으면 첫 줄에 표시. */
-export function tailOutput(text: string, max = VERIFY_OUTPUT_TAIL): string {
-  if (text.length <= max) return text;
+/** 출력 버퍼의 꼬리만 남긴다(앞을 자르면 잘린 줄을 버린다). 안내 문장은 붙이지 않는다 — truncated 로 알린다. */
+export function cutOutput(text: string, max = VERIFY_OUTPUT_TAIL): { text: string; truncated: boolean } {
+  if (text.length <= max) return { text, truncated: false };
   const cut = text.slice(text.length - max);
   const nl = cut.indexOf("\n");
-  return "…(앞부분 생략)\n" + (nl >= 0 && nl < 200 ? cut.slice(nl + 1) : cut);
+  return { text: nl >= 0 && nl < 200 ? cut.slice(nl + 1) : cut, truncated: true };
+}
+
+/** 출력 버퍼의 꼬리만 남긴다. 잘렸으면 첫 줄에 표시(예전 기록과 같은 모양). */
+export function tailOutput(text: string, max = VERIFY_OUTPUT_TAIL): string {
+  const r = cutOutput(text, max);
+  // i18n-ignore: 예전 기록과 같은 모양의 저장 형식
+  return r.truncated ? "…(앞부분 생략)\n" + r.text : r.text;
+}
+
+/** 카드에 그릴(또는 입력창에 붙일) 출력: 잘림 표시 + 출력 원문 + 앱 안내를 지금 언어로. */
+export function verifyOutputText(i18n: unknown, c: VerifyCommandResult): string {
+  const parts: string[] = [];
+  // i18n-ignore: 사전에 없을 때의 대체 문장
+  if (c.truncated) parts.push(msgText(i18n, { key: "repo.msg.verify.truncated" }, "…(앞부분 생략)"));
+  if (c.output) parts.push(c.output);
+  const note = c.noteMsg || c.note ? msgText(i18n, c.noteMsg, c.note ?? "") : "";
+  if (note) parts.push(note);
+  return parts.join("\n");
 }
 
 /** 전체 결과 = 명령 결과들의 합: 하나라도 failed 면 failed, aborted 가 있으면 aborted, 다 passed 면 passed. */
@@ -99,5 +118,6 @@ export function formatDuration(ms: number, t: TFunction): string {
 
 /** 실패한 명령의 출력을 채팅에 붙일 때의 제목. */
 export function failedCommandTitle(c: VerifyCommandResult): string {
+  // i18n-ignore: prompt
   return `검증 실패: ${c.cmd}${typeof c.exitCode === "number" ? ` (exit ${c.exitCode})` : ""}`;
 }

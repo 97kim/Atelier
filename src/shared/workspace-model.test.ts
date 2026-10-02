@@ -228,7 +228,6 @@ test("createWorkspace/updateWorkspace/tabCwd: 이름만으로 만들고, 탭 경
   assert.equal(tabCwd(m, m.tabs[0]), "/repo/other");
   m = updateWorkspace(m, "w1", { name: "   " });
   assert.equal(m.workspaces[0].name, "결제 개편"); // 빈 이름은 무시
-  assert.equal(createWorkspace(m, "", T0, "w2").workspace.name, "새 워크스페이스");
   assert.equal(updateWorkspace(m, "nope", { name: "x" }), m);
 });
 

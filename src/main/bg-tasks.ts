@@ -7,6 +7,7 @@
 
 import type { BackgroundJobDto } from "@shared/background-jobs";
 import { taskLabel, taskSummary, type LiveBackgroundTask } from "@shared/bg-tasks";
+import { mt } from "./i18n";
 
 /** 끝난 작업의 이름을 알림에 쓰려고 잠깐 기억해 둔다 — 끝났다는 알림이 목록에서 빠진 뒤에 올 수 있다. */
 const RECENT_MAX = 64;
@@ -62,8 +63,8 @@ export class BackgroundTaskRegistry {
     return [...s.tasks.values()].map((t) => ({
       id: t.id,
       sessionId: s.sessionId,
-      label: taskLabel(t.type),
-      title: taskSummary(t.description) || taskLabel(t.type),
+      label: taskLabel(mt, t.type),
+      title: taskSummary(t.description) || taskLabel(mt, t.type),
       status: "running" as const,
       summary: taskSummary(t.description),
       startedAt: t.startedAt,

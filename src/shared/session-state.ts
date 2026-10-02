@@ -1,6 +1,8 @@
 // 세션 상태 머신 — 순수 리듀서. UI 는 이 상태를 그리기만 하고, main 은 재생(replay)에 쓴다.
 // 부수효과 없음. node:test 로 검증 (session-state.test.ts).
 
+import { ko } from "./i18n/ko";
+import type { Msg } from "./i18n/msg";
 import {
   addUsage,
   ZERO_USAGE,
@@ -39,7 +41,8 @@ export interface ToolBlock {
   name: string;
   input: unknown;
   partial: boolean;
-  result?: { output: string; isError: boolean };
+  /** outputMsg: 앱이 대신 채운 결과 문구(도구가 결과 없이 끝났을 때). 그릴 때 번역한다. */
+  result?: { output: string; isError: boolean; outputMsg?: Msg };
   permission?: "pending" | "allowed" | "denied";
   /** Skill·Agent 가 띄운 하위 에이전트의 활동(화면 전용, 재생하면 없다). */
   subagent?: SubagentProgress;
@@ -80,6 +83,7 @@ export interface TurnBlock {
   numTurns: number;
   isError: boolean;
   errorText?: string;
+  errorMsg?: Msg;
   forkPoint?: ForkPoint;
 }
 
@@ -96,12 +100,14 @@ export interface ErrorBlock {
   kind: "error";
   id: string;
   message: string;
+  msg?: Msg;
 }
 
 export interface NoticeBlock {
   kind: "notice";
   id: string;
   message: string;
+  msg?: Msg;
   level: "notice" | "suggestion" | "warning";
 }
 
@@ -112,6 +118,8 @@ export interface ReviewBlock {
   status: "requested" | "done" | "failed";
   text: string;
   scope?: string;
+  scopeMsg?: Msg;
+  textMsg?: Msg;
   ts: number;
 }
 
@@ -227,13 +235,14 @@ function finalizeStreaming(blocks: Block[]): Block[] {
  * 입력을 만들던 중(partial)에 끝난 도구는 실행되지 않았다 — partial 은 그대로 둬서 덜 만든 명령·경로로
  * "터미널에서 실행"·파일 열기가 붙지 않게 한다.
  */
-function finalizeRunningTools(blocks: Block[], note: string): Block[] {
+function finalizeRunningTools(blocks: Block[], note: keyof typeof ko.session.msg.tool): Block[] {
   if (!blocks.some((b) => b.kind === "tool" && !b.result)) return blocks;
-  return blocks.map((b) =>
-    b.kind === "tool" && !b.result
-      ? { ...b, result: { output: b.partial ? "입력을 다 만들기 전에 끝나 실행하지 않았습니다." : note, isError: true } }
-      : b,
-  );
+  return blocks.map((b) => {
+    if (b.kind !== "tool" || b.result) return b;
+    const key = b.partial ? "partialInput" : note;
+    // output 은 원본(한국어) 문장 — 인계·내보내기처럼 번역 없이 읽는 곳이 쓴다
+    return { ...b, result: { output: ko.session.msg.tool[key], outputMsg: { key: `session.msg.tool.${key}` }, isError: true } };
+  });
 }
 
 function upsert<T extends Block>(
@@ -364,7 +373,7 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
           partial: false,
           permission: b?.permission,
           subagent: b?.subagent,
-          result: { output: event.output, isError: event.isError },
+          result: { output: event.output, isError: event.isError, ...(event.outputMsg ? { outputMsg: event.outputMsg } : {}) },
         })),
       };
 
@@ -424,7 +433,7 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
         lastTurn: hasUsage || !state.lastTurn ? event : state.lastTurn,
         sessionId: event.sessionId ?? state.sessionId,
         blocks: [
-          ...finalizeRunningTools(finalizeStreaming(state.blocks), "턴이 끝나 결과를 받지 못했습니다."),
+          ...finalizeRunningTools(finalizeStreaming(state.blocks), "turnEnded"),
           {
             kind: "turn",
             id: `turn-${event.ts}-${state.totals.turns + 1}`,
@@ -434,6 +443,7 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
             numTurns: event.numTurns,
             isError: event.isError,
             errorText: event.errorText,
+            errorMsg: event.errorMsg,
             forkPoint: event.forkPoint,
           },
         ],
@@ -454,7 +464,9 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
           reviewer: event.reviewer,
           status: event.status,
           text: event.text,
+          textMsg: event.textMsg,
           scope: event.scope ?? b?.scope,
+          scopeMsg: event.scopeMsg ?? b?.scopeMsg,
           ts: b?.ts ?? event.ts,
         })),
       };
@@ -532,7 +544,7 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
 
     case "notice": {
       const id = event.key ? `notice-${event.key}` : `notice-${event.ts}-${state.eventCount}`;
-      return { ...state, blocks: upsert<NoticeBlock>(state.blocks, id, "notice", () => ({ kind: "notice", id, message: event.message, level: event.level })) };
+      return { ...state, blocks: upsert<NoticeBlock>(state.blocks, id, "notice", () => ({ kind: "notice", id, message: event.message, msg: event.msg, level: event.level })) };
     }
 
     case "error":
@@ -544,8 +556,8 @@ function apply(state: SessionState, event: ChatEvent): SessionState {
         blocks: [
           ...(event.fatal === false
             ? finalizeStreaming(state.blocks)
-            : finalizeRunningTools(finalizeStreaming(state.blocks), "오류로 끝나 결과를 받지 못했습니다.")),
-          { kind: "error", id: `err-${event.ts}-${state.eventCount}`, message: event.message },
+            : finalizeRunningTools(finalizeStreaming(state.blocks), "errorEnded")),
+          { kind: "error", id: `err-${event.ts}-${state.eventCount}`, message: event.message, msg: event.msg },
         ],
       };
 

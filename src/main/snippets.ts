@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { upsertSnippet, type SnippetDto } from "@shared/snippets";
+import { mt } from "./i18n";
 
 export class SnippetStore {
   private items: SnippetDto[];
@@ -21,7 +22,7 @@ export class SnippetStore {
   save(input: { id?: string; name: string; text: string; workspaceId: string | null }):
     | { ok: true; snippet: SnippetDto }
     | { ok: false; error: string } {
-    const r = upsertSnippet(this.items, input, Date.now(), randomUUID);
+    const r = upsertSnippet(mt, this.items, input, Date.now(), randomUUID);
     if ("error" in r) return { ok: false, error: r.error };
     this.items = r.snippets;
     this.persist();

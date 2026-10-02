@@ -18,8 +18,9 @@ import {
 } from "electron";
 import type { PermissionAnswer } from "@shared/chat-events";
 import { isThemeMode } from "@shared/theme";
-import { isLanguageSetting, resolveLocale, LANGUAGE_SETTING_DEFAULT } from "@shared/i18n/locale";
-import { setMainLocale } from "./i18n";
+import { intlLocale, isLanguageSetting, resolveLocale, LANGUAGE_SETTING_DEFAULT, type Locale } from "@shared/i18n/locale";
+import { appMsg, mainI18n, mt, setMainLocale } from "./i18n";
+import { msgText, type Msg, type MsgKey } from "@shared/i18n/msg";
 import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type UpdateCheckDto, type UpdateRunResult, type UpdateStatusDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type CompactResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, type ManagedWorktreeDto, SearchResultDto } from "@shared/ipc";
 import {
   DEFAULT_PRICING,
@@ -42,7 +43,7 @@ import { ShellCliMonitor } from "./cli-watch";
 import { SlashCommandCache } from "./claude-commands";
 import { fetchMcpStatus } from "./claude-mcp";
 import { forkCodexThread, setCodexSessionIdleMs, type CodexRuntime } from "./codex-adapter";
-import { buildReviewPrompt, otherProvider, reviewPermissionDecision, reviewScope, reviewTabTitle } from "@shared/cross-review";
+import { buildReviewPrompt, otherProvider, reviewPermissionDecision, reviewScopeParams, reviewTabTitle } from "@shared/cross-review";
 import { handoffBriefPrompt, handoffNotePermission, NOTE_FILE } from "@shared/handoff";
 import { lastReplyText } from "@shared/session-state";
 import { parseCron } from "@shared/cron";
@@ -79,7 +80,7 @@ import { draftCommitMessage } from "./git-draft";
 import { ScheduleStore } from "./schedule-store";
 import { ScheduleEngine } from "./schedule-engine";
 import { runPrecheckCommand } from "./precheck";
-import { SCHEDULE_WORKSPACE, type Run, type Schedule, type ScheduleTarget } from "@shared/schedules";
+import { isScheduleWorkspace, runReason, type Run, type Schedule, type ScheduleTarget } from "@shared/schedules";
 import { createFileLogger, type FileLogger } from "./logger";
 import { brewUpgrade, caskVersion, compareVersions, fetchLatestRelease } from "./app-update";
 import { Store } from "./persistence";
@@ -201,7 +202,7 @@ async function sdkEnv(): Promise<Record<string, string>> {
 async function claudeRuntime(): Promise<ClaudeRuntime> {
   const cli = await cliDiscovery().find("claude");
   if (!cli.installed || !cli.path)
-    throw new Error(cli.error || "Claude CLI를 찾을 수 없습니다.");
+    throw new Error(cli.error || mt("main.error.claudeCliMissing"));
   const env = await sdkEnv();
   env.CLAUDE_AGENT_SDK_CLIENT_APP = `atelier/${app.getVersion()}`;
   return { pathToClaudeCodeExecutable: cli.path, env };
@@ -210,7 +211,7 @@ async function claudeRuntime(): Promise<ClaudeRuntime> {
 async function codexRuntime(): Promise<CodexRuntime> {
   const cli = await cliDiscovery().find("codex");
   if (!cli.installed || !cli.path)
-    throw new Error(cli.error || "Codex CLI를 찾을 수 없습니다.");
+    throw new Error(cli.error || mt("main.error.codexCliMissing"));
   return { codexPath: cli.path, env: await sdkEnv() };
 }
 
@@ -259,7 +260,7 @@ function onBackgroundJobFinished(job: BackgroundJobDto) {
   const ok = job.status === "completed";
   attention.backgroundJob(tabId, !ok);
   notify(
-    `${ok ? "백그라운드 작업 완료" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
+    `${ok ? mt("main.notify.bgDone") : mt("main.notify.bgFailed")} · ${tabTitleOf(tabId)}`,
     `${job.label} — ${job.summary || job.title}`,
     tabId,
   );
@@ -279,9 +280,13 @@ let scheduleEngine: ScheduleEngine | null = null;
  * 예약마다 어디에 둘지 묻지 않는다. 결과는 언제나 한곳에 모이는 편이 찾기 쉽다.
  */
 function scheduleWorkspaceId(): string | null {
-  const found = workspaces.state().model.workspaces.find((w) => w.name === SCHEDULE_WORKSPACE);
-  if (found) return found.id;
-  const made = workspaces.createWorkspace(SCHEDULE_WORKSPACE);
+  const found = workspaces.state().model.workspaces.find(isScheduleWorkspace);
+  if (found) {
+    // 표식이 생기기 전에 만든 것(이름으로 찾은 것)에는 표식을 붙여 둔다 — 그 뒤로는 이름을 바꿔도 찾는다
+    if (!found.builtin) workspaces.updateWorkspace(found.id, { builtin: "schedules" });
+    return found.id;
+  }
+  const made = workspaces.createWorkspace(mt("schedules.workspaceName"), "schedules");
   // 워크스페이스를 만들면 빈 탭이 따라온다. 예약은 제 탭을 따로 만드니 그건 치운다.
   if (made.tabId) workspaces.deleteTab(made.tabId);
   return made.workspaceId;
@@ -297,7 +302,7 @@ function cwdForTarget(target: ScheduleTarget): string | null {
 function schedulesApi() {
       const store = scheduleStore;
       const engine = scheduleEngine;
-      if (!store || !engine) throw new Error("예약이 아직 준비되지 않았습니다.");
+      if (!store || !engine) throw new Error(mt("schedules.error.notReady"));
       return {
         list: () => scheduleSnapshot() as { schedules: (Schedule & { nextRunAt: number | null })[]; runs: Run[] },
         save: (input: Partial<Schedule> & { id?: string }) => {
@@ -306,7 +311,7 @@ function schedulesApi() {
           const enabled = input.enabled ?? existing?.enabled ?? true;
           const next: Schedule = {
             id: existing?.id ?? randomUUID(),
-            name: input.name ?? existing?.name ?? "예약",
+            name: input.name ?? existing?.name ?? mt("schedules.defaultName"),
             cron: input.cron ?? existing?.cron ?? "0 9 * * *",
             timezone: input.timezone ?? existing?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
             prompt: input.prompt ?? existing?.prompt ?? "",
@@ -323,10 +328,10 @@ function schedulesApi() {
           };
           // 화면과 CLI 가 같은 문을 쓰므로 검증도 여기 둔다. 못 도는 예약을 그대로 저장하면
           // 목록에는 있는데 영영 안 도는 것이 되고, 사용자는 기다리다가 알게 된다.
-          if (!next.name.trim()) throw new Error("이름을 적어 주세요.");
-          if (!next.prompt.trim()) throw new Error("보낼 말을 적어 주세요.");
-          if (!parseCron(next.cron)) throw new Error("cron 형식이 아닙니다(분 시 일 월 요일).");
-          if (!cwdForTarget(next.target)) throw new Error("실행할 폴더를 고르세요.");
+          if (!next.name.trim()) throw new Error(mt("schedules.error.nameRequired"));
+          if (!next.prompt.trim()) throw new Error(mt("schedules.error.promptRequired"));
+          if (!parseCron(next.cron)) throw new Error(mt("schedules.error.cronInvalid"));
+          if (!cwdForTarget(next.target)) throw new Error(mt("schedules.error.folderRequired"));
           store.upsertSchedule(next);
           sendAll(IPC.schedulesChanged, scheduleSnapshot());
           return next;
@@ -351,14 +356,14 @@ function startSchedules() {
   const store = scheduleStore;
   scheduleEngine = new ScheduleEngine({
     store,
-    checkTarget: (target) => (cwdForTarget(target) ? null : "예약에 실행할 폴더가 없습니다."),
+    checkTarget: (target) => (cwdForTarget(target) ? null : runReason(mt, "schedules.msg.noFolder")),
     checkBudget: () => {
       const settings = usageSettings();
       if (!settings.monthlyBudgetUsd || settings.monthlyBudgetUsd <= 0) return null;
       const sum = querySummary({ ...periodRange("month", Date.now()), provider: "all" });
       // 예약은 사람이 안 보는 사이에 돈다 — 예산을 넘겼으면 조용히 멈추는 편이 낫다.
       return sum.totals.costUsd >= settings.monthlyBudgetUsd
-        ? `이번 달 추정 비용이 예산을 넘겼습니다($${sum.totals.costUsd.toFixed(2)} / $${settings.monthlyBudgetUsd.toFixed(2)}).`
+        ? runReason(mt, "schedules.msg.budgetExceeded", { spent: sum.totals.costUsd.toFixed(2), budget: settings.monthlyBudgetUsd.toFixed(2) })
         : null;
     },
     // 선조건은 예약에 적힌 폴더에서 돈다. 격리 회차의 worktree 는 이 시점에 아직 없다 —
@@ -417,9 +422,9 @@ async function sweepIsolatedRuns(scheduleId: string): Promise<void> {
 /** 예약 한 회차를 실제로 띄운다. 격리 세션이면 worktree 를 만들고, 아니면 정해 둔 탭에 보낸다. */
 async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: string }> {
   const wsId = scheduleWorkspaceId();
-  if (!wsId) throw new Error("예약 탭을 둘 워크스페이스를 만들지 못했습니다.");
+  if (!wsId) throw new Error(mt("schedules.error.workspaceFailed"));
   const base = cwdForTarget(schedule.target);
-  if (!base) throw new Error("예약에 실행할 폴더가 없습니다.");
+  if (!base) throw new Error(mt("schedules.msg.noFolder"));
   let tabId: string;
   // 실제로 돌 경로. 격리면 worktree 안, 아니면 예약에 적힌 폴더다.
   // 이걸 안 들고 다니면 configure 가 원본 경로로 덮어써 격리가 풀린다(실제로 그랬다).
@@ -444,8 +449,8 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
       }));
       throw new Error(
         undo.ok
-          ? "세션을 만들지 못했습니다."
-          : `세션을 만들지 못했고, 만들어 둔 worktree도 치우지 못했습니다(${r.worktree.path}): ${undo.error}`,
+          ? mt("schedules.error.sessionFailed")
+          : mt("schedules.error.sessionFailedUndo", { path: r.worktree.path, detail: undo.error }),
       );
     }
     tabId = made;
@@ -464,7 +469,7 @@ async function dispatchSchedule(schedule: Schedule, run: Run): Promise<{ tabId: 
       // 선조건은 워크스페이스 기본 경로에서 검사하고 실제 작업은 사용자가 보고 있던
       // 다른 worktree 에서 하는 일이 생긴다.
       const made = workspaces.createTab(wsId, { cwd: base, title: schedule.name });
-      if (!made) throw new Error("세션을 만들지 못했습니다.");
+      if (!made) throw new Error(mt("schedules.error.sessionFailed"));
       tabId = made;
       scheduleStore?.upsertSchedule({ ...schedule, pinnedTabId: made });
     }
@@ -494,13 +499,13 @@ function scheduleSnapshot() {
 function notifyScheduleRun(run: Run) {
   if (run.status === "completed" || run.status === "pending" || run.status === "running") return;
   const store = scheduleStore;
-  const name = store?.schedule(run.scheduleId)?.name ?? "예약";
+  const name = store?.schedule(run.scheduleId)?.name ?? mt("schedules.defaultName");
   if (run.status === "needs_action") {
-    notify(`예약이 승인을 기다립니다 · ${name}`, run.snapshot.prompt.slice(0, 80), run.tabId ?? undefined);
+    notify(mt("schedules.notify.needsAction", { name }), run.snapshot.prompt.slice(0, 80), run.tabId ?? undefined);
     return;
   }
   if (run.status.startsWith("skipped_")) return; // 건너뜀은 조용히 — 이력에 남는다
-  notify(`예약 실패 · ${name}`, run.reason ?? run.status, run.tabId ?? undefined);
+  notify(mt("schedules.notify.failed", { name }), run.reason ? msgText(mainI18n(), run.reasonMsg, run.reason) : run.status, run.tabId ?? undefined);
 }
 
 function startBackgroundJobWatcher() {
@@ -556,7 +561,7 @@ let snippets: SnippetStore;
 let lsp: LspManager;
 let searchIndex: SearchIndex;
 
-const UNKNOWN_CWD = "알 수 없는 작업 경로입니다.";
+const unknownCwd = () => mt("main.error.unknownCwd");
 
 /** 외부 브라우저로 넘겨도 되는 URL(http/https/mailto). file:·javascript: 등은 거부. */
 function isExternalUrl(url: string): boolean {
@@ -587,7 +592,7 @@ function hardenWebviews() {
     }
   });
 }
-const UNAPPROVED_DIR = "디렉토리 선택 창으로 고른 경로만 쓸 수 있습니다.";
+const unapprovedDir = () => mt("main.error.unapprovedDir");
 
 /**
  * 사용자가 실제로 고른 루트 디렉토리들(네이티브 디렉토리 선택 창) + 시작 시 모델에 이미 있던 경로 + 앱이 만드는 worktree 루트.
@@ -679,36 +684,50 @@ async function startControlServer() {
   }
 }
 
+/** 리뷰 카드에 저장하는 앱 문구: 문장(text)과 사전 키(textMsg)를 함께. */
+function reviewText(key: MsgKey): { text: string; textMsg: Msg } {
+  const m = appMsg(key);
+  return { text: m.message, textMsg: m.msg };
+}
+
+/** 팬아웃 세션 카드에 저장하는 앱 문구: 문장(error)과 사전 키(errorMsg)를 함께. */
+function fanoutError(key: MsgKey): { error: string; errorMsg: Msg } {
+  const m = appMsg(key);
+  return { error: m.message, errorMsg: m.msg };
+}
+
 /**
  * 교차 리뷰: 이 탭의 작업 트리 diff 를 다른 provider 의 새 탭에 보내고, 그 탭의 첫 답이 오면 이 탭에 review 카드로 남긴다.
  * 리뷰 탭은 화면을 빼앗지 않고(활성 탭 복원) 정책은 ask(읽기 전용에 가깝게). 결과 대기는 main 이 하므로 사용자가 탭을 옮겨도 이어진다.
  */
 async function startCrossReview(tabId: string): Promise<{ ok: true; reviewTabId: string; scope: string } | { ok: false; error: string }> {
   const tab = workspaces.tab(tabId);
-  if (!tab) return { ok: false, error: "탭을 찾지 못했습니다." };
+  if (!tab) return { ok: false, error: mt("main.error.tabNotFound") };
   const snap = sessions.snapshot(tabId);
-  if (!snap.cwd) return { ok: false, error: "이 탭에서 사용할 작업 경로를 먼저 선택하세요." };
+  if (!snap.cwd) return { ok: false, error: mt("main.error.cwdRequired") };
   const cwd = snap.cwd;
   const env = await cliDiscovery().buildEnv();
   const changes = await gitChanges(cwd, env);
-  if (changes.length === 0) return { ok: false, error: "리뷰할 파일 변경이 없습니다." };
+  if (changes.length === 0) return { ok: false, error: mt("main.review.noChanges") };
   const diff = await gitDiffFor(cwd, env, changes.map((c) => c.path));
-  if (!diff.trim()) return { ok: false, error: "리뷰할 diff를 읽지 못했습니다." };
+  if (!diff.trim()) return { ok: false, error: mt("main.review.diffUnreadable") };
   const reviewer = otherProvider(snap.provider);
   const originTitle = tabTitleOf(tabId);
   const prevActive = workspaces.state().model.activeTabId;
   const reviewTabId = workspaces.createTab(tab.workspaceId);
-  if (!reviewTabId) return { ok: false, error: "리뷰 탭을 만들지 못했습니다." };
+  if (!reviewTabId) return { ok: false, error: mt("main.review.tabCreateFailed") };
   // model 은 명시적으로 비운다 — 새 탭이 활성 탭의(다른 provider 의) 모델명을 물려받지 않게
   sessions.configure(reviewTabId, { cwd, provider: reviewer, policy: "ask", model: undefined });
-  workspaces.renameTab(reviewTabId, reviewTabTitle(originTitle));
+  workspaces.renameTab(reviewTabId, reviewTabTitle(mt, originTitle));
   if (prevActive && prevActive !== reviewTabId) workspaces.activateTab(prevActive);
-  const scope = reviewScope(changes);
-  sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "requested", text: "", scope });
+  const scopeParams = reviewScopeParams(changes);
+  const scope = mt("main.msg.reviewScope", scopeParams);
+  const scopeMsg: Msg = { key: "main.msg.reviewScope", params: scopeParams };
+  sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "requested", text: "", scope, scopeMsg });
   const since = sessions.events(reviewTabId).length;
   const sent = await handleChatSend(reviewTabId, { text: buildReviewPrompt({ originTitle, author: snap.provider, changes: changes.map((c) => ({ path: c.path, kind: c.kind })), diff }) });
   if (!sent.ok) {
-    sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "failed", text: sent.error });
+    sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "failed", text: sent.error, scope, scopeMsg });
     return { ok: false, error: sent.error };
   }
   void (async () => {
@@ -729,15 +748,15 @@ async function startCrossReview(tabId: string): Promise<{ ok: true; reviewTabId:
       if (!busy && turned) {
         const text = lastReplyText(sessions.events(reviewTabId));
         const failed = st.status === "error" && !text;
-        sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: failed ? "failed" : "done", text: text || "리뷰 탭이 답 없이 끝났습니다. 리뷰 탭을 열어 확인하세요." });
+        sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: failed ? "failed" : "done", ...(text ? { text } : reviewText("main.msg.reviewNoReply")), scope, scopeMsg });
         return;
       }
       if (!busy && st.status === "error") {
-        sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "failed", text: "리뷰 탭에서 오류가 났습니다. 리뷰 탭을 열어 확인하세요." });
+        sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "failed", ...reviewText("main.msg.reviewTabError"), scope, scopeMsg });
         return;
       }
       if (Date.now() - started > 30 * 60_000) {
-        sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "failed", text: "30분 안에 리뷰가 끝나지 않았습니다. 리뷰 탭을 열어 확인하세요." });
+        sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "failed", ...reviewText("main.msg.reviewTimeout"), scope, scopeMsg });
         return;
       }
     }
@@ -751,13 +770,13 @@ async function startCrossReview(tabId: string): Promise<{ ok: true; reviewTabId:
  */
 async function startVerify(tabId: string, commands?: string[]): Promise<VerifyStartResult> {
   const tab = workspaces.tab(tabId);
-  if (!tab) return { ok: false, error: "탭을 찾지 못했습니다." };
+  if (!tab) return { ok: false, error: mt("main.error.tabNotFound") };
   const cwd = sessions.snapshot(tabId).cwd;
-  if (!cwd) return { ok: false, error: "이 탭에서 사용할 작업 경로를 먼저 선택하세요." };
-  if (!existsSync(cwd)) return { ok: false, error: `작업 경로를 찾을 수 없습니다: ${cwd}` };
+  if (!cwd) return { ok: false, error: mt("main.error.cwdRequired") };
+  if (!existsSync(cwd)) return { ok: false, error: mt("main.verify.cwdMissing", { cwd }) };
   const ws = workspaces.state().model.workspaces.find((w) => w.id === tab.workspaceId);
   const list = commands && commands.length > 0 ? commands : (ws?.verifyCommands ?? []);
-  if (list.length === 0) return { ok: false, error: "검증 명령이 없습니다. 먼저 명령을 정해 주세요." };
+  if (list.length === 0) return { ok: false, error: mt("main.verify.noCommands") };
   const env = await cliDiscovery().buildEnv();
   return verifyRunner.start({ tabId, cwd, commands: list, env });
 }
@@ -783,12 +802,12 @@ function noteFanout(tabId: string, e: FanoutEvent, patch: Partial<Omit<FanoutEve
  * 각 세션이 끝나면 worktree 의 변경 통계와 답변 앞부분을 카드에 적는다. 권한 대기(ask 정책)는 waiting 으로 표시만 한다 — 사람이 그 탭에서 답한다.
  */
 async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutStartResult> {
-  const v = validateFanoutRequest(req);
+  const v = validateFanoutRequest(mt, req);
   if (!v.ok) return v;
   const tab = workspaces.tab(tabId);
-  if (!tab) return { ok: false, error: "탭을 찾지 못했습니다." };
+  if (!tab) return { ok: false, error: mt("main.error.tabNotFound") };
   const cwd = sessions.snapshot(tabId).cwd;
-  if (!cwd) return { ok: false, error: "이 탭에서 사용할 작업 경로를 먼저 선택하세요." };
+  if (!cwd) return { ok: false, error: mt("main.error.cwdRequired") };
   const env = await cliDiscovery().buildEnv();
   const originTitle = tabTitleOf(tabId);
   const prevActive = workspaces.state().model.activeTabId;
@@ -806,10 +825,10 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
         if (t) await worktreeRemove(env, t, { force: true });
         workspaces.deleteTab(m.tabId);
       }
-      return { ok: false, error: `세션 ${label}의 worktree를 만들지 못했습니다: ${wt.error}` };
+      return { ok: false, error: mt("main.fanout.worktreeFailed", { label, detail: wt.error }) };
     }
-    const vTab = workspaces.createTab(tab.workspaceId, { cwd: wt.worktree.path, worktree: wt.worktree, title: fanoutTabTitle(label, spec.provider, originTitle) });
-    if (!vTab) return { ok: false, error: "팬아웃 세션의 탭을 만들지 못했습니다." };
+    const vTab = workspaces.createTab(tab.workspaceId, { cwd: wt.worktree.path, worktree: wt.worktree, title: fanoutTabTitle(mt, label, spec.provider, tab.title?.trim() || null) });
+    if (!vTab) return { ok: false, error: mt("main.fanout.tabCreateFailed") };
     // model 은 항상 명시(없으면 비움) — 활성 탭의 다른 provider 모델명이 물려지지 않게
     sessions.configure(vTab, { cwd: wt.worktree.path, provider: spec.provider, policy: v.policy, model: spec.model });
     variants.push({ tabId: vTab, label, provider: spec.provider, ...(spec.model ? { model: spec.model } : {}), status: "running" });
@@ -851,10 +870,10 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
           const changes = snap?.ok ? snap.changes : [];
           const text = lastReplyText(sessions.events(x.tabId));
           const failed = st.status === "error" && !text;
-          next[i] = { ...x, status: failed ? "failed" : "done", ...changeStats(changes), summary: excerpt(text, FANOUT_SUMMARY_EXCERPT), durationMs: Date.now() - started, ...(failed ? { error: "팬아웃 세션에서 오류가 발생했습니다. 해당 탭에서 내용을 확인하세요." } : {}) };
+          next[i] = { ...x, status: failed ? "failed" : "done", ...changeStats(changes), summary: excerpt(text, FANOUT_SUMMARY_EXCERPT), durationMs: Date.now() - started, ...(failed ? fanoutError("main.msg.fanoutSessionError") : {}) };
           changed = true;
         } else if (Date.now() - started > 90 * 60_000) {
-          next[i] = { ...x, status: "failed", error: "90분 안에 끝나지 않았습니다." };
+          next[i] = { ...x, status: "failed", ...fanoutError("main.msg.fanoutTimeout") };
           changed = true;
         }
       }
@@ -874,7 +893,7 @@ async function startFanout(tabId: string, req: FanoutStartDto): Promise<FanoutSt
 
 async function fanoutCompare(tabId: string, fanoutId: string): Promise<FanoutCompareDto> {
   const ev = fanoutBlock(tabId, fanoutId);
-  if (!ev) throw new Error("팬아웃 기록을 찾지 못했습니다.");
+  if (!ev) throw new Error(mt("main.fanout.recordNotFound"));
   const env = await cliDiscovery().buildEnv();
   const variants: FanoutCompareDto["variants"] = [];
   for (const x of ev.variants) {
@@ -889,15 +908,15 @@ async function fanoutCompare(tabId: string, fanoutId: string): Promise<FanoutCom
 
 async function fanoutAdopt(tabId: string, fanoutId: string, variantTabId: string): Promise<FanoutAdoptResult> {
   const ev = fanoutBlock(tabId, fanoutId);
-  if (!ev) return { ok: false, error: "팬아웃 기록을 찾지 못했습니다." };
+  if (!ev) return { ok: false, error: mt("main.fanout.recordNotFound") };
   const x = ev.variants.find((v) => v.tabId === variantTabId);
-  if (!x) return { ok: false, error: "이 팬아웃에서 선택한 세션의 결과를 찾지 못했습니다." };
-  if (x.status === "running" || x.status === "waiting") return { ok: false, error: "선택한 세션이 아직 작업 중입니다. 작업이 끝난 뒤 적용하세요." };
+  if (!x) return { ok: false, error: mt("main.fanout.variantNotFound") };
+  if (x.status === "running" || x.status === "waiting") return { ok: false, error: mt("main.fanout.variantBusy") };
   const wt = workspaces.tab(variantTabId)?.worktree;
-  if (!wt || !existsSync(wt.path)) return { ok: false, error: "선택한 세션의 worktree가 없어 결과를 적용할 수 없습니다." };
+  if (!wt || !existsSync(wt.path)) return { ok: false, error: mt("main.fanout.variantNoWorktree") };
   const cwd = sessions.snapshot(tabId).cwd;
-  if (!cwd) return { ok: false, error: "결과를 적용할 원래 탭의 작업 경로가 없습니다." };
-  if (sessions.isBusy(tabId)) return { ok: false, error: "원래 탭의 작업이 끝난 뒤 결과를 적용할 수 있습니다." };
+  if (!cwd) return { ok: false, error: mt("main.fanout.originNoCwd") };
+  if (sessions.isBusy(tabId)) return { ok: false, error: mt("main.fanout.originBusy") };
   const env = await cliDiscovery().buildEnv();
   // 팬아웃을 만든 저장소에만 적용한다 — 그 사이 탭의 작업 경로가 다른 저장소로 바뀌었으면 거부
   const top = (await gitInfo(cwd, env))?.root ?? null;
@@ -908,7 +927,7 @@ async function fanoutAdopt(tabId: string, fanoutId: string, variantTabId: string
       return false;
     }
   };
-  if (!same(top, wt.repo)) return { ok: false, error: `이 팬아웃의 원본 저장소는 ${wt.repo}입니다. 현재 탭의 작업 경로(${cwd})가 다른 저장소여서 결과를 적용하지 않았습니다.` };
+  if (!same(top, wt.repo)) return { ok: false, error: mt("main.fanout.wrongRepo", { repo: wt.repo, cwd }) };
   const p = await worktreePatch(env, wt);
   if (!p.ok) return p;
   const a = await applyPatch(env, cwd, p.patch);
@@ -919,7 +938,7 @@ async function fanoutAdopt(tabId: string, fanoutId: string, variantTabId: string
 
 async function fanoutCleanup(tabId: string, fanoutId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const ev = fanoutBlock(tabId, fanoutId);
-  if (!ev) return { ok: false, error: "팬아웃 기록을 찾지 못했습니다." };
+  if (!ev) return { ok: false, error: mt("main.fanout.recordNotFound") };
   const env = await cliDiscovery().buildEnv();
   const errors: string[] = [];
   const variants = ev.variants.slice();
@@ -979,7 +998,7 @@ async function installCliShim(): Promise<{ ok: true; path: string; onPath: boole
     const target = join(dir, "atelier");
     const script = [
       "#!/bin/sh",
-      "# Atelier CLI — 앱에 동봉된 cli/atelier.cjs 를 앱의 Electron(node 모드)으로 실행한다. 설정 > 일반에서 다시 설치하면 갱신된다.",
+      mt("main.cli.shimComment"),
       // 이 앱의 userData(개발 실행은 이름이 달라 경로도 다르다). 이미 정해 두었으면 그것을 존중한다.
       `: "\${ATELIER_USERDATA:=${shq(app.getPath("userData")).replace(/^'|'$/g, "")}}"`,
       "export ATELIER_USERDATA",
@@ -995,7 +1014,7 @@ async function installCliShim(): Promise<{ ok: true; path: string; onPath: boole
       ok: true,
       path: target,
       onPath,
-      ...(onPath ? {} : { hint: `터미널 PATH 에 ${dir} 이 없습니다. ~/.zshrc 에 export PATH="$HOME/.local/bin:$PATH" 를 추가하고 새 터미널을 여세요.` }),
+      ...(onPath ? {} : { hint: mt("main.cli.pathHint", { dir }) }),
     };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -1055,7 +1074,7 @@ function installSkillStub(agent?: "claude" | "codex"): { ok: true; paths: string
       writeFileSync(t.path, stub);
       paths.push(t.path);
     }
-    if (paths.length === 0) return { ok: false, error: "Claude Code(~/.claude)도 Codex(~/.codex)도 이 PC 에 없습니다." };
+    if (paths.length === 0) return { ok: false, error: mt("main.cli.noAgents") };
     return { ok: true, paths, skipped };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -1178,7 +1197,14 @@ function appSettings(): AppSettingsDto {
 function applyAppSettings(s: AppSettingsDto) {
   // 네이티브 UI(다이얼로그·컨텍스트 메뉴·스크롤바)도 같은 테마로. 렌더러는 자기 설정값으로 따로 칠한다.
   nativeTheme.themeSource = s.theme;
+  const prevLanguage = mainI18n().language;
   setMainLocale(s.resolvedLocale);
+  // 메뉴는 만들 때의 언어로 굳는다 — 언어가 바뀌면 다시 만든다(앱 시작 전 첫 호출에서는 아직 메뉴가 없다)
+  if (mainI18n().language !== prevLanguage) {
+    if (menuBuilt) buildMenu();
+    // CLI 탐색 결과에는 번역된 오류 문구가 들어 있다 — 다음 조회에서 지금 언어로 다시 만든다
+    discovery?.invalidate();
+  }
   setClaudeSessionIdleMs(s.sessionIdleMinutes * 60_000);
   setCodexSessionIdleMs(s.sessionIdleMinutes * 60_000);
   sessions.setMaxConcurrent(s.maxConcurrent);
@@ -1208,8 +1234,8 @@ function checkBudget() {
   store.saveSettings({ ...settings, budgetAlertedMonth: month });
   if (Notification.isSupported()) {
     new Notification({
-      title: "월 예산 80% 도달",
-      body: `이번 달 추정 비용 $${s.totals.costUsd.toFixed(2)} / 예산 $${settings.monthlyBudgetUsd.toFixed(2)}`,
+      title: mt("main.notify.budgetTitle"),
+      body: mt("main.notify.budgetBody", { cost: s.totals.costUsd.toFixed(2), budget: settings.monthlyBudgetUsd.toFixed(2) }),
     }).show();
   }
 }
@@ -1285,7 +1311,7 @@ function bootstrap() {
         // 오류는 원칙적으로 회차의 끝이다(대기열 취소도 fatal:false 로 온다 — 무시하면 영영 도는 중이 된다).
         // 다만 "재시도 예정" 은 예외다. 그걸 끝으로 읽으면 일은 계속 도는데 감시와 겹침 방지만 풀린다.
         else if (event.type === "error" && event.willRetry !== true)
-          scheduleEngine.onSignal(tabId, { kind: "stream_ended", reason: event.message, expected: false });
+          scheduleEngine.onSignal(tabId, { kind: "stream_ended", reason: event.message, expected: false, reasonMsg: event.msg });
       }
       // 어댑터가 직접 흘린 status(waiting_permission 등)도 사이드바 상태에 반영한다.
       if (event.type === "status") workspaces.onStatus(tabId, event.status);
@@ -1294,8 +1320,8 @@ function bootstrap() {
       if (event.type === "permission_request") {
         const question = event.tool === "AskUserQuestion";
         notifyIfUnfocused(
-          question ? `질문 대기 · ${title}` : `권한 승인 대기 · ${title}`,
-          question ? summarizeToolInput(event.tool, event.input) || "모델이 선택지를 물었습니다" : (event.title ?? `${event.tool} 실행을 허용할까요?`),
+          question ? mt("main.notify.questionWaiting", { title }) : mt("main.notify.permissionWaiting", { title }),
+          question ? summarizeToolInput(event.tool, event.input) || mt("main.notify.questionBody") : (event.title ?? mt("main.notify.permissionBody", { tool: event.tool })),
           tabId,
         );
       } else if (event.type === "turn_result") {
@@ -1307,8 +1333,8 @@ function bootstrap() {
         if (!supervised && shouldNotifyDone(appSettings().notifyOnDone, focused, isActive)) {
           const reply = lastReplyText(sessions.events(tabId)).replace(/\s+/g, " ").trim();
           notify(
-            `${event.isError ? "응답 실패" : "응답 완료"} · ${title}`,
-            event.isError ? (event.errorText ?? "오류") : `${(event.durationMs / 1000).toFixed(0)}초 · ${reply.slice(0, 140) || "답변이 도착했습니다"}`,
+            `${event.isError ? mt("main.notify.replyFailed") : mt("main.notify.replyDone")} · ${title}`,
+            event.isError ? (event.errorText ?? mt("main.notify.errorFallback")) : mt("main.notify.replyBody", { seconds: (event.durationMs / 1000).toFixed(0), reply: reply.slice(0, 140) || mt("main.notify.replyArrived") }),
             tabId,
           );
         }
@@ -1350,10 +1376,10 @@ function bootstrap() {
       const ok = note.status === "completed";
       // 배너는 잠깐이다. 보고 있지 않았다면 탭에도 표시를 남긴다 — 자리를 비웠다 와도 알아보게.
       attention.backgroundJob(tabId, !ok);
-      const what = job?.summary || job?.title || "백그라운드 작업";
+      const what = job?.summary || job?.title || mt("main.notify.bgJob");
       notify(
-        `${ok ? "백그라운드 작업 완료" : note.timedOut ? "백그라운드 작업 시간 초과" : "백그라운드 작업 실패"} · ${tabTitleOf(tabId)}`,
-        note.timedOut ? `시간 제한에 걸려 멈췄습니다: ${what}` : note.summary || what,
+        `${ok ? mt("main.notify.bgDone") : note.timedOut ? mt("main.notify.bgTimedOut") : mt("main.notify.bgFailed")} · ${tabTitleOf(tabId)}`,
+        note.timedOut ? mt("main.notify.bgTimedOutBody", { what }) : note.summary || what,
         tabId,
       );
     },
@@ -1371,7 +1397,7 @@ function bootstrap() {
         if (provider === "claude") {
           const cli = await cliDiscovery().find("claude");
           if (!cli.installed || !cli.path)
-            throw new Error(cli.error || "Claude CLI를 찾을 수 없습니다.");
+            throw new Error(cli.error || mt("main.error.claudeCliMissing"));
           const args = sessionId
             ? isNew
               ? ["--session-id", sessionId]
@@ -1392,11 +1418,11 @@ function bootstrap() {
             cli.path,
             args,
           );
-          if (!r.ok) throw new Error(r.error ?? "CLI 를 띄우지 못했습니다.");
+          if (!r.ok) throw new Error(r.error ?? mt("main.error.cliLaunchFailed"));
         } else {
           const cli = await cliDiscovery().find("codex");
           if (!cli.installed || !cli.path)
-            throw new Error(cli.error || "Codex CLI를 찾을 수 없습니다.");
+            throw new Error(cli.error || mt("main.error.codexCliMissing"));
           const args = sessionId && !isNew ? ["resume", sessionId] : [];
           const r = terminals.openCommand(
             `${tabId}:cli`,
@@ -1405,7 +1431,7 @@ function bootstrap() {
             cli.path,
             args,
           );
-          if (!r.ok) throw new Error(r.error ?? "CLI 를 띄우지 못했습니다.");
+          if (!r.ok) throw new Error(r.error ?? mt("main.error.cliLaunchFailed"));
         }
       },
       kill(tabId) {
@@ -1427,7 +1453,7 @@ function bootstrap() {
         attention.terminalPermission(tabId, !!waiting);
       if (waiting)
         notifyIfUnfocused(
-          `권한 승인 대기(터미널) · ${tabTitleOf(tabId)}`,
+          mt("main.notify.terminalPermissionWaiting", { title: tabTitleOf(tabId) }),
           `${waiting.tool} ${waiting.summary}`.trim(),
           tabId,
         );
@@ -1491,7 +1517,7 @@ async function forkTab(tabId: string, pointId: string): Promise<{ ok: true; tabI
   const src = sessions.forkSource(tabId, pointId);
   if (!src.ok) return src;
   const tab = workspaces.state().model.tabs.find((t) => t.id === tabId);
-  if (!tab) return { ok: false, error: "탭을 찾지 못했습니다." };
+  if (!tab) return { ok: false, error: mt("main.error.tabNotFound") };
   let sessionId: string;
   try {
     sessionId =
@@ -1506,10 +1532,10 @@ async function forkTab(tabId: string, pointId: string): Promise<{ ok: true; tabI
             log: (l) => console.log(l),
           });
   } catch (e) {
-    return { ok: false, error: `분기하지 못했습니다: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, error: mt("main.error.forkFailed", { detail: e instanceof Error ? e.message : String(e) }) };
   }
-  const newTabId = workspaces.createTab(tab.workspaceId, { cwd: src.cwd, title: `${tabTitleOf(tabId)} (분기)` });
-  if (!newTabId) return { ok: false, error: "새 탭을 만들지 못했습니다." };
+  const newTabId = workspaces.createTab(tab.workspaceId, { cwd: src.cwd, title: mt("main.tab.forkTitle", { title: tabTitleOf(tabId) }) });
+  if (!newTabId) return { ok: false, error: mt("main.error.tabCreateFailed") };
   sessions.adoptFork(newTabId, { provider: src.provider, cwd: src.cwd, model: src.model, policy: src.policy, sessionId }, src.prefix);
   workspaces.activateTab(newTabId);
   return { ok: true, tabId: newTabId };
@@ -1517,7 +1543,7 @@ async function forkTab(tabId: string, pointId: string): Promise<{ ok: true; tabI
 
 function tabTitleOf(tabId: string): string {
   const tab = workspaces.state().model.tabs.find((t) => t.id === tabId);
-  return tab ? tabTitle(tab) : "세션";
+  return tab ? tabTitle(tab, mt("shared.untitledTab")) : mt("main.tab.fallbackTitle");
 }
 
 function attachmentsDir(): string {
@@ -1565,14 +1591,14 @@ const browserViews = new Map<string, { id: number; url: string }>();
 /** 등록된 브라우저에서 스크립트를 돌리고 결과를 받는다. 없거나 죽었으면 뚜렷하게 알린다. */
 async function runInBrowser(tabId: string, script: string): Promise<Record<string, unknown>> {
   const reg = browserViews.get(tabId);
-  if (!reg) throw new Error("이 탭에 열린 브라우저가 없습니다. 먼저 `atelier browser open --url …` 으로 여세요.");
+  if (!reg) throw new Error(mt("main.error.browserNotOpen"));
   const wc = webContents.fromId(reg.id);
   if (!wc || wc.isDestroyed()) {
     browserViews.delete(tabId);
-    throw new Error("브라우저 탭이 닫혔습니다. 다시 여세요.");
+    throw new Error(mt("main.error.browserClosed"));
   }
   const out = await wc.executeJavaScript(script, true);
-  if (!out || typeof out !== "object") throw new Error("브라우저가 결과를 주지 않았습니다.");
+  if (!out || typeof out !== "object") throw new Error(mt("main.error.browserNoResult"));
   const r = out as Record<string, unknown>;
   if (typeof r.error === "string") throw new Error(r.error);
   return r;
@@ -1586,7 +1612,7 @@ async function handleChatSend(
   const prepared = prepareChatImages(payload?.images);
   if (!prepared.ok) return { ok: false, error: prepared.error };
   if (!text && prepared.prepared.length === 0)
-    return { ok: false, error: "내용이 비어 있습니다." };
+    return { ok: false, error: mt("main.error.emptyContent") };
 
   const saved = saveChatImages({
     baseDir: attachmentsDir(),
@@ -1596,7 +1622,7 @@ async function handleChatSend(
   if (!saved.ok) return { ok: false, error: saved.error };
 
   const ts = Date.now();
-  return sessions.send(tabId, text || "(이미지)", saved.stored, {
+  return sessions.send(tabId, text || mt("main.chat.imageOnly"), saved.stored, {
     type: "user_message",
     ts,
     id: `u-${ts}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1654,9 +1680,9 @@ function registerIpc() {
     if (update) return update.job;
     // 진행 상태를 본 뒤 다시 붙기 전에 끝났을 수 있다 — 다시 돌리지 않고 결과를 준다
     if (installed) return Promise.resolve({ ok: true, version: installed });
-    if (!fromCask()) return Promise.resolve({ ok: false, error: "Homebrew로 설치한 /Applications/Atelier.app에서만 업데이트할 수 있습니다." });
+    if (!fromCask()) return Promise.resolve({ ok: false, error: mt("main.update.caskOnly") });
     const target = latestSeen;
-    if (!target) return Promise.resolve({ ok: false, error: "먼저 업데이트를 확인하세요." });
+    if (!target) return Promise.resolve({ ok: false, error: mt("main.update.checkFirst") });
     const job = cliDiscovery()
       .buildEnv()
       .then((env) => brewUpgrade(env, target))
@@ -1676,24 +1702,24 @@ function registerIpc() {
   applyAppSettings(appSettings());
   ipcMain.handle(IPC.appSettingsGet, (): AppSettingsDto => appSettings());
   ipcMain.handle(IPC.appSettingsSet, (_e, patch: Partial<AppSettingsDto>): AppSettingsDto => {
-    if (!patch || typeof patch !== "object") throw new Error("잘못된 인자");
+    if (!patch || typeof patch !== "object") throw new Error(mt("main.error.badArgs"));
     const cur = store.loadSettings<Record<string, unknown>>({});
     const next = { ...cur };
     if (patch.theme !== undefined) {
-      if (!isThemeMode(patch.theme)) throw new Error("잘못된 테마");
+      if (!isThemeMode(patch.theme)) throw new Error(mt("main.error.badTheme"));
       next.theme = patch.theme;
     }
     if (patch.language !== undefined) {
-      if (!isLanguageSetting(patch.language)) throw new Error("잘못된 언어");
+      if (!isLanguageSetting(patch.language)) throw new Error(mt("main.error.badLanguage"));
       next.language = patch.language;
     }
     if (patch.warmTarget !== undefined) {
-      if (patch.warmTarget !== "active" && patch.warmTarget !== "off") throw new Error("잘못된 예열 대상");
+      if (patch.warmTarget !== "active" && patch.warmTarget !== "off") throw new Error(mt("main.error.badWarmTarget"));
       next.warmTarget = patch.warmTarget;
     }
     if (patch.sessionIdleMinutes !== undefined) {
       const n = Number(patch.sessionIdleMinutes);
-      if (!Number.isFinite(n) || n < SESSION_IDLE_MINUTES_MIN || n > SESSION_IDLE_MINUTES_MAX) throw new Error(`유휴 시간은 ${SESSION_IDLE_MINUTES_MIN}~${SESSION_IDLE_MINUTES_MAX}분 사이여야 합니다.`);
+      if (!Number.isFinite(n) || n < SESSION_IDLE_MINUTES_MIN || n > SESSION_IDLE_MINUTES_MAX) throw new Error(mt("main.error.idleMinutesRange", { min: SESSION_IDLE_MINUTES_MIN, max: SESSION_IDLE_MINUTES_MAX }));
       next.sessionIdleMinutes = Math.round(n);
     }
     if (patch.keepBrowserLogin !== undefined) {
@@ -1702,14 +1728,14 @@ function registerIpc() {
       if (!next.keepBrowserLogin) forgetSessionCookies(app.getPath("userData"));
     }
     if (patch.notifyOnDone !== undefined) {
-      if (!isNotifyOnDone(patch.notifyOnDone)) throw new Error("잘못된 알림 설정");
+      if (!isNotifyOnDone(patch.notifyOnDone)) throw new Error(mt("main.error.badNotifySetting"));
       next.notifyOnDone = patch.notifyOnDone;
     }
     // 경로를 고르는 건 main 의 선택 창(app:pick-worktree-dir)만 한다 — 여기서는 기본값으로 되돌리기만 받는다
     if (patch.worktreeDirCustom === false) delete next.worktreeDir;
     if (patch.maxConcurrent !== undefined) {
       const n = Number(patch.maxConcurrent);
-      if (!Number.isFinite(n) || n < MAX_CONCURRENT_MIN || n > MAX_CONCURRENT_MAX) throw new Error(`동시 작업 수는 ${MAX_CONCURRENT_MIN}~${MAX_CONCURRENT_MAX} 사이여야 합니다.`);
+      if (!Number.isFinite(n) || n < MAX_CONCURRENT_MIN || n > MAX_CONCURRENT_MAX) throw new Error(mt("main.error.maxConcurrentRange", { min: MAX_CONCURRENT_MIN, max: MAX_CONCURRENT_MAX }));
       next.maxConcurrent = Math.round(n);
     }
     store.saveSettings(next);
@@ -1780,12 +1806,12 @@ function registerIpc() {
     handleChatSend(tabId, payload),
   );
   ipcMain.handle(IPC.chatVerify, (_e, tabId: string, opts?: { commands?: unknown }) => {
-    if (typeof tabId !== "string") return { ok: false, error: "tabId 가 없습니다." } satisfies VerifyStartResult;
+    if (typeof tabId !== "string") return { ok: false, error: mt("main.error.tabIdMissing") } satisfies VerifyStartResult;
     // commands 를 줬는데 모양이 틀리면(문자열·빈 배열·잘못된 원소) 저장된 명령으로 대체하지 않고 거절한다
     if (opts && "commands" in opts && opts.commands !== undefined) {
-      if (!Array.isArray(opts.commands) || opts.commands.length === 0 || !opts.commands.every((c) => typeof c === "string" && c.trim())) return { ok: false, error: "commands 는 비어 있지 않은 문자열 배열이어야 합니다." } satisfies VerifyStartResult;
+      if (!Array.isArray(opts.commands) || opts.commands.length === 0 || !opts.commands.every((c) => typeof c === "string" && c.trim())) return { ok: false, error: mt("main.verify.commandsInvalid") } satisfies VerifyStartResult;
       const commands = parseVerifyCommands((opts.commands as string[]).join("\n"));
-      if (commands.length === 0) return { ok: false, error: "실행할 명령이 없습니다." } satisfies VerifyStartResult;
+      if (commands.length === 0) return { ok: false, error: mt("main.verify.noCommandsToRun") } satisfies VerifyStartResult;
       return startVerify(tabId, commands);
     }
     return startVerify(tabId);
@@ -1809,7 +1835,7 @@ function registerIpc() {
         }
       };
       const ws = model.workspaces.find((w) => w.path && norm(w.path) === norm(o.cwd)) ?? model.workspaces.find((w) => w.id === model.tabs.find((t) => t.id === model.activeTabId)?.workspaceId) ?? model.workspaces[0];
-      if (!ws) return { ok: false, error: "워크스페이스가 없습니다.", stage: "creating_tab" };
+      if (!ws) return { ok: false, error: mt("main.error.noWorkspace"), stage: "creating_tab" };
       const prevActive = model.activeTabId;
       const env = await cliDiscovery().buildEnv();
       let tabId: string | null;
@@ -1825,7 +1851,7 @@ function registerIpc() {
         tabId = workspaces.createTab(ws.id);
         if (tabId) workspaces.renameTab(tabId, o.title);
       }
-      if (!tabId) return { ok: false, error: "탭을 만들지 못했습니다.", stage: "creating_tab" };
+      if (!tabId) return { ok: false, error: mt("main.error.tabMakeFailed"), stage: "creating_tab" };
       sessions.configure(tabId, { cwd, provider: o.provider, policy: o.policy, model: o.model });
       // 워커는 화면을 빼앗지 않는다
       if (prevActive && prevActive !== tabId) workspaces.activateTab(prevActive);
@@ -1867,20 +1893,20 @@ function registerIpc() {
     cleanupWorker: async (tabId, worktree) => {
       const tab = workspaces.tab(tabId);
       if (!tab) return { tabClosed: false, worktreeRemoved: false };
-      if (sessions.isBusy(tabId)) return { tabClosed: false, worktreeRemoved: false, error: "탭이 아직 실행 중입니다." };
+      if (sessions.isBusy(tabId)) return { tabClosed: false, worktreeRemoved: false, error: mt("main.error.tabStillRunning") };
       let worktreeRemoved = false;
       const wt = tab.worktree ?? worktree;
       if (wt) {
         const env = await cliDiscovery().buildEnv();
         // 환경을 읽는 사이에 사용자가 그 탭에 지시를 보냈을 수 있다 — 지우기 직전에 다시 본다
-        if (sessions.isBusy(tabId)) return { tabClosed: false, worktreeRemoved: false, error: "탭이 실행을 시작해 정리를 멈췄습니다." };
+        if (sessions.isBusy(tabId)) return { tabClosed: false, worktreeRemoved: false, error: mt("main.error.tabStartedStopCleanup") };
         const r = await worktreeRemove(env, wt, { force: true });
         if (!r.ok) return { tabClosed: false, worktreeRemoved: false, error: r.error };
         worktreeRemoved = true;
         workspaces.clearWorktree(tabId);
         sessions.configure(tabId, { cwd: wt.repo });
       }
-      if (sessions.isBusy(tabId)) return { tabClosed: false, worktreeRemoved, error: "탭이 실행을 시작해 닫지 않았습니다." };
+      if (sessions.isBusy(tabId)) return { tabClosed: false, worktreeRemoved, error: mt("main.error.tabStartedNotClosed") };
       workspaces.closeTab(tabId);
       return { tabClosed: true, worktreeRemoved };
     },
@@ -1890,12 +1916,12 @@ function registerIpc() {
       sendAll(IPC.orchChanged, runId);
       // Run 단위 알림: 사람이 봐야 하는 질문/에스컬레이션/탭 소실, 그리고 모든 Task 가 끝났을 때
       if (event.type === "message" && event.message.to === "run" && (event.message.type === "question" || event.message.type === "escalation" || event.message.noteKind === "worker_tab_missing" || event.message.noteKind === "turn_ended_without_report")) {
-        const kind = event.message.type === "question" ? "워커의 질문" : event.message.type === "escalation" ? "워커 에스컬레이션" : "확인 필요";
+        const kind = event.message.type === "question" ? mt("cli.notify.workerQuestion") : event.message.type === "escalation" ? mt("cli.notify.workerEscalation") : mt("cli.notify.needsAttention");
         notifyIfUnfocused(`${kind} · ${state.run.objective.slice(0, 40)}`, event.message.body, state.run.coordinator.kind === "tab" ? state.run.coordinator.tabId : undefined);
       }
       if ((event.type === "dispatch_settled" || event.type === "dispatch_abandoned") && runSettled(state) && !notifiedRuns.has(runId)) {
         notifiedRuns.add(runId);
-        if (appSettings().notifyOnDone !== "off") notify(`오케스트레이션 완료 · ${state.run.objective.slice(0, 40)}`, runSummary(state), state.run.createdBy.kind === "tab" ? state.run.createdBy.tabId : undefined);
+        if (appSettings().notifyOnDone !== "off") notify(`${mt("cli.notify.runDone")} · ${state.run.objective.slice(0, 40)}`, runSummary(mt, state), state.run.createdBy.kind === "tab" ? state.run.createdBy.tabId : undefined);
       }
       // 카드는 Run 을 만든 탭에 남긴다(사람이 인수해도 그 탭의 카드가 계속 따라간다)
       const cardTab = state.run.createdBy.kind === "tab" ? state.run.createdBy.tabId : null;
@@ -1927,12 +1953,12 @@ function registerIpc() {
   });
   ipcMain.handle(IPC.orchGate, (_e, runId: string, gateId: string, resolution: string) => orchOk(() => orchestrator!.gateResolve({ runId: String(runId), actor: { kind: "user" }, gateId: String(gateId), resolution: String(resolution) })));
   ipcMain.handle(IPC.orchClose, (_e, runId: string) => orchOk(() => orchestrator!.close(String(runId), { kind: "user" })));
-  ipcMain.handle(IPC.chatFanout, (_e, tabId: string, req: FanoutStartDto) => (typeof tabId === "string" && req && typeof req === "object" ? startFanout(tabId, req) : ({ ok: false, error: "잘못된 요청" } satisfies FanoutStartResult)));
+  ipcMain.handle(IPC.chatFanout, (_e, tabId: string, req: FanoutStartDto) => (typeof tabId === "string" && req && typeof req === "object" ? startFanout(tabId, req) : ({ ok: false, error: mt("main.error.badRequest") } satisfies FanoutStartResult)));
   ipcMain.handle(IPC.chatFanoutCompare, (_e, tabId: string, fanoutId: string) => fanoutCompare(String(tabId), String(fanoutId)));
   ipcMain.handle(IPC.chatFanoutAdopt, (_e, tabId: string, fanoutId: string, variantTabId: string) => fanoutAdopt(String(tabId), String(fanoutId), String(variantTabId)));
   ipcMain.handle(IPC.chatFanoutCleanup, (_e, tabId: string, fanoutId: string) => fanoutCleanup(String(tabId), String(fanoutId)));
   ipcMain.handle(IPC.chatCrossReview, (_e, tabId: string) => {
-    if (typeof tabId !== "string") throw new Error("잘못된 인자");
+    if (typeof tabId !== "string") throw new Error(mt("main.error.badArgs"));
     return startCrossReview(tabId);
   });
   ipcMain.handle(IPC.chatAttachTerminal, (_e, tabId: string) =>
@@ -1945,20 +1971,20 @@ function registerIpc() {
   ipcMain.handle(IPC.chatLimitRetry, (_e, tabId: string) => sessions.limitRetryNow(tabId));
   ipcMain.handle(IPC.chatLimitCancel, (_e, tabId: string) => sessions.limitCancel(tabId));
   ipcMain.handle(IPC.chatQueueRemove, (_e, tabId: string, id: string) => {
-    if (typeof tabId !== "string" || typeof id !== "string") throw new Error("잘못된 인자");
+    if (typeof tabId !== "string" || typeof id !== "string") throw new Error(mt("main.error.badArgs"));
     return sessions.queueRemove(tabId, id);
   });
   ipcMain.handle(IPC.chatQueueSendNext, (_e, tabId: string) => sessions.queueSendNext(tabId));
   ipcMain.handle(IPC.chatFork, (_e, tabId: string, pointId: string) => {
-    if (typeof tabId !== "string" || typeof pointId !== "string") throw new Error("잘못된 인자");
+    if (typeof tabId !== "string" || typeof pointId !== "string") throw new Error(mt("main.error.badArgs"));
     return forkTab(tabId, pointId);
   });
   ipcMain.handle(IPC.chatQueueSteer, (_e, tabId: string, id: string) => {
-    if (typeof tabId !== "string" || typeof id !== "string") throw new Error("잘못된 인자");
+    if (typeof tabId !== "string" || typeof id !== "string") throw new Error(mt("main.error.badArgs"));
     return sessions.queueSteer(tabId, id);
   });
   ipcMain.handle(IPC.chatQueueUpdate, (_e, tabId: string, id: string, text: string) => {
-    if (typeof tabId !== "string" || typeof id !== "string" || typeof text !== "string") throw new Error("잘못된 인자");
+    if (typeof tabId !== "string" || typeof id !== "string" || typeof text !== "string") throw new Error(mt("main.error.badArgs"));
     return sessions.queueUpdate(tabId, id, text.slice(0, 20_000));
   });
   ipcMain.handle(
@@ -1969,24 +1995,24 @@ function registerIpc() {
   ipcMain.handle(
     IPC.chatConfigure,
     (_e, tabId: string, patch: Partial<SessionConfigDto>) => {
-      if (typeof tabId !== "string" || !patch || typeof patch !== "object") throw new Error("잘못된 인자");
+      if (typeof tabId !== "string" || !patch || typeof patch !== "object") throw new Error(mt("main.error.badArgs"));
       const clean: Partial<SessionConfigDto> = {};
       if ("cwd" in patch) {
         // 탭 cwd 는 파일 조작·git·언어 서버의 경계가 된다 — 사용자가 디렉토리 선택 창으로 고른 루트 안만 받는다.
         if (patch.cwd === null || patch.cwd === "") clean.cwd = null;
         else if (typeof patch.cwd === "string" && isApprovedDir(patch.cwd)) clean.cwd = patch.cwd;
-        else throw new Error(UNAPPROVED_DIR);
+        else throw new Error(unapprovedDir());
       }
       if (patch.provider !== undefined) {
-        if (!PROVIDERS.includes(patch.provider)) throw new Error("잘못된 provider");
+        if (!PROVIDERS.includes(patch.provider)) throw new Error(mt("main.error.badProvider"));
         clean.provider = patch.provider;
       }
       if (patch.policy !== undefined) {
-        if (typeof patch.policy !== "string") throw new Error("잘못된 policy");
+        if (typeof patch.policy !== "string") throw new Error(mt("main.error.badPolicy"));
         clean.policy = patch.policy;
       }
       if ("model" in patch) {
-        if (patch.model !== undefined && typeof patch.model !== "string") throw new Error("잘못된 model");
+        if (patch.model !== undefined && typeof patch.model !== "string") throw new Error(mt("main.error.badModel"));
         clean.model = patch.model?.slice(0, 200);
       }
       const snap = sessions.configure(tabId, clean);
@@ -2003,7 +2029,7 @@ function registerIpc() {
   ipcMain.handle(
     IPC.chatCompact,
     async (_e, tabId: string, focus?: string): Promise<CompactResult> => {
-      if (typeof tabId !== "string") return { ok: false, error: "tabId 가 없습니다." };
+      if (typeof tabId !== "string") return { ok: false, error: mt("main.error.tabIdMissing") };
       if (sessions.canCompactNatively(tabId)) {
         const f = typeof focus === "string" ? focus.trim() : "";
         const r = await handleChatSend(tabId, { text: f ? `/compact ${f}` : "/compact" });
@@ -2034,7 +2060,7 @@ function registerIpc() {
   });
 
   ipcMain.handle(IPC.mcpStatus, async (_e, cwd: string) => {
-    if (typeof cwd !== "string" || !isKnownCwd(cwd)) throw new Error(UNKNOWN_CWD);
+    if (typeof cwd !== "string" || !isKnownCwd(cwd)) throw new Error(unknownCwd());
     return fetchMcpStatus(await claudeRuntime(), cwd, (line) => console.log(`[mcp] ${line}`));
   });
   ipcMain.handle(IPC.chatSearch, (_e, query: string): SearchResultDto[] => {
@@ -2076,29 +2102,30 @@ function registerIpc() {
       ? await dialog.showSaveDialog(win, opts)
       : await dialog.showSaveDialog(opts);
     if (r.canceled || !r.filePath) return null;
-    const md = eventsToMarkdown(store.readEvents(tabId), {
+    const md = eventsToMarkdown(mt, store.readEvents(tabId), {
       title,
       workspace: model.workspaces.find((w) => w.id === tab.workspaceId)?.name ?? null,
       provider: PROVIDER_LABEL[tab.provider],
       cwd: workspaces.resolveConfig(tabId)?.cwd ?? null,
       exportedAt: Date.now(),
+      locale: intlLocale(mainI18n().language as Locale),
     });
     try {
       const { writeFileSync } = await import("node:fs");
       writeFileSync(r.filePath, md, "utf8");
     } catch (e) {
-      throw new Error(`내보내기 실패: ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(mt("main.export.failed", { detail: e instanceof Error ? e.message : String(e) }));
     }
     return r.filePath;
   });
 
   ipcMain.handle(IPC.lspStatus, () => lsp.status());
   ipcMain.handle(IPC.lspSetPath, (_e, serverId: unknown, path: string | null) =>
-    isLspServerId(serverId) ? lsp.setOverride(serverId, typeof path === "string" ? path : null) : { ok: false, error: "알 수 없는 언어 서버" },
+    isLspServerId(serverId) ? lsp.setOverride(serverId, typeof path === "string" ? path : null) : { ok: false, error: mt("main.error.unknownLsp") },
   );
   ipcMain.handle(IPC.lspStart, (_e, cwd: string, serverId: unknown) => {
-    if (!isLspServerId(serverId)) return { ok: false, error: "알 수 없는 언어 서버" };
-    return typeof cwd === "string" && isKnownCwd(cwd) ? lsp.start(cwd, serverId) : { ok: false, error: "알 수 없는 작업 경로" };
+    if (!isLspServerId(serverId)) return { ok: false, error: mt("main.error.unknownLsp") };
+    return typeof cwd === "string" && isKnownCwd(cwd) ? lsp.start(cwd, serverId) : { ok: false, error: mt("main.error.unknownCwdShort") };
   });
   ipcMain.on(IPC.lspSend, (_e, id: string, message: string) => {
     if (typeof id === "string" && typeof message === "string") lsp.send(id, message);
@@ -2123,19 +2150,19 @@ function registerIpc() {
   ipcMain.handle(
     IPC.gitCommit,
     async (_e, cwd: string, paths: string[], message: string) => {
-      if (typeof cwd !== "string" || !Array.isArray(paths) || typeof message !== "string") return { ok: false, error: "잘못된 인자" };
-      if (!isKnownCwd(cwd)) return { ok: false, error: UNKNOWN_CWD };
+      if (typeof cwd !== "string" || !Array.isArray(paths) || typeof message !== "string") return { ok: false, error: mt("main.error.badArgs") };
+      if (!isKnownCwd(cwd)) return { ok: false, error: unknownCwd() };
       return gitCommit(cwd, await cliDiscovery().buildEnv(), paths, message);
     },
   );
   ipcMain.handle(IPC.gitRevert, async (_e, cwd: string, path: string) => {
-    if (typeof cwd !== "string" || typeof path !== "string") return { ok: false, error: "잘못된 인자" };
-    if (!isKnownCwd(cwd)) return { ok: false, error: UNKNOWN_CWD };
+    if (typeof cwd !== "string" || typeof path !== "string") return { ok: false, error: mt("main.error.badArgs") };
+    if (!isKnownCwd(cwd)) return { ok: false, error: unknownCwd() };
     return gitRevert(cwd, await cliDiscovery().buildEnv(), path);
   });
   ipcMain.handle(IPC.gitDraftMessage, async (_e, cwd: string, paths: string[]) => {
-    if (typeof cwd !== "string" || !Array.isArray(paths)) return { ok: false, error: "잘못된 인자" };
-    if (!isKnownCwd(cwd)) return { ok: false, error: UNKNOWN_CWD };
+    if (typeof cwd !== "string" || !Array.isArray(paths)) return { ok: false, error: mt("main.error.badArgs") };
+    if (!isKnownCwd(cwd)) return { ok: false, error: unknownCwd() };
     try {
       return await draftCommitMessage(await claudeRuntime(), cwd, paths);
     } catch (e) {
@@ -2152,26 +2179,26 @@ function registerIpc() {
       opts: { expectedMtimeMs: number | null; expectedSize?: number | null; force?: boolean },
     ) => {
       if (typeof cwd !== "string" || typeof path !== "string" || typeof content !== "string" || !opts || typeof opts !== "object")
-        return { ok: false, error: "잘못된 인자" };
-      if (!isKnownCwd(cwd)) return { ok: false, error: UNKNOWN_CWD };
+        return { ok: false, error: mt("main.error.badArgs") };
+      if (!isKnownCwd(cwd)) return { ok: false, error: unknownCwd() };
       return writeFileView(cwd, path, content, opts, await cliDiscovery().buildEnv());
     },
   );
   ipcMain.handle(IPC.fileCreate, async (_e, cwd: string, path: string, kind: "file" | "dir") => {
     if (typeof cwd !== "string" || typeof path !== "string" || (kind !== "file" && kind !== "dir"))
-      return { ok: false, error: "잘못된 인자" };
-    if (!isKnownCwd(cwd)) return { ok: false, error: UNKNOWN_CWD };
+      return { ok: false, error: mt("main.error.badArgs") };
+    if (!isKnownCwd(cwd)) return { ok: false, error: unknownCwd() };
     return createPath(cwd, path, kind, await cliDiscovery().buildEnv());
   });
   ipcMain.handle(IPC.fileRename, async (_e, cwd: string, from: string, to: string) => {
     if (typeof cwd !== "string" || typeof from !== "string" || typeof to !== "string")
-      return { ok: false, error: "잘못된 인자" };
-    if (!isKnownCwd(cwd)) return { ok: false, error: UNKNOWN_CWD };
+      return { ok: false, error: mt("main.error.badArgs") };
+    if (!isKnownCwd(cwd)) return { ok: false, error: unknownCwd() };
     return renamePath(cwd, from, to, await cliDiscovery().buildEnv());
   });
   ipcMain.handle(IPC.fileDelete, async (_e, cwd: string, path: string) => {
-    if (typeof cwd !== "string" || typeof path !== "string") return { ok: false, error: "잘못된 인자" };
-    if (!isKnownCwd(cwd)) return { ok: false, error: UNKNOWN_CWD };
+    if (typeof cwd !== "string" || typeof path !== "string") return { ok: false, error: mt("main.error.badArgs") };
+    if (!isKnownCwd(cwd)) return { ok: false, error: unknownCwd() };
     const r = await resolveDeletable(cwd, path, await cliDiscovery().buildEnv());
     if (!r.ok) return r;
     try {
@@ -2182,8 +2209,8 @@ function registerIpc() {
     }
   });
   ipcMain.handle(IPC.fileRead, async (_e, cwd: string, path: string) => {
-    if (typeof cwd !== "string" || typeof path !== "string") throw new Error("잘못된 인자");
-    if (!isKnownCwd(cwd)) throw new Error(UNKNOWN_CWD);
+    if (typeof cwd !== "string" || typeof path !== "string") throw new Error(mt("main.error.badArgs"));
+    if (!isKnownCwd(cwd)) throw new Error(unknownCwd());
     return readFileView(cwd, path, await cliDiscovery().buildEnv());
   });
   ipcMain.handle(IPC.fileList, (_e, dir: string) => {
@@ -2201,11 +2228,11 @@ function registerIpc() {
   ipcMain.handle(IPC.controlInstallSkill, (_e, agent?: unknown) => installSkillStub(agent === "claude" || agent === "codex" ? agent : undefined));
   ipcMain.handle(IPC.controlInstallStatus, () => installStatus());
   ipcMain.handle(IPC.previewUrl, async (_e, cwd: string, path: string) => {
-    if (typeof cwd !== "string" || typeof path !== "string") return { ok: false, error: "잘못된 인자" };
-    if (!isKnownCwd(cwd)) return { ok: false, error: UNKNOWN_CWD };
+    if (typeof cwd !== "string" || typeof path !== "string") return { ok: false, error: mt("main.error.badArgs") };
+    if (!isKnownCwd(cwd)) return { ok: false, error: unknownCwd() };
     const root = await repoRoot(cwd, await cliDiscovery().buildEnv());
     const url = await previewServer.urlFor(root, isAbsolute(path) ? path : resolve(cwd, path));
-    return url ? { ok: true, url } : { ok: false, error: "저장소 안의 파일만 미리 볼 수 있습니다." };
+    return url ? { ok: true, url } : { ok: false, error: mt("main.error.previewRepoOnly") };
   });
   ipcMain.handle(IPC.backgroundJobs, () => allBackgroundJobs());
 
@@ -2271,7 +2298,7 @@ function registerIpc() {
     return dir ? workspaces.addWorkspace(dir) : null;
   });
   ipcMain.handle(IPC.wsCreate, (_e, name: string) =>
-    workspaces.createWorkspace(name),
+    workspaces.createWorkspace(name.trim() || mt("main.workspace.defaultName")),
   );
   ipcMain.handle(
     IPC.wsUpdate,
@@ -2283,7 +2310,7 @@ function registerIpc() {
       if (patch.path !== undefined) {
         if (patch.path === "") clean.path = "";
         else if (typeof patch.path === "string" && isApprovedDir(patch.path)) clean.path = patch.path;
-        else throw new Error(UNAPPROVED_DIR);
+        else throw new Error(unapprovedDir());
       }
       workspaces.updateWorkspace(id, clean);
     },
@@ -2308,11 +2335,11 @@ function registerIpc() {
     async (_e, workspaceId: string, fromTabId: string | null) => {
       const model = workspaces.state().model;
       const ws = model.workspaces.find((w) => w.id === workspaceId);
-      if (!ws) return { ok: false, error: "워크스페이스가 없습니다." };
+      if (!ws) return { ok: false, error: mt("main.error.noWorkspace") };
       const from = fromTabId ? model.tabs.find((t) => t.id === fromTabId) : null;
       const repo = (from ? workspaces.resolveConfig(from.id)?.cwd : null) ?? ws.path ?? null;
       if (!repo)
-        return { ok: false, error: "저장소 경로가 없습니다. 세션의 작업 경로나 워크스페이스 기본 경로를 먼저 정하세요." };
+        return { ok: false, error: mt("main.error.repoPathMissing") };
       const env = await cliDiscovery().buildEnv();
       const r = await worktreeCreate(repo, env, {
         rootDir: worktreeRootDir(),
@@ -2321,7 +2348,7 @@ function registerIpc() {
       });
       if (!r.ok) return r;
       const tabId = workspaces.createTab(workspaceId, { cwd: r.worktree.path, worktree: r.worktree });
-      if (!tabId) return { ok: false, error: "탭을 만들지 못했습니다." };
+      if (!tabId) return { ok: false, error: mt("main.error.tabMakeFailed") };
       return { ok: true, tabId };
     },
   );
@@ -2331,7 +2358,7 @@ function registerIpc() {
   });
   ipcMain.handle(IPC.wtMerge, async (_e, tabId: string) => {
     const wt = workspaces.tab(tabId)?.worktree;
-    if (!wt) return { ok: false, error: "격리 세션이 아닙니다." };
+    if (!wt) return { ok: false, error: mt("repo.worktree.notIsolated") };
     return worktreeMerge(await cliDiscovery().buildEnv(), wt);
   });
   // 설정의 worktree 정리 목록. 지금 위치와 예전(앱 데이터 폴더 안) 위치를 함께 본다.
@@ -2342,24 +2369,24 @@ function registerIpc() {
     return list.map((w) => {
       const users = tabsUsingPath(model, w.path);
       const t = users[0];
-      return { ...w, tab: t ? { id: t.id, title: tabTitle(t), open: t.open !== false } : null, openTabs: users.filter((x) => x.open !== false).length };
+      return { ...w, tab: t ? { id: t.id, title: tabTitle(t, mt("shared.untitledTab")), open: t.open !== false } : null, openTabs: users.filter((x) => x.open !== false).length };
     });
   };
   ipcMain.handle(IPC.wtListManaged, () => managedWorktrees());
   ipcMain.handle(IPC.wtRemoveManaged, async (_e, path: string) => {
-    if (typeof path !== "string") throw new Error("잘못된 인자");
+    if (typeof path !== "string") throw new Error(mt("main.error.badArgs"));
     // 렌더러가 준 경로를 그대로 지우지 않는다 — 지금 목록에 있는 것만
     const w = (await managedWorktrees()).find((x) => x.path === path);
-    if (!w) return { ok: false, error: "앱이 만든 worktree가 아닙니다." };
+    if (!w) return { ok: false, error: mt("repo.worktree.notManaged") };
     if (w.openTabs > 0)
-      return { ok: false, error: `열려 있는 탭 ${w.openTabs}개(${w.tab?.title ?? ""}${w.openTabs > 1 ? " 등" : ""})가 쓰고 있습니다. 탭을 닫은 뒤 지우세요.` };
+      return { ok: false, error: mt(w.openTabs > 1 ? "repo.worktree.inUseMany" : "repo.worktree.inUse", { count: w.openTabs, title: w.tab?.title ?? "" }) };
     return worktreeRemove(await cliDiscovery().buildEnv(), { repo: w.repo, path: w.path, branch: w.branch, base: "" }, { force: true });
   });
   ipcMain.handle(IPC.wtRemove, async (_e, tabId: string, opts: { force?: boolean }) => {
     const wt = workspaces.tab(tabId)?.worktree;
-    if (!wt) return { ok: false, error: "격리 세션이 아닙니다." };
+    if (!wt) return { ok: false, error: mt("repo.worktree.notIsolated") };
     // 세션이 그 경로에서 돌고 있으면 먼저 멈춘다 (경로가 사라진다).
-    if (sessions.isBusy(tabId)) return { ok: false, error: "실행 중인 턴이 끝난 뒤에 정리할 수 있습니다." };
+    if (sessions.isBusy(tabId)) return { ok: false, error: mt("repo.worktree.busy") };
     const r = await worktreeRemove(await cliDiscovery().buildEnv(), wt, opts);
     if (!r.ok) return r;
     // 탭은 원본 저장소로 돌아가고 provider 세션은 새로 시작한다 (경로가 바뀌므로).
@@ -2369,7 +2396,7 @@ function registerIpc() {
   });
 
   ipcMain.handle(IPC.tabDelete, async (_e, tabId: string) => {
-    if (typeof tabId !== "string") return { ok: false, error: "잘못된 탭 id" };
+    if (typeof tabId !== "string") return { ok: false, error: mt("main.error.badTabId") };
     // 격리 세션 탭: 먼저 턴과 터미널을 멈춘 뒤 worktree 를 정리한다(실행 중인 CLI 발밑에서 디렉토리가 사라지지 않게).
     // 커밋되지 않은 변경이 있으면 worktree 와 탭을 그대로 두고 알린다(데이터 보호).
     const wt = workspaces.tab(tabId)?.worktree;
@@ -2380,7 +2407,7 @@ function registerIpc() {
       if (!r.ok)
         return {
           ok: false,
-          error: `worktree를 삭제하지 못해 탭을 남겼습니다: ${r.error} 탭 위의 브랜치 메뉴에서 변경을 확인하고 커밋하거나 worktree를 삭제하세요.`,
+          error: mt("repo.worktree.tabKept", { error: r.error }),
         };
     }
     terminals.closePrefix(`${tabId}:`);
@@ -2518,27 +2545,29 @@ function shortcut(
   };
 }
 
+let menuBuilt = false;
+
 function buildMenu() {
   const tabItems: MenuItemConstructorOptions[] = [];
   for (let n = 1; n <= 9; n++) {
-    tabItems.push(shortcut(`탭 ${n}`, `CmdOrCtrl+${n}`, `tab-${n as 1}`));
+    tabItems.push(shortcut(mt("main.menu.tabN", { n }), `CmdOrCtrl+${n}`, `tab-${n as 1}`));
   }
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
     {
-      label: "파일",
+      label: mt("main.menu.file"),
       submenu: [
-        shortcut("새 세션", "CmdOrCtrl+T", "new-tab"),
-        shortcut("닫은 코드·브라우저 탭 다시 열기", "CmdOrCtrl+Shift+T", "reopen-tab"),
-        shortcut("탭 닫기", "CmdOrCtrl+W", "close-tab"),
+        shortcut(mt("main.menu.newSession"), "CmdOrCtrl+T", "new-tab"),
+        shortcut(mt("main.menu.reopenTab"), "CmdOrCtrl+Shift+T", "reopen-tab"),
+        shortcut(mt("main.menu.closeTab"), "CmdOrCtrl+W", "close-tab"),
         { type: "separator" },
-        shortcut("워크스페이스 전환…", "CmdOrCtrl+K", "switch-workspace"),
-        shortcut("대화 검색…", "CmdOrCtrl+F", "search"),
+        shortcut(mt("main.menu.switchWorkspace"), "CmdOrCtrl+K", "switch-workspace"),
+        shortcut(mt("main.menu.searchChat"), "CmdOrCtrl+F", "search"),
       ],
     },
     { role: "editMenu" },
     {
-      label: "보기",
+      label: mt("main.menu.view"),
       submenu: [
         // ⌘R 은 브라우저 탭 새로고침에 준다 — 창 새로고침은 개발용이라 메뉴에서만 쓴다
         { role: "reload", accelerator: "" },
@@ -2548,31 +2577,31 @@ function buildMenu() {
         { role: "zoomIn" },
         { role: "zoomOut" },
         { type: "separator" },
-        shortcut("사이드바", "CmdOrCtrl+B", "toggle-sidebar"),
-        shortcut("터미널 패널", "CmdOrCtrl+J", "toggle-terminal"),
-        shortcut("코드·브라우저 넓게 보기", "CmdOrCtrl+Shift+E", "toggle-editor-maximize"),
+        shortcut(mt("main.menu.sidebar"), "CmdOrCtrl+B", "toggle-sidebar"),
+        shortcut(mt("main.menu.terminalPanel"), "CmdOrCtrl+J", "toggle-terminal"),
+        shortcut(mt("main.menu.widenEditor"), "CmdOrCtrl+Shift+E", "toggle-editor-maximize"),
         { type: "separator" },
-        shortcut("브라우저 주소창", "CmdOrCtrl+L", "browser-address"),
-        shortcut("브라우저 새로고침", "CmdOrCtrl+R", "browser-reload"),
-        shortcut("브라우저 강력 새로고침 (캐시 무시)", "CmdOrCtrl+Shift+R", "browser-hard-reload"),
+        shortcut(mt("main.menu.browserAddress"), "CmdOrCtrl+L", "browser-address"),
+        shortcut(mt("main.menu.browserReload"), "CmdOrCtrl+R", "browser-reload"),
+        shortcut(mt("main.menu.browserHardReload"), "CmdOrCtrl+Shift+R", "browser-hard-reload"),
         { type: "separator" },
         { role: "togglefullscreen" },
       ],
     },
     {
-      label: "탭",
+      label: mt("main.menu.tab"),
       submenu: [
-        shortcut("다음 탭", "Ctrl+Tab", "next-tab"),
-        shortcut("이전 탭", "Ctrl+Shift+Tab", "prev-tab"),
+        shortcut(mt("main.menu.nextTab"), "Ctrl+Tab", "next-tab"),
+        shortcut(mt("main.menu.prevTab"), "Ctrl+Shift+Tab", "prev-tab"),
         { type: "separator" },
-        shortcut("다음 응답 필요 세션", "CmdOrCtrl+Shift+Down", "next-attention"),
-        shortcut("이전 응답 필요 세션", "CmdOrCtrl+Shift+Up", "prev-attention"),
+        shortcut(mt("main.menu.nextAttention"), "CmdOrCtrl+Shift+Down", "next-attention"),
+        shortcut(mt("main.menu.prevAttention"), "CmdOrCtrl+Shift+Up", "prev-attention"),
         { type: "separator" },
         ...tabItems,
       ],
     },
     {
-      label: "창",
+      label: mt("main.menu.window"),
       submenu: [
         { role: "minimize" },
         { role: "zoom" },
@@ -2582,6 +2611,7 @@ function buildMenu() {
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  menuBuilt = true;
 }
 
 // ===== Window =====

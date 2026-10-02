@@ -2,6 +2,8 @@ import type { schedules as ko } from "../ko/schedules";
 import type { DeepPartial } from "../types";
 
 export const schedules: DeepPartial<typeof ko> = {
+  workspaceName: "Schedules",
+  defaultName: "Schedule",
   title: "Schedules",
   description: "Sends a message to the AI at set times and keeps the results of each run.",
   newSchedule: "New schedule",
@@ -86,5 +88,35 @@ export const schedules: DeepPartial<typeof ko> = {
     runNow: "Run once now",
     edit: "Edit",
     remove: "Delete the schedule and its history",
+  },
+  error: {
+    notReady: "Schedules aren't ready yet.",
+    nameRequired: "Enter a name.",
+    promptRequired: "Enter what to send.",
+    cronInvalid: "Not a cron expression (min hour day month weekday).",
+    folderRequired: "Choose the folder to run in.",
+    workspaceFailed: "Couldn't create a workspace for schedule tabs.",
+    sessionFailed: "Couldn't create the session.",
+    sessionFailedUndo: "Couldn't create the session, and the worktree that was created couldn't be removed either ({{path}}): {{detail}}",
+    saveFailed: "Couldn't save the schedule history: {{detail}}",
+  },
+  notify: {
+    needsAction: "Schedule is waiting for approval · {{name}}",
+    failed: "Schedule failed · {{name}}",
+  },
+  msg: {
+    missedGrace: "Atelier was off or woke up late, past the grace period.",
+    overlap: "The previous run hasn't finished yet.",
+    staleGap: "Atelier was off for a long time, so the runs in between are skipped.",
+    appStopped: "Atelier quit before it saw the end of this run.",
+    noFolder: "This schedule has no folder to run in.",
+    budgetExceeded: "This month's estimated cost is over budget (${{spent}} / ${{budget}}).",
+    startFailed: "Couldn't start the run: {{detail}}",
+    modelError: "The model ended with an error.",
+    precheckTimeout: "The precheck command timed out and was stopped.",
+    precheckSpawnFailed: "Couldn't run the precheck command: {{detail}}",
+    precheckNoExit: "The precheck command didn't report an exit code.",
+    precheckNothingToDo: "The precheck said there is nothing to do right now (exit code 1).",
+    precheckExit: "The precheck command exited with code {{code}}.",
   },
 };

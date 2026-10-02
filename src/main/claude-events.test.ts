@@ -554,7 +554,7 @@ test("system/init 의 plugin_errors 는 경고 한 줄로(key 고정), 없으면
     mapper.map(m({ type: "system", subtype: "init", session_id: "s", model: "opus", cwd: "/r", uuid: "u", ...extra }), 1);
   assert.equal(init({}).length, 1);
   const ev = init({ plugin_errors: [{ plugin: "codex@openai", type: "dependency-unsatisfied", message: "node 가 없습니다" }, { plugin: "inline[0]", type: "path-not-found", message: "" }] });
-  assert.deepEqual(ev[1], { type: "notice", ts: 1, level: "warning", key: "plugin-errors", message: "플러그인 2개를 불러오지 못했습니다: codex@openai (node 가 없습니다), inline[0]" });
+  assert.deepEqual(ev[1], { type: "notice", ts: 1, level: "warning", key: "plugin-errors", message: "플러그인 2개를 불러오지 못했습니다: codex@openai (node 가 없습니다), inline[0]", msg: { key: "session.msg.pluginErrors.all", params: { count: 2, shown: "codex@openai (node 가 없습니다), inline[0]" } } });
 });
 
 test("forkPoint: 정상 턴의 마지막 최상위 체인 항목 uuid 를 붙이고, 서브에이전트 메시지는 빼며, 결과 뒤엔 비운다", () => {

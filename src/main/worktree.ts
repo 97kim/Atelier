@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { WorktreeMeta } from "@shared/workspace-model";
 import type { GitChangeDto } from "@shared/ipc";
+import { mt } from "./i18n";
 
 interface Run {
   code: number;
@@ -43,17 +44,17 @@ export async function worktreeCreate(
   opts: { rootDir: string; slug: string },
 ): Promise<{ ok: true; worktree: WorktreeMeta } | { ok: false; error: string }> {
   const top = ok(await run(repoCwd, ["rev-parse", "--show-toplevel"], env));
-  if (!top) return { ok: false, error: "git 저장소가 아닙니다." };
+  if (!top) return { ok: false, error: mt("repo.worktree.notGitRepo") };
   const head = ok(await run(top, ["rev-parse", "--verify", "-q", "HEAD"], env));
-  if (!head) return { ok: false, error: "첫 커밋을 만든 뒤 worktree를 만들 수 있습니다." };
+  if (!head) return { ok: false, error: mt("repo.worktree.needFirstCommit") };
   const baseRef = ok(await run(top, ["rev-parse", "--abbrev-ref", "HEAD"], env));
   if (!baseRef || baseRef === "HEAD")
-    return { ok: false, error: "원본 저장소가 브랜치에 연결되어 있지 않습니다(detached HEAD). 사용할 브랜치로 전환한 뒤 worktree를 만드세요." };
+    return { ok: false, error: mt("repo.worktree.detachedHead") };
   const base = baseRef;
   // worktree 폴더를 저장소 안에 두면 만든 worktree 가 원본에 untracked 로 잡힌다(위치는 설정에서 고른다)
   const inside = relative(resolve(top), resolve(opts.rootDir));
   if (inside === "" || (!inside.startsWith("..") && !isAbsolute(inside)))
-    return { ok: false, error: `worktree 폴더(${opts.rootDir})가 이 저장소 안에 있습니다. 설정 > 일반 > 저장 위치에서 저장소 밖의 폴더를 고르세요.` };
+    return { ok: false, error: mt("repo.worktree.insideRepo", { dir: opts.rootDir }) };
   const dir = join(opts.rootDir, basename(top));
   fs.mkdirSync(dir, { recursive: true });
   // 이름 충돌 회피
@@ -63,7 +64,7 @@ export async function worktreeCreate(
   const path = join(dir, slug);
   const branch = `atelier/${slug}`;
   const r = await run(top, ["worktree", "add", "-b", branch, path, "HEAD"], env);
-  if (r.code !== 0) return { ok: false, error: r.stderr.trim() || "worktree를 만들지 못했습니다." };
+  if (r.code !== 0) return { ok: false, error: r.stderr.trim() || mt("repo.worktree.createFailed") };
   return { ok: true, worktree: { repo: top, path, branch, base } };
 }
 
@@ -111,18 +112,18 @@ export async function worktreeMerge(
   wt: WorktreeMeta,
 ): Promise<{ ok: true; merged: number } | { ok: false; error: string }> {
   const st = await worktreeStatus(env, wt);
-  if (!st.exists) return { ok: false, error: "worktree를 찾을 수 없습니다." };
-  if (st.baseMissing) return { ok: false, error: `원본 브랜치 ${wt.base}를 찾을 수 없습니다. 브랜치를 복구하거나 직접 병합하세요.` };
-  if (st.dirty > 0) return { ok: false, error: `worktree에 커밋하지 않은 변경이 ${st.dirty}개 있습니다. 먼저 커밋하거나 변경을 버리세요.` };
+  if (!st.exists) return { ok: false, error: mt("repo.worktree.notFound") };
+  if (st.baseMissing) return { ok: false, error: mt("repo.worktree.baseMissing", { base: wt.base }) };
+  if (st.dirty > 0) return { ok: false, error: mt("repo.worktree.dirty", { count: st.dirty }) };
   if (st.ahead === 0) return { ok: true, merged: 0 };
   const cur = ok(await run(wt.repo, ["rev-parse", "--abbrev-ref", "HEAD"], env));
-  if (cur !== wt.base) return { ok: false, error: `원본 저장소의 현재 브랜치는 ${cur ?? "확인 불가"}입니다. ${wt.base} 브랜치로 전환한 뒤 커밋을 가져오세요.` };
+  if (cur !== wt.base) return { ok: false, error: mt("repo.worktree.wrongBranch", { current: cur ?? mt("repo.worktree.unknownBranch"), base: wt.base }) };
   const repoDirty = ok(await run(wt.repo, ["status", "--porcelain", "--untracked-files=no"], env)) ?? "";
-  if (repoDirty) return { ok: false, error: "원본 저장소에 커밋하지 않은 변경이 있습니다. 먼저 커밋하거나 임시 보관(stash)하세요." };
+  if (repoDirty) return { ok: false, error: mt("repo.worktree.repoDirty") };
   const m = await run(wt.repo, ["merge", "--no-edit", wt.branch], env);
   if (m.code !== 0) {
     await run(wt.repo, ["merge", "--abort"], env);
-    return { ok: false, error: `커밋을 병합하지 못했습니다. 오류 내용을 확인하세요: ${(m.stdout + m.stderr).trim().split("\n").slice(-3).join(" ")}` };
+    return { ok: false, error: mt("repo.worktree.mergeFailed", { detail: (m.stdout + m.stderr).trim().split("\n").slice(-3).join(" ") }) };
   }
   return { ok: true, merged: st.ahead };
 }
@@ -136,9 +137,9 @@ export async function worktreeRemove(
   if (fs.existsSync(wt.path)) {
     const st = await worktreeStatus(env, wt);
     if (st.dirty > 0 && !opts.force)
-      return { ok: false, error: `worktree에 커밋하지 않은 변경이 ${st.dirty}개 있어 삭제하지 않았습니다.` };
+      return { ok: false, error: mt("repo.worktree.removeDirty", { count: st.dirty }) };
     const r = await run(wt.repo, ["worktree", "remove", ...(opts.force ? ["--force"] : []), wt.path], env);
-    if (r.code !== 0) return { ok: false, error: r.stderr.trim() || "worktree를 삭제하지 못했습니다." };
+    if (r.code !== 0) return { ok: false, error: r.stderr.trim() || mt("repo.worktree.removeFailed") };
   } else {
     await run(wt.repo, ["worktree", "prune"], env);
   }
@@ -233,9 +234,9 @@ async function withStagedSnapshot<T>(env: NodeJS.ProcessEnv, wt: WorktreeMeta, f
   const env2 = { ...env, GIT_INDEX_FILE: tmp };
   try {
     const rt = await run(wt.path, ["read-tree", "HEAD"], env2);
-    if (rt.code !== 0) return { ok: false, error: rt.stderr.trim() || "변경 내용을 비교할 기준 커밋을 읽지 못했습니다." };
+    if (rt.code !== 0) return { ok: false, error: rt.stderr.trim() || mt("repo.worktree.baseCommitReadFailed") };
     const add = await run(wt.path, ["add", "-A"], env2);
-    if (add.code !== 0) return { ok: false, error: add.stderr.trim() || "변경 내용을 비교하기 위한 임시 파일 목록을 만들지 못했습니다." };
+    if (add.code !== 0) return { ok: false, error: add.stderr.trim() || mt("repo.worktree.tempIndexFailed") };
     return await fn(env2);
   } finally {
     fs.rmSync(tmp, { force: true });
@@ -256,12 +257,12 @@ export interface WorktreeSnapshot {
  * (HEAD 기준 작업 트리만 보면 세션이 커밋해 버린 변경이 빠진다.)
  */
 export async function worktreeSnapshot(env: NodeJS.ProcessEnv, wt: WorktreeMeta, opts: { diffs?: boolean; maxDiffFiles?: number } = {}): Promise<WorktreeSnapshot | { ok: false; error: string }> {
-  if (!fs.existsSync(wt.path)) return { ok: false, error: "worktree를 찾을 수 없습니다." };
+  if (!fs.existsSync(wt.path)) return { ok: false, error: mt("repo.worktree.notFound") };
   const base = await worktreeBase(env, wt);
-  if (!base) return { ok: false, error: `비교 기준인 원본 브랜치 ${wt.base}를 찾지 못했습니다.` };
+  if (!base) return { ok: false, error: mt("repo.worktree.compareBaseMissing", { base: wt.base }) };
   return withStagedSnapshot(env, wt, async (env2) => {
     const ns = await run(wt.path, ["diff", "--cached", "--numstat", "-z", "-M", base], env2);
-    if (ns.code !== 0) return { ok: false as const, error: ns.stderr.trim() || "diff를 읽지 못했습니다." };
+    if (ns.code !== 0) return { ok: false as const, error: ns.stderr.trim() || mt("repo.worktree.diffReadFailed") };
     const st = await run(wt.path, ["diff", "--cached", "--name-status", "-z", "-M", base], env2);
     const kinds = new Map<string, { kind: GitChangeDto["kind"]; oldPath?: string }>();
     const sf = st.stdout.split("\0");
@@ -297,7 +298,7 @@ export async function worktreeSnapshot(env: NodeJS.ProcessEnv, wt: WorktreeMeta,
     if (opts.diffs) {
       for (const c of changes.slice(0, opts.maxDiffFiles ?? 60)) {
         const d = await run(wt.path, ["diff", "--cached", "--no-color", "-M", base, "--", `:(literal)${c.path}`, ...(c.oldPath ? [`:(literal)${c.oldPath}`] : [])], env2);
-        diffs[c.path] = d.stdout.length > 40_000 ? `${d.stdout.slice(0, 40_000)}\n... (diff가 길어 나머지를 생략했습니다)` : d.stdout;
+        diffs[c.path] = d.stdout.length > 40_000 ? `${d.stdout.slice(0, 40_000)}\n${mt("repo.worktree.diffTruncated")}` : d.stdout;
       }
     }
     return { ok: true as const, base, changes, diffs };
@@ -306,12 +307,12 @@ export async function worktreeSnapshot(env: NodeJS.ProcessEnv, wt: WorktreeMeta,
 
 /** worktree 의 모든 변경(커밋한 것 + 작업 트리 + 새 파일)을 base 기준 패치 하나로(팬아웃 채택용). 실제 인덱스는 보존된다. */
 export async function worktreePatch(env: NodeJS.ProcessEnv, wt: WorktreeMeta): Promise<{ ok: true; patch: string; base: string } | { ok: false; error: string }> {
-  if (!fs.existsSync(wt.path)) return { ok: false, error: "worktree를 찾을 수 없습니다." };
+  if (!fs.existsSync(wt.path)) return { ok: false, error: mt("repo.worktree.notFound") };
   const base = await worktreeBase(env, wt);
-  if (!base) return { ok: false, error: `비교 기준인 원본 브랜치 ${wt.base}를 찾지 못했습니다.` };
+  if (!base) return { ok: false, error: mt("repo.worktree.compareBaseMissing", { base: wt.base }) };
   return withStagedSnapshot(env, wt, async (env2) => {
     const d = await run(wt.path, ["diff", "--cached", "--binary", "--no-color", base], env2);
-    if (d.code !== 0) return { ok: false as const, error: d.stderr.trim() || "diff를 읽지 못했습니다." };
+    if (d.code !== 0) return { ok: false as const, error: d.stderr.trim() || mt("repo.worktree.diffReadFailed") };
     return { ok: true as const, patch: d.stdout, base };
   });
 }
@@ -320,12 +321,12 @@ export async function worktreePatch(env: NodeJS.ProcessEnv, wt: WorktreeMeta): P
 export async function applyPatch(env: NodeJS.ProcessEnv, cwd: string, patch: string): Promise<{ ok: true; files: string[] } | { ok: false; error: string }> {
   if (!patch.trim()) return { ok: true, files: [] };
   const top = ok(await run(cwd, ["rev-parse", "--show-toplevel"], env));
-  if (!top) return { ok: false, error: "git 저장소가 아닙니다." };
+  if (!top) return { ok: false, error: mt("repo.worktree.notGitRepo") };
   const check = await runInput(top, ["apply", "--check", "--binary", "--whitespace=nowarn", "-"], env, patch);
-  if (check.code !== 0) return { ok: false, error: `패치를 원본에 적용할 수 없습니다. 오류 내용을 확인하세요: ${check.stderr.trim().split("\n").slice(0, 3).join(" ")}` };
+  if (check.code !== 0) return { ok: false, error: mt("repo.worktree.patchCheckFailed", { detail: check.stderr.trim().split("\n").slice(0, 3).join(" ") }) };
   const stat = await runInput(top, ["apply", "--numstat", "--binary", "-"], env, patch);
   const files = stat.stdout.split("\n").filter(Boolean).map((l) => l.split("\t")[2]).filter((f): f is string => !!f);
   const a = await runInput(top, ["apply", "--binary", "--whitespace=nowarn", "-"], env, patch);
-  if (a.code !== 0) return { ok: false, error: a.stderr.trim() || "패치를 원본에 적용하지 못했습니다." };
+  if (a.code !== 0) return { ok: false, error: a.stderr.trim() || mt("repo.worktree.patchApplyFailed") };
   return { ok: true, files };
 }

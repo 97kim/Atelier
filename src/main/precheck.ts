@@ -6,6 +6,7 @@
 
 import { spawn } from "node:child_process";
 import type { PrecheckResult } from "@shared/schedules";
+import { mt } from "./i18n";
 
 /** 기록에 남길 출력 길이. 통째로 두면 이력 파일이 커진다. */
 const TAIL_MAX = 2000;
@@ -84,7 +85,7 @@ export function runPrecheckCommand(input: { command: string; timeoutMs: number; 
     child.on("error", (e) => finish(null, e.message));
     child.on("close", (code, signal) => {
       // 시간 초과로 우리가 죽인 것은 "종료 코드" 로 읽으면 안 된다.
-      finish(timedOut ? null : code, timedOut ? null : signal ? `신호 ${signal} 로 끝났습니다.` : null);
+      finish(timedOut ? null : code, timedOut ? null : signal ? mt("session.error.signalExit", { signal }) : null);
     });
   });
 }

@@ -4,6 +4,7 @@
 
 import type { ClaudeRuntime } from "./claude-adapter";
 import { importClaudeSdk } from "./esm";
+import { mt } from "./i18n";
 
 type Query = import("@anthropic-ai/claude-agent-sdk").Query;
 type SDKUserMessage = import("@anthropic-ai/claude-agent-sdk").SDKUserMessage;
@@ -18,7 +19,7 @@ export function withTimeout<T>(
   return Promise.race([
     p,
     new Promise<never>((_, rej) =>
-      setTimeout(() => rej(new Error(`${label} ${ms / 1000}초 초과`)), ms),
+      setTimeout(() => rej(new Error(mt("session.error.timeout", { label, sec: ms / 1000 }))), ms),
     ),
   ]);
 }
@@ -65,7 +66,7 @@ export async function withControlQuery<T>(
     await withTimeout(
       q.initializationResult(),
       INIT_TIMEOUT_MS,
-      "initialize 응답",
+      mt("session.error.label.initialize"),
     );
     return await fn(q);
   } finally {
@@ -116,7 +117,7 @@ export async function fetchUsageText(
     }
   })();
   try {
-    await withTimeout(run, INIT_TIMEOUT_MS, "/usage 응답");
+    await withTimeout(run, INIT_TIMEOUT_MS, mt("session.error.label.usage"));
   } finally {
     abort.abort();
     try {

@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReviewPrompt, CROSS_REVIEW_DIFF_MAX, isReadOnlyCommand, otherProvider, reviewPermissionDecision, reviewScope, reviewTabTitle } from "./cross-review";
+import { buildReviewPrompt, CROSS_REVIEW_DIFF_MAX, isReadOnlyCommand, otherProvider, reviewPermissionDecision, reviewScopeParams, reviewTabTitle } from "./cross-review";
+import { createI18n } from "./i18n";
+const { t } = createI18n("ko");
 
 test("cross-review: 상대 provider·제목·범위·프롬프트(긴 diff 는 자른다)", () => {
   assert.equal(otherProvider("claude"), "codex");
   assert.equal(otherProvider("codex"), "claude");
-  assert.equal(reviewTabTitle("auth 버그"), "교차 리뷰 · auth 버그");
-  assert.equal(reviewScope([{ path: "a", added: 40, deleted: 2 }, { path: "b", added: 2, deleted: 5 }]), "2개 파일 · +42 −7");
+  assert.equal(reviewTabTitle(t, "auth 버그"), "교차 리뷰 · auth 버그");
+  assert.equal(t("main.msg.reviewScope", reviewScopeParams([{ path: "a", added: 40, deleted: 2 }, { path: "b", added: 2, deleted: 5 }])), "2개 파일 · +42 −7");
   const p = buildReviewPrompt({ originTitle: "auth 버그", author: "claude", changes: [{ path: "src/a.ts", kind: "modified" }], diff: "diff --git a/src/a.ts\n+x" });
   assert.match(p, /Claude Code 와 함께 작업한 "auth 버그"/);
   assert.match(p, /수정과 쓰기 명령은 물론, 테스트·빌드·스크립트 실행/);

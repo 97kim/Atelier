@@ -3,6 +3,7 @@
 // 바이너리에서 확인한 다른 변형: "Allow Codex to run `…`", "Codex wants to edit …", "grant these permissions",
 // MCP 도구 승인의 "Allow this request and continue" / "Run the tool and continue", 답한 뒤의 "Approved action:".
 import type { TerminalAttention } from "./session-manager";
+import { mt } from "./i18n";
 
 export type CodexApprovalSignal = { kind: "prompt"; attention: TerminalAttention } | { kind: "answered" };
 
@@ -57,16 +58,16 @@ export function detectCodexApproval(raw: string, now = Date.now()): CodexApprova
   });
   // codex-cli 0.153 실제 화면: "Would you like to run the following command? … Reason: <모델이 쓴 문장> $ <명령> › 1. Yes, proceed (y) …"
   const cmd = commandBeforeChoice(text);
-  if (cmd) push(cmd.at, attention("명령 실행", cmd.command));
-  for (const m of text.matchAll(/Allow Codex to run `([^`\n]{0,600})`/g)) push(m.index ?? -1, attention("명령 실행", collapse(m[1])));
-  for (const m of text.matchAll(/Codex wants to edit ([^\n]{0,300})/g)) push(m.index ?? -1, attention("파일 수정", collapse(m[1]).replace(/[?:]+$/, "")));
-  for (const m of text.matchAll(/grant these permissions/g)) push(m.index ?? -1, attention("권한 요청", ""));
-  for (const m of text.matchAll(/Allow this request and continue|Run the tool and continue/g)) push(m.index ?? -1, attention("도구 실행", ""));
+  if (cmd) push(cmd.at, attention(mt("session.attention.runCommand"), cmd.command));
+  for (const m of text.matchAll(/Allow Codex to run `([^`\n]{0,600})`/g)) push(m.index ?? -1, attention(mt("session.attention.runCommand"), collapse(m[1])));
+  for (const m of text.matchAll(/Codex wants to edit ([^\n]{0,300})/g)) push(m.index ?? -1, attention(mt("session.attention.editFile"), collapse(m[1]).replace(/[?:]+$/, "")));
+  for (const m of text.matchAll(/grant these permissions/g)) push(m.index ?? -1, attention(mt("session.attention.permissionRequest"), ""));
+  for (const m of text.matchAll(/Allow this request and continue|Run the tool and continue/g)) push(m.index ?? -1, attention(mt("session.attention.runTool"), ""));
   for (const m of text.matchAll(/Approved action:/g)) push(m.index ?? -1, { kind: "answered" });
   // 폴백: 위 문구가 바뀌어도 승인 선택지 틀("Yes, proceed (y)" 뒤에 "Press enter to confirm or esc to cancel")은 잡는다.
   if (found.length === 0) {
     const yes = text.indexOf("Yes, proceed (y)");
-    if (yes >= 0 && text.slice(yes, yes + 500).includes("Press enter to confirm or esc to cancel")) push(yes, attention("승인 요청", ""));
+    if (yes >= 0 && text.slice(yes, yes + 500).includes("Press enter to confirm or esc to cancel")) push(yes, attention(mt("session.attention.approvalRequest"), ""));
   }
   if (found.length === 0) return null;
   found.sort((a, b) => a.at - b.at);

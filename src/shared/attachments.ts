@@ -31,6 +31,7 @@ export function formatCodeAttachment(o: { relPath: string; line: number; endLine
 export function formatTerminalAttachment(o: { title: string; text: string; selection: boolean }): string {
   const fence = fenceFor(o.text);
   const body = o.text.replace(/\s+$/, "");
+  // i18n-ignore: prompt
   return `터미널 ${o.title}${o.selection ? " (선택 영역)" : " (최근 출력)"}\n${fence}text\n${body}\n${fence}`;
 }
 

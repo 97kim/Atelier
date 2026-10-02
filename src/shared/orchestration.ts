@@ -3,7 +3,9 @@
 //
 // 개념: Run(코디네이터의 인박스·이름 공간) > Task(작업) > Dispatch(그 작업의 권위 있는 시도 1개 = 탭 하나).
 // 권한은 dispatchId + capability(실행 세대)에 묶인다. 탭이 살아 있는 것·프로세스가 살아 있는 것·턴이 도는 것·Dispatch 권한은 서로 다르다.
+import type { TFunction } from "i18next";
 import type { PermissionPolicy } from "./chat-events";
+import type { Msg } from "./i18n/msg";
 import type { Provider } from "./ipc";
 import type { WorktreeMeta } from "./workspace-model";
 
@@ -95,6 +97,8 @@ export interface OrchMessage {
   type: OrchMessageType;
   subject: string;
   body: string;
+  /** 앱이 만든 note 의 본문이면 사전 키와 값. 그릴 때 지금 언어로 번역하고, 없으면(워커·코디네이터가 쓴 글, 예전 기록) body 를 쓴다. */
+  bodyMsg?: Msg;
   taskId?: string;
   dispatchId?: string;
   /** question: 선택지 */
@@ -408,25 +412,25 @@ export function isOpenDispatch(d: OrchDispatch): boolean {
   return d.status === "starting" || d.status === "live" || d.status === "reported";
 }
 
-export function runSummary(s: OrchRunState): string {
+export function runSummary(t: TFunction, s: OrchRunState): string {
   const done = s.tasks.filter((t) => t.status === "succeeded").length;
   const failed = s.tasks.filter((t) => t.status === "failed" || t.status === "abandoned").length;
   const running = s.tasks.filter((t) => t.status === "running").length;
   const a = attention(s);
   const gates = s.gates.filter((g) => !g.resolution).length;
-  const parts = [`${done}/${s.tasks.length} 완료`];
-  if (running) parts.push(`${running} 진행`);
-  if (gates) parts.push(`게이트 결정 대기 ${gates}개`);
-  if (failed) parts.push(`${failed} 실패`);
-  if (a.questions.length) parts.push(`${a.questions.length} 질문`);
+  const parts = [t("cli.summary.done", { done, total: s.tasks.length })];
+  if (running) parts.push(t("cli.summary.running", { count: running }));
+  if (gates) parts.push(t("cli.summary.gates", { count: gates }));
+  if (failed) parts.push(t("cli.summary.failed", { count: failed }));
+  if (a.questions.length) parts.push(t("cli.summary.questions", { count: a.questions.length }));
   return parts.join(" · ");
 }
 
 // ===== 검증 =====
-export function validateSpec(spec: unknown): { ok: true; spec: string } | { ok: false; error: string } {
+export function validateSpec(t: TFunction, spec: unknown): { ok: true; spec: string } | { ok: false; error: string } {
   const s = typeof spec === "string" ? spec.trim() : "";
-  if (!s) return { ok: false, error: "spec 이 비어 있습니다. 대상·변경·제약·소유 범위·완료 기준을 적어 주세요." };
-  if (s.length > 20_000) return { ok: false, error: "spec 이 너무 깁니다(20,000자 이하)." };
+  if (!s) return { ok: false, error: t("cli.orch.error.specEmpty") };
+  if (s.length > 20_000) return { ok: false, error: t("cli.orch.error.specTooLong") };
   return { ok: true, spec: s };
 }
 
@@ -443,29 +447,48 @@ export function buildWorkerPrompt(i: PreambleInput): string {
   const { cli, run, task, dispatch: d } = i;
   const ids = `--run ${run.id} --dispatch ${d.id} --capability ${d.capability}`;
   return [
+    // i18n-ignore: prompt
     `[Atelier 오케스트레이션 · 워커 계약 v${ORCH_PROTOCOL_VERSION}]`,
+    // i18n-ignore: prompt
     `당신은 이 Run 의 워커입니다. 아래 Task 하나만 수행하고, 끝나면 완료 보고를 정확히 한 번 보낸 뒤 이 턴을 끝내세요.`,
     ``,
+    // i18n-ignore: prompt
     `- Run: ${run.id}  (목표: ${run.objective})`,
+    // i18n-ignore: prompt
     `- Task: ${task.id}  Dispatch: ${d.id}  탭: ${d.tabId}`,
+    // i18n-ignore: prompt
     `- 작업 경로: ${d.cwd}${d.worktree ? ` (격리 worktree, 브랜치 ${d.worktree.branch}, base ${d.worktree.base} 의 HEAD 에서 시작 — 원본의 커밋 안 된 변경은 여기 없습니다)` : " (공유 경로 — 다른 워커와 같은 파일을 건드리지 마세요)"}`,
+    // i18n-ignore: prompt
     `- 제공자/정책: ${d.provider}${d.model ? ` (${d.model})` : ""} / ${d.policy}`,
     ``,
+    // i18n-ignore: prompt
     `규칙:`,
+    // i18n-ignore: prompt
     `1. 코디네이터에게 물어야 할 게 있으면 사람에게 묻는 화면을 띄우지 말고 아래 ask 명령을 쓰세요. 답이 올 때까지 막힙니다. 시간이 초과되면 같은 질문을 --resume <message_id> 로 다시 기다리세요(새 질문을 만들지 마세요).`,
+    // i18n-ignore: prompt
     `   ${cli} orch ask ${ids} --question "<질문>" [--options "a,b"] --timeout-ms 600000`,
     `   ${cli} orch ask ${ids} --resume <message_id> --timeout-ms 600000`,
+    // i18n-ignore: prompt
     `2. 새 파일을 시작하기 전·테스트를 돌린 뒤·완료 보고 직전에 코디네이터의 후속 지시를 읽으세요:`,
     `   ${cli} orch check ${ids}`,
+    // i18n-ignore: prompt
     `   messages 가 있으면 반영한 뒤 응답의 ackSeq 로 확인하세요(확인 전엔 같은 지시가 다시 옵니다): ${cli} orch check ${ids} --ack <ackSeq>`,
+    // i18n-ignore: prompt
     `   결과에 consumer_fenced 가 오면 이 Dispatch 는 더 이상 당신 것이 아닙니다. 즉시 멈추고 완료 보고를 보내지 마세요.`,
+    // i18n-ignore: prompt
     `3. 막혀서 코디네이터가 개입해야 하면:`,
+    // i18n-ignore: prompt
     `   ${cli} orch send ${ids} --type escalation --subject "Blocked: <이유>" --body "<상황>"`,
+    // i18n-ignore: prompt
     `4. 완료 보고는 정확히 한 번, 성공/실패를 명시해서(세 문장 권장: 무엇을 바꿨나·무엇을 발견했나·무엇이 남았나):`,
+    // i18n-ignore: prompt
     `   ${cli} orch send ${ids} --type worker_done --outcome succeeded|failed --subject "<한 줄 상태>" --body "<보고>" [--files-modified "a.ts,b.ts"]`,
+    // i18n-ignore: prompt
     `   실패를 본문에만 숨기지 마세요. 보고 뒤에는 새 일을 시작하지 말고 이 턴을 끝내세요.`,
+    // i18n-ignore: prompt
     `5. 다른 워커를 띄우거나 새 Run 을 만들지 마세요. 이 Task 범위 밖의 파일은 건드리지 마세요.`,
     ``,
+    // i18n-ignore: prompt
     ...(task.deps.length ? [`- 이 Task 는 앞선 Task(${task.deps.join(", ")})가 끝난 뒤 시작됐습니다. 그 산출물이 필요하면 spec 에 적힌 위치에서 읽으세요.`, ``] : []),
     `=== Task ===`,
     task.spec,
@@ -475,9 +498,12 @@ export function buildWorkerPrompt(i: PreambleInput): string {
 /** 코디네이터 탭에 붙이는 안내(run-create 를 탭이 했을 때). */
 export function coordinatorHint(cli: string, run: OrchRun): string {
   return [
+    // i18n-ignore: prompt
     `[Atelier 오케스트레이션 · 코디네이터] Run ${run.id} 이 만들어졌습니다. 워커를 띄운 뒤 인박스를 기다리세요:`,
+    // i18n-ignore: prompt
     `${cli} orch worker-start --run ${run.id} --key ${run.coordinator.key} --spec "<작업>" --agent claude|codex [--worktree]`,
     `${cli} orch check --run ${run.id} --key ${run.coordinator.key} --wait --timeout-ms 900000`,
+    // i18n-ignore: prompt
     `질문엔 reply, 완료 보고를 받으면 결과를 검증한 뒤 --ack <delivery_id> 로 다음을 기다립니다. 빈 대기는 실패가 아닙니다.`,
   ].join("\n");
 }

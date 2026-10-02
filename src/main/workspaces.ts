@@ -24,6 +24,7 @@ import {
   titleFromMessage,
   updateTab,
   type WorkbenchModel,
+  type Workspace,
   type WorktreeMeta,
   type TabMeta,
 } from "@shared/workspace-model";
@@ -129,15 +130,15 @@ export class WorkspaceService {
   }
 
   /** 이름만으로 워크스페이스를 만들고 빈 탭을 하나 연다. 작업 경로는 탭에서 정한다. */
-  createWorkspace(name: string): { workspaceId: string; tabId: string } {
+  createWorkspace(name: string, builtin?: Workspace["builtin"]): { workspaceId: string; tabId: string } {
     const now = Date.now();
-    const { model, workspace } = createWorkspace(this.model, name, now, randomUUID());
+    const { model, workspace } = createWorkspace(this.model, name, now, randomUUID(), builtin);
     const created = createTab(model, workspace.id, now, randomUUID());
     this.commit(created.model);
     return { workspaceId: workspace.id, tabId: created.tab.id };
   }
 
-  updateWorkspace(workspaceId: string, patch: { name?: string; path?: string; verifyCommands?: string[] }) {
+  updateWorkspace(workspaceId: string, patch: { name?: string; path?: string; verifyCommands?: string[]; builtin?: Workspace["builtin"] }) {
     const before = this.model.workspaces.find((w) => w.id === workspaceId)?.path;
     this.commit(updateWorkspace(this.model, workspaceId, patch));
     const after = this.model.workspaces.find((w) => w.id === workspaceId)?.path;

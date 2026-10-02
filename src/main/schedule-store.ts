@@ -8,7 +8,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import type { Msg } from "@shared/i18n/msg";
 import { isFinalRunStatus, isLiveRun, shouldCoalesceSkip, type Run, type RunStatus, type Schedule } from "@shared/schedules";
+import { mt } from "./i18n";
 
 /** 예약 하나가 남기는 이력 상한. 넘치면 오래되고 끝난 것부터 버린다. */
 export const RUN_HISTORY_MAX = 50;
@@ -61,7 +63,7 @@ export class ScheduleStore {
       }
       // 삼키면 안 된다. "보내기 전에 기록한다" 는 약속이 깨진 채로 실행이 이어지면,
       // 재시작 뒤 그 회차가 아예 없던 일이 된다(보냈는지조차 알 수 없다).
-      throw new Error(`예약 기록을 저장하지 못했습니다: ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(mt("schedules.error.saveFailed", { detail: e instanceof Error ? e.message : String(e) }));
     }
   }
 
@@ -146,12 +148,12 @@ export class ScheduleStore {
    * 5분마다 도는 예약이 대상을 잃으면 하루 288개의 똑같은 행이 진짜 이력을 밀어낸다.
    * 합쳤으면 true.
    */
-  recordSkip(input: { scheduleId: string; scheduledFor: number; status: RunStatus; reason: string; make: () => Run }): {
+  recordSkip(input: { scheduleId: string; scheduledFor: number; status: RunStatus; reason: string; reasonMsg?: Msg; make: () => Run }): {
     run: Run;
     coalesced: boolean;
   } {
     const last = this.lastRun(input.scheduleId);
-    if (shouldCoalesceSkip(last, input.status, input.reason) && last) {
+    if (shouldCoalesceSkip(last, input.status, input.reason, input.reasonMsg) && last) {
       const run = this.updateRun(last.id, { scheduledFor: input.scheduledFor, endedAt: Date.now() });
       return { run: run ?? last, coalesced: true };
     }
@@ -162,10 +164,10 @@ export class ScheduleStore {
    * 앱이 살아 있는 동안 끝을 못 본 회차를 정리한다. 재시작 직후에 부른다.
    * 성공으로 바꾸지 않는다 — 보냈는지도 확신할 수 없는 회차가 섞여 있다.
    */
-  reconcileOnStart(reason: string): Run[] {
+  reconcileOnStart(reason: string, reasonMsg?: Msg): Run[] {
     const stranded = this.liveRuns();
     for (const r of stranded) {
-      this.updateRun(r.id, { status: "interrupted", endedAt: Date.now(), reason });
+      this.updateRun(r.id, { status: "interrupted", endedAt: Date.now(), reason, reasonMsg });
     }
     return stranded;
   }

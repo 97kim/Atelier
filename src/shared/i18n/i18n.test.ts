@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createI18n, intlLocale, isLanguageSetting, resolveLocale } from "./index";
 import { en } from "./en";
 import { ko } from "./ko";
+import { msgText, type Msg } from "./msg";
 
 test("system 은 시스템이 가장 선호하는 언어가 한국어일 때만 ko", () => {
   assert.equal(resolveLocale("system", ["ko-KR", "en-US"]), "ko");
@@ -58,4 +59,31 @@ test("영어 사전은 한국어 사전의 키만 쓰고, 빈 값이 없고, 보
     assert.equal(vars(value), vars(k.get(key)!), `보간 변수가 다르다: ${key}`);
   }
   for (const [key, value] of k) assert.notEqual(value.trim(), "", `빈 문구: ${key}`);
+});
+
+test("영어 사전에 빠진 키가 없다", () => {
+  const e = flatten(en);
+  // "__" 로 시작하는 키는 위 테스트가 넣은 임시 키다
+  const missing = [...flatten(ko).keys()].filter((key) => !key.startsWith("__") && !e.has(key));
+  assert.deepEqual(missing, []);
+});
+
+test("저장된 문구는 지금 언어로 번역되고, 모르는 키나 깨진 값은 함께 저장한 문장으로 보인다", () => {
+  const koI = createI18n("ko");
+  const enI = createI18n("en");
+  const msg: Msg = { key: "session.msg.interrupted" };
+  assert.equal(msgText(koI, msg, "x"), "중단됨");
+  assert.equal(msgText(enI, msg, "x"), "Stopped");
+  assert.equal(msgText(enI, undefined, "외부 오류"), "외부 오류");
+  assert.equal(msgText(enI, { key: "session.msg.__gone" } as never, "예전 문장"), "예전 문장");
+  assert.equal(msgText(enI, { key: "settings.title" } as never, "예전 문장"), "예전 문장");
+  assert.equal(msgText(enI, { key: 3 } as never, "예전 문장"), "예전 문장");
+  // 복수형 키는 count 로 찾는다
+  assert.equal(msgText(enI, { key: "main.msg.reviewScope", params: { count: 1, added: 3, deleted: 0 } }, "x"), "1 file · +3 −0");
+  assert.equal(msgText(enI, { key: "main.msg.reviewScope", params: { count: 2, added: 3, deleted: 0 } }, "x"), "2 files · +3 −0");
+  // 시각은 ms 로 저장하고 사전의 datetime 포맷이 언어에 맞게 그린다
+  const until = new Date(2026, 9, 2, 15, 30).getTime();
+  const limit: Msg = { key: "session.msg.limit.retryAt", params: { until, attempts: 2 } };
+  assert.match(msgText(koI, limit, "x"), /(오후|PM) 03:30 에 자동으로 다시 시도합니다 \(2번째\)/);
+  assert.match(msgText(enI, limit, "x"), /at 03:30 PM \(attempt 2\)/);
 });

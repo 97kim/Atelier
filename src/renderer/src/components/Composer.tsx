@@ -132,7 +132,7 @@ export function Composer({
   // 앱이 직접 처리하는 커맨드(/model·/config·/mcp)는 CLI 목록과 합쳐 보여 준다. "로딩 중" 판정은 CLI 목록(commands) 기준.
   const commandRows: PaletteRow[] =
     slashQuery !== null && commands
-      ? filterCommands(withAppCommands(commands), slashQuery).map((c) => ({
+      ? filterCommands(withAppCommands(t, commands), slashQuery).map((c) => ({
           kind: "command",
           key: `c:${c.name}`,
           command: c,

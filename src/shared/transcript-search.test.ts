@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ChatEvent } from "./chat-events";
+import { createI18n } from "@shared/i18n";
 import { eventsToMarkdown, exportFileName, makeSnippet, searchEvents } from "./transcript-search";
 
 const events: ChatEvent[] = [
@@ -33,7 +34,7 @@ test("makeSnippet: 앞뒤 생략 표시", () => {
 });
 
 test("eventsToMarkdown: 제목·메타·역할 헤더·툴 출력 자르기·턴 통계", () => {
-  const md = eventsToMarkdown(events, { title: "로그인 수정", workspace: "kop", provider: "Claude Code", cwd: "/a", exportedAt: 0 });
+  const md = eventsToMarkdown(createI18n("ko").t, events, { title: "로그인 수정", workspace: "kop", provider: "Claude Code", cwd: "/a", exportedAt: 0 });
   assert.match(md, /^# 로그인 수정\n/);
   assert.match(md, /- 워크스페이스: kop\n- provider: Claude Code\n- 경로: \/a/);
   assert.match(md, /## 사용자 · .*\n\n로그인 버그를 고쳐줘/);

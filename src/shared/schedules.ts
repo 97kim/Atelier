@@ -6,7 +6,9 @@
 // 회차는 보내기 "전에" 기록한다. 보낸 뒤에 기록하면 그 사이에 앱이 죽었을 때
 // 보냈는지 안 보냈는지 알 길이 없다.
 
+import type { TFunction } from "i18next";
 import type { PermissionPolicy } from "./chat-events";
+import type { Msg, MsgKey } from "./i18n/msg";
 import type { ProviderId, WorktreeMeta } from "./workspace-model";
 
 /**
@@ -24,10 +26,14 @@ import type { ProviderId, WorktreeMeta } from "./workspace-model";
  * 격리 회차(worktree)는 계속 새 탭이다. 회차마다 worktree가 다른데 탭의 경로는 하나뿐이다.
  */
 /**
- * 예약 결과가 모이는 워크스페이스 이름. 예약 결과는 언제나 여기로 모인다 — 어디에 둘지 묻지 않는다.
- * main 이 시작할 때 만들어 두고 사이드바가 맨 위로 올린다. 양쪽이 같은 값을 봐야 해서 여기 둔다.
+ * 예약 결과가 모이는 워크스페이스인가. 예약 결과는 언제나 여기로 모인다 — 어디에 둘지 묻지 않는다.
+ * main 이 시작할 때 만들어 두고 사이드바가 맨 위로 올린다. 양쪽이 같은 기준을 봐야 해서 여기 둔다.
+ * 이름은 만든 때의 언어로 저장되므로 builtin 으로 찾는다. 표식이 생기기 전에 만든 것은 이름이 "예약" 이다.
  */
-export const SCHEDULE_WORKSPACE = "예약";
+export function isScheduleWorkspace(w: { name: string; builtin?: string }): boolean {
+  // i18n-ignore: 예전 버전이 만든 워크스페이스의 이름(식별용)
+  return w.builtin === "schedules" || (w.builtin === undefined && w.name === "예약");
+}
 
 export type ScheduleTarget = {
   kind: "fresh";
@@ -142,8 +148,22 @@ export interface Run {
    */
   worktree?: WorktreeMeta;
   precheck?: PrecheckResult;
-  /** 사람이 읽을 사유. 건너뜀·중단이면 반드시 채운다. */
+  /** 사람이 읽을 사유. 건너뜀·중단이면 반드시 채운다. 만든 때의 언어로 저장한다. */
   reason: string | null;
+  /** reason 의 사전 키와 값. 화면이 지금 언어로 다시 그린다. 예전 기록에는 없다. */
+  reasonMsg?: Msg;
+}
+
+/** 사유 문장과 그 Msg. 만드는 쪽이 둘을 함께 들고 다닌다. */
+export interface RunReason {
+  reason: string;
+  reasonMsg: Msg;
+}
+
+/** 사유를 만든다. t 는 main 이면 `mt`, 테스트면 `createI18n("ko").t`. */
+export function runReason(t: TFunction, key: MsgKey, params?: Msg["params"]): RunReason {
+  const reason = (t as unknown as (k: string, p?: object) => string)(key, params);
+  return { reason, reasonMsg: params ? { key, params } : { key } };
 }
 
 /** 이 예약의 회차 하나를 가리키는 안정된 열쇠. 중복 시작을 막는다. */
@@ -169,7 +189,12 @@ export function missedBeyondGrace(input: { schedule: Schedule; scheduledFor: num
  * 같은 사유의 건너뜀이 연달아 쌓이는 것을 막는다. 5분마다 도는 예약이 대상을 잃으면
  * 하루 288개의 똑같은 행이 쌓여 진짜 이력을 밀어낸다 — 마지막 회차가 같은 사유면 갱신만 한다.
  */
-export function shouldCoalesceSkip(last: Run | null, status: RunStatus, reason: string | null): boolean {
+export function shouldCoalesceSkip(last: Run | null, status: RunStatus, reason: string | null, reasonMsg?: Msg): boolean {
   if (!last) return false;
-  return last.status === status && last.reason === reason && status.startsWith("skipped_");
+  if (last.status !== status || !status.startsWith("skipped_")) return false;
+  // 언어가 바뀌면 같은 사유도 문장이 달라진다 — 양쪽에 Msg 가 있으면 키와 값으로, 예전 기록이면 문장으로 비교한다.
+  if (last.reasonMsg && reasonMsg) {
+    return last.reasonMsg.key === reasonMsg.key && JSON.stringify(last.reasonMsg.params ?? {}) === JSON.stringify(reasonMsg.params ?? {});
+  }
+  return last.reason === reason;
 }

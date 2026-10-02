@@ -6,6 +6,7 @@ import path from "node:path";
 import type { ChatEvent } from "@shared/chat-events";
 import type { ProviderRateLimitDto } from "@shared/ipc";
 import { emptyModel, type WorkbenchModel } from "@shared/workspace-model";
+import { mt } from "./i18n";
 import { CHAT_IMAGE_MAX_BYTES, CHAT_IMAGE_MAX_COUNT, isChatImageMime, toHistoryImages, type StoredChatImage } from "./chat-attachments";
 
 /** 탭마다 남겨 두는 "비운 대화" 보관본 수. 되돌아갈 만큼은 남기되 무한히 쌓이지는 않게. */
@@ -81,7 +82,7 @@ export class Store {
           activeTabId: typeof parsed.activeTabId === "string" ? parsed.activeTabId : null,
         };
       }
-      throw new Error("workspaces.json 형식이 맞지 않습니다.");
+      throw new Error(mt("main.error.badWorkspacesFile"));
     } catch (e) {
       // 손상된 파일은 백업하고 빈 모델로 시작 — 사용자가 수동 복구할 수 있게 원본 보존.
       const backup = `${this.modelPath}.broken-${Date.now()}`;

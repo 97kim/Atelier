@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SessionStatus } from "@shared/chat-events";
-import { SCHEDULE_WORKSPACE } from "@shared/schedules";
+import { isScheduleWorkspace } from "@shared/schedules";
 import type { AppInfoDto, WorkspaceStateDto, SessionAttention } from "@shared/ipc";
 import {
   tabTitle,
@@ -115,7 +115,7 @@ export function Sidebar({
   // 예약 결과가 모이는 칸만 맨 위에 둔다. 사람이 만든 것이 아니라 앱이 만든 자리라, 손으로 맞춘
   // 순서 사이에 끼어 있으면 매번 찾아야 한다. 저장된 순서는 건드리지 않는다 — 보이는 순서만 바꾼다.
   const workspaces = useMemo(() => {
-    const i = model.workspaces.findIndex((w) => w.name === SCHEDULE_WORKSPACE);
+    const i = model.workspaces.findIndex(isScheduleWorkspace);
     if (i <= 0) return model.workspaces;
     const list = [...model.workspaces];
     return [list.splice(i, 1)[0], ...list];

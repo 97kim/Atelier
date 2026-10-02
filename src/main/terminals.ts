@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { IPty } from "node-pty";
 import { TERMINAL_CLEAR_MARK } from "@shared/ipc";
+import { mt } from "./i18n";
 
 export interface TerminalOpenResult {
   ok: boolean;
@@ -118,7 +119,7 @@ export class TerminalManager {
         ok: false,
         existing: false,
         shell,
-        error: `작업 경로가 없습니다: ${cwd}`,
+        error: mt("session.error.noCwdAt", { cwd }),
       };
     }
     try {

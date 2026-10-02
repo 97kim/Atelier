@@ -4,6 +4,7 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
+import { mt } from "./i18n";
 import { LSP_SERVERS, lspServerSpec, type LspServerId, type LspServerSpec } from "@shared/lsp-servers";
 
 export interface LspServerStatus {
@@ -205,10 +206,10 @@ export class LspManager {
   }
 
   setOverride(serverId: LspServerId, path: string | null): { ok: true } | { ok: false; error: string } {
-    if (!lspServerSpec(serverId)) return { ok: false, error: "알 수 없는 언어 서버" };
+    if (!lspServerSpec(serverId)) return { ok: false, error: mt("repo.lsp.unknownServer") };
     const p = path?.trim() || null;
-    if (p && !isAbsolute(p)) return { ok: false, error: "절대 경로로 지정해 주세요." };
-    if (p && !isExecutableFile(p)) return { ok: false, error: `실행할 수 있는 파일이 아닙니다: ${p}` };
+    if (p && !isAbsolute(p)) return { ok: false, error: mt("repo.lsp.needAbsolute") };
+    if (p && !isExecutableFile(p)) return { ok: false, error: mt("repo.lsp.notExecutable", { path: p }) };
     this.deps.saveOverride(serverId, p);
     return { ok: true };
   }
@@ -216,7 +217,7 @@ export class LspManager {
   /** 탭 cwd 의 저장소 루트에 서버를 띄운다(이미 있으면 그 id). 루트와 id 를 함께 돌려준다. */
   async start(cwd: string, serverId: LspServerId): Promise<StartResult> {
     const spec = lspServerSpec(serverId);
-    if (!spec) return { ok: false, error: "알 수 없는 언어 서버" };
+    if (!spec) return { ok: false, error: mt("repo.lsp.unknownServer") };
     const root = await this.deps.resolveRoot(cwd);
     for (const s of this.servers.values()) if (s.spec.id === spec.id && s.root === root) return { ok: true, id: s.id, root };
     const key = `${spec.id} ${root}`;
@@ -230,7 +231,7 @@ export class LspManager {
 
   private async startRoot(spec: LspServerSpec, root: string): Promise<StartResult> {
     const r = await this.resolve(spec.id);
-    if (!r.path) return { ok: false, error: `${spec.bin} 를 찾지 못했습니다. 설치: ${spec.hint}` };
+    if (!r.path) return { ok: false, error: mt("repo.lsp.notFound", { bin: spec.bin, hint: spec.hint }) };
     const env = await this.deps.env();
     const id = `lsp-${++this.seq}`;
     let proc: ChildProcessWithoutNullStreams;
@@ -245,7 +246,7 @@ export class LspManager {
       } catch {
         /* 무시 */
       }
-      return { ok: false, error: "앱이 종료 중입니다." };
+      return { ok: false, error: mt("repo.lsp.closing") };
     }
     const server: Server = {
       id,

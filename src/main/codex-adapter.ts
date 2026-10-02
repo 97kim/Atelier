@@ -2,11 +2,13 @@
 // 턴마다 `turn/start` 만 보낸다. 승인(명령 실행·파일 변경)은 서버 요청으로 받아 앱의 권한 카드로 잇는다.
 // app-server 를 못 띄우는 옛 CLI 는 SDK exec 경로(턴마다 `codex exec`)로 폴백한다 — 그 경로엔 승인 콜백이 없어 정책을 샌드박스로만 매핑한다.
 
+import { CODEX_PERMISSION_TOOL } from "@shared/tool-state";
 import type { ChatEvent, PermissionAnswer, PermissionPolicy, PermissionRequestEvent } from "@shared/chat-events";
 import { buildCodexInput, type StoredChatImage } from "./chat-attachments";
 import { mapCodexEvent } from "./codex-events";
 import { AppServerError, CodexAppServer, classifyResumeFailure, mapAppServerNotification, normalizeFileChanges, resumeConflictMessage, type AppServerTurnContext, type FileChangeDto } from "./codex-app-server";
 import { importCodexSdk } from "./esm";
+import { appMsg, MsgError, mt } from "./i18n";
 
 type ThreadOptions = import("@openai/codex-sdk").ThreadOptions;
 
@@ -105,7 +107,7 @@ export function closeCodexSession(key: string): void {
   s.dead = true;
   if (s.idleTimer) clearTimeout(s.idleTimer);
   s.server.close();
-  s.turn?.reject(new Error("세션이 종료되었습니다."));
+  s.turn?.reject(new MsgError("session.msg.sessionEnded"));
   s.turn = null;
 }
 
@@ -144,7 +146,7 @@ async function openSessionNow(runtime: CodexRuntime, key: string, cwd: string, l
       if (live.get(key) === s) live.delete(key);
       s.dead = true;
       if (s.idleTimer) clearTimeout(s.idleTimer);
-      s.turn?.reject(new Error(error ?? `Codex 프로세스가 끝났습니다 (${code ?? "?"})`));
+      s.turn?.reject(error ? new Error(error) : new MsgError("session.msg.codexExited", { code: code ?? "?" }));
       s.turn = null;
     },
   });
@@ -189,6 +191,7 @@ function trackFileChanges(s: LiveCodex, method: string, params: Record<string, u
 /** 승인 요청 → 앱의 권한 카드. 답이 allow 면 accept(always 면 acceptForSession), 아니면 decline. 진행 중인 턴이 없으면 거부. */
 async function handleServerRequest(s: LiveCodex, method: string, params: Record<string, unknown>): Promise<unknown> {
   const t = s.turn;
+  // i18n-ignore: prompt
   if (!t || !t.req.requestPermission) throw new Error("진행 중인 턴이 없어 승인할 수 없습니다.");
   const itemId = typeof params.itemId === "string" ? params.itemId : `req-${Date.now()}`;
   const ask = async (tool: string, title: string, input: Record<string, unknown>, description?: string) => {
@@ -215,25 +218,27 @@ async function handleServerRequest(s: LiveCodex, method: string, params: Record<
   };
   switch (method) {
     case "item/commandExecution/requestApproval": {
-      const a = await ask("Bash", "명령 실행을 허용할까요?", { command: params.command ?? "", cwd: params.cwd ?? "" }, typeof params.reason === "string" ? params.reason : undefined);
+      const a = await ask("Bash", mt("session.approval.runCommand"), { command: params.command ?? "", cwd: params.cwd ?? "" }, typeof params.reason === "string" ? params.reason : undefined);
       if (t.req.abort.signal.aborted) return { decision: "cancel" };
       return { decision: a.behavior === "allow" ? (a.always ? "acceptForSession" : "accept") : "decline" };
     }
     case "item/fileChange/requestApproval": {
       // 요청 자체엔 변경 내용이 없다 — 같은 itemId 의 item/started 에서 받아 둔 changes(경로·종류·diff)를 붙인다.
       const changes = s.fileChanges.get(itemId) ?? [];
-      const title = changes.length > 0 ? `파일 ${changes.length}개 변경을 허용할까요?` : "파일 변경을 허용할까요?";
+      const title = changes.length > 0 ? mt("session.approval.fileChanges", { count: changes.length }) : mt("session.approval.fileChange");
       const a = await ask("ApplyPatch", title, { changes, grantRoot: params.grantRoot ?? "" }, typeof params.reason === "string" ? params.reason : undefined);
       if (t.req.abort.signal.aborted) return { decision: "cancel" };
       return { decision: a.behavior === "allow" ? (a.always ? "acceptForSession" : "accept") : "decline" };
     }
     case "item/permissions/requestApproval": {
-      const a = await ask("권한", "추가 권한을 허용할까요?", { permissions: params.permissions ?? {} }, typeof params.reason === "string" ? params.reason : undefined);
+      const a = await ask(CODEX_PERMISSION_TOOL, mt("session.approval.permissions"), { permissions: params.permissions ?? {} }, typeof params.reason === "string" ? params.reason : undefined);
+      // i18n-ignore: prompt
       if (a.behavior !== "allow") throw new Error("사용자가 이 작업을 거부했습니다.");
       return { permissions: params.permissions ?? {}, scope: "turn" };
     }
     default:
       // 사용자 입력 요청·MCP elicitation 등은 아직 UI 가 없다 — 거부로 답해 턴이 멈추지 않게 한다.
+      // i18n-ignore: prompt
       throw new Error(`지원하지 않는 요청: ${method}`);
   }
 }
@@ -280,13 +285,13 @@ async function openThread(s: LiveCodex, req: Pick<CodexTurnRequest, "sessionKey"
       }
       // 스레드가 정말 없으면 새로 시작한다(기록은 앱 쪽에 남아 있다). 사용자에게는 한 줄 알린다.
       req.log?.(`[codex ${req.sessionKey}] resume 실패 → 새 스레드: ${detail}`);
-      req.onEvent?.({ type: "error", ts: Date.now(), fatal: false, message: `이전 Codex 스레드(${req.sessionId.slice(0, 8)}…)를 찾지 못해 새 스레드로 시작합니다. 화면의 대화는 남지만 Codex 는 이전 맥락을 모릅니다. (${detail})` });
+      req.onEvent?.({ type: "error", ts: Date.now(), fatal: false, ...appMsg("session.msg.codexThreadMissing", { id: req.sessionId.slice(0, 8), detail }) });
     }
   }
   const r = await s.server.request<{ thread?: { id?: string }; model?: string }>("thread/start", base);
   s.threadId = r.thread?.id ?? null;
   s.model = r.model || null;
-  if (!s.threadId) throw new Error("Codex 스레드를 열지 못했습니다.");
+  if (!s.threadId) throw new MsgError("session.msg.codexThreadOpen");
 }
 
 export type CodexWarmRequest = Pick<CodexTurnRequest, "sessionKey" | "cwd" | "sessionId" | "policy" | "model" | "log">;
@@ -319,7 +324,7 @@ function markUnavailableIfStartupFailure(e: unknown, log?: (line: string) => voi
 }
 
 export async function runCodexTurn(runtime: CodexRuntime, req: CodexTurnRequest): Promise<void> {
-  if (req.abort.signal.aborted) throw new Error("중단됨");
+  if (req.abort.signal.aborted) throw new MsgError("session.msg.interrupted");
   if (appServerUnavailable) return runCodexTurnExec(runtime, req);
   let s: LiveCodex;
   try {
@@ -329,7 +334,7 @@ export async function runCodexTurn(runtime: CodexRuntime, req: CodexTurnRequest)
     if (appServerUnavailable) return runCodexTurnExec(runtime, req);
     throw e;
   }
-  if (!s.threadId) throw new Error("Codex 스레드를 열지 못했습니다.");
+  if (!s.threadId) throw new MsgError("session.msg.codexThreadOpen");
   if (s.idleTimer) {
     clearTimeout(s.idleTimer);
     s.idleTimer = null;
@@ -395,6 +400,7 @@ export async function forkCodexThread(
     log: req.log,
     onNotification: () => {},
     onServerRequest: async () => {
+      // i18n-ignore: prompt
       throw new Error("분기 중에는 요청을 받지 않습니다.");
     },
     onExit: () => {},
@@ -408,7 +414,7 @@ export async function forkCodexThread(
       30_000,
     );
     const id = r.thread?.id;
-    if (!id) throw new Error("Codex 가 분기한 스레드 id 를 주지 않았습니다.");
+    if (!id) throw new Error(mt("session.error.codexForkNoId"));
     return id;
   } finally {
     server.close();
@@ -423,7 +429,7 @@ export async function forkCodexThread(
 export async function steerCodexTurn(sessionKey: string, text: string, images: { filePath: string }[]): Promise<void> {
   const s = live.get(sessionKey);
   const t = s?.turn;
-  if (!s || s.dead || !t?.turnId || !s.threadId) throw new Error("지금 반영할 Codex 작업이 없습니다.");
+  if (!s || s.dead || !t?.turnId || !s.threadId) throw new Error(mt("session.error.codexNothingToSteer"));
   const input: Record<string, unknown>[] = [...images.map((i) => ({ type: "localImage", path: i.filePath })), { type: "text", text }];
   await s.server.request("turn/steer", { threadId: s.threadId, input, expectedTurnId: t.turnId }, 15_000);
 }
@@ -453,7 +459,7 @@ export async function runCodexTurnExec(runtime: CodexRuntime, req: CodexTurnRequ
     if (req.abort.signal.aborted) throw e;
     const msg = e instanceof Error ? e.message : String(e);
     if (!streamed && /experimental-json|unexpected argument|unrecognized|invalid.*argument/i.test(msg)) {
-      throw new Error("codex CLI 버전이 오래되어 SDK 연동을 지원하지 않습니다. 업데이트가 필요합니다: npm i -g @openai/codex@latest");
+      throw new MsgError("session.msg.codexOutdated");
     }
     throw e;
   }

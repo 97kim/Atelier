@@ -3,6 +3,7 @@
 
 import fs from "fs";
 import path from "path";
+import { mt } from "./i18n";
 
 // 타입만 사용하므로 `import(...)` 타입 구문으로 가져온다 (CommonJS require() 유발 X).
 type SDKUserMessage = import("@anthropic-ai/claude-agent-sdk").SDKUserMessage;
@@ -67,27 +68,27 @@ export type DecodeResult =
  */
 export function decodeChatImage(name: string, base64: unknown): DecodeResult {
   if (typeof base64 !== "string" || !base64.trim()) {
-    return { ok: false, error: `${name}: 이미지 데이터가 비어 있습니다.` };
+    return { ok: false, error: mt("session.error.image.empty", { name }) };
   }
   const compact = base64.replace(/\s+/g, "");
   if (compact.startsWith("data:")) {
     return {
       ok: false,
-      error: `${name}: data: 접두사를 제외한 순수 base64 만 보낼 수 있습니다.`,
+      error: mt("session.error.image.dataPrefix", { name }),
     };
   }
   if (!BASE64_RE.test(compact) || compact.length % 4 !== 0) {
-    return { ok: false, error: `${name}: 이미지 데이터가 올바른 base64 가 아닙니다.` };
+    return { ok: false, error: mt("session.error.image.badBase64", { name }) };
   }
   const bytes = Buffer.from(compact, "base64");
   if (bytes.length === 0) {
-    return { ok: false, error: `${name}: 이미지 데이터가 비어 있습니다.` };
+    return { ok: false, error: mt("session.error.image.empty", { name }) };
   }
   if (bytes.length > CHAT_IMAGE_MAX_BYTES) {
     const mb = (bytes.length / 1024 / 1024).toFixed(1);
     return {
       ok: false,
-      error: `${name}: 이미지 1장은 최대 ${CHAT_IMAGE_MAX_BYTES / 1024 / 1024}MB 까지 첨부할 수 있습니다. (${mb}MB)`,
+      error: mt("session.error.image.tooLarge", { name, max: CHAT_IMAGE_MAX_BYTES / 1024 / 1024, mb }),
     };
   }
   return { ok: true, bytes };
@@ -102,13 +103,13 @@ export type PrepareResult =
 export function prepareChatImages(images: unknown): PrepareResult {
   if (images === undefined || images === null) return { ok: true, prepared: [] };
   if (!Array.isArray(images)) {
-    return { ok: false, error: "이미지 첨부 형식이 올바르지 않습니다." };
+    return { ok: false, error: mt("session.error.image.badFormat") };
   }
   if (images.length === 0) return { ok: true, prepared: [] };
   if (images.length > CHAT_IMAGE_MAX_COUNT) {
     return {
       ok: false,
-      error: `이미지는 최대 ${CHAT_IMAGE_MAX_COUNT}장까지 첨부할 수 있습니다. (${images.length}장 요청)`,
+      error: mt("session.error.image.tooMany", { max: CHAT_IMAGE_MAX_COUNT, requested: images.length }),
     };
   }
 
@@ -118,11 +119,11 @@ export function prepareChatImages(images: unknown): PrepareResult {
     const name =
       raw && typeof raw.name === "string" && raw.name.trim()
         ? raw.name.trim()
-        : `이미지 ${i + 1}`;
+        : mt("session.error.image.defaultName", { n: i + 1 });
     if (!raw || !isChatImageMime(raw.mime)) {
       return {
         ok: false,
-        error: `${name}: 지원하지 않는 이미지 형식입니다. (png, jpeg, webp 만 가능)`,
+        error: mt("session.error.image.badMime", { name }),
       };
     }
     const decoded = decodeChatImage(name, raw.base64);
@@ -166,7 +167,7 @@ export function saveChatImages({
     return { ok: true, stored };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: `이미지 첨부 저장에 실패했습니다: ${msg}` };
+    return { ok: false, error: mt("session.error.image.saveFailed", { detail: msg }) };
   }
 }
 

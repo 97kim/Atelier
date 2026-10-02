@@ -16,6 +16,7 @@ import { ClaudeEventMapper, parseClaudeRateLimit } from "./claude-events";
 import { importClaudeSdk } from "./esm";
 import { claudeProgressNotes } from "./cli-defaults";
 import { homedir } from "node:os";
+import { MsgError, mt } from "./i18n";
 
 type SdkOptions = import("@anthropic-ai/claude-agent-sdk").Options;
 type SDKUserMessage = import("@anthropic-ai/claude-agent-sdk").SDKUserMessage;
@@ -96,11 +97,13 @@ export function permissionResultFor(
     if (answer.behavior === "allow" && answer.answers && Object.keys(answer.answers).length > 0) {
       return { behavior: "allow", updatedInput: { ...toolInput, answers: answer.answers } };
     }
+    // i18n-ignore: prompt
     return { behavior: "deny", message: "사용자가 질문에 답하지 않았습니다. 필요하면 합리적인 기본값으로 진행하세요.", interrupt: false };
   }
   if (answer.behavior === "allow") {
     return { behavior: "allow", updatedInput: toolInput, updatedPermissions: answer.always ? suggestions : undefined };
   }
+  // i18n-ignore: prompt
   return { behavior: "deny", message: "사용자가 이 작업을 거부했습니다.", interrupt: false };
 }
 
@@ -197,7 +200,7 @@ export function liveClaudeSessions(): string[] {
 }
 
 /** 프로세스를 내린다(탭 해제·대화 비우기·provider 전환·cwd 변경·앱 종료). 진행 중인 턴이 있으면 중단으로 끝난다. */
-export function closeClaudeSession(key: string, reason = "세션을 닫았습니다."): void {
+export function closeClaudeSession(key: string, reason = mt("session.msg.closed")): void {
   const s = live.get(key);
   if (!s) return;
   s.closing = reason;
@@ -210,7 +213,7 @@ export function closeClaudeSession(key: string, reason = "세션을 닫았습니
   } catch {
     /* 이미 끝남 */
   }
-  s.turn?.reject(new Error("세션이 종료되었습니다."));
+  s.turn?.reject(new MsgError("session.msg.sessionEnded"));
   s.turn = null;
   // 살아 있던 백그라운드 작업 집합은 이 프로세스의 것이다 — 남겨 두면 끝나지 않는 표시가 된다.
   // 출처를 cleanup 으로 밝힌다: 이건 "일이 끝났다" 가 아니라 "더는 모른다" 는 뜻이다.
@@ -233,7 +236,7 @@ export function interruptClaudeSession(key: string): boolean {
   setTimeout(() => {
     // 아직도 돌고 있으면 내린다. interrupt 를 무시하는 CLI 를 붙잡아 두면
     // 사용자는 중단을 눌렀는데 일이 계속되는 것을 보게 된다.
-    if (live.get(key) === s && !s.dead && (s.turn || s.ambientMapper)) closeClaudeSession(key, "중단했습니다.");
+    if (live.get(key) === s && !s.dead && (s.turn || s.ambientMapper)) closeClaudeSession(key, mt("session.msg.stoppedShort"));
   }, INTERRUPT_GRACE_MS);
   return true;
 }
@@ -329,10 +332,15 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
       // 해요체로 쓴다: 해라체로 쓰면 모델이 그 말투("확인한다")를 진행 설명에 그대로 따라 썼다.
       // 언어·말투 규칙은 따로 못박는다: 짧은 새 세션에서도 진행 설명이 영어로 넘어가는 일이 있었다.
       append: [
+        // i18n-ignore: prompt
         "이 대화는 Atelier 앱의 채팅 화면에 보여요. 도구 호출은 접힌 카드로만 보여서, 사용자는 당신이 쓰는 글로 작업 흐름을 따라와요.",
+        // i18n-ignore: prompt
         "- 도구를 부르기 전에, 무엇을 왜 하려는지 한 문장으로 말해 주세요.",
+        // i18n-ignore: prompt
         "- 도구 결과를 받으면 다음 도구를 부르기 전에 한두 문장을 써 주세요. 방금 무엇을 알아냈는지(원인을 찾았다면 원인), 그래서 다음에 무엇을 할지요.",
+        // i18n-ignore: prompt
         "- 이 설명은 짧게, 새로 알게 된 것만 써 주세요. 최종 답에는 결과와 결론을 쓰고, 설명에서 이미 전한 과정은 되풀이하지 마세요.",
+        // i18n-ignore: prompt
         "- 진행 설명과 도구 호출의 설명(Bash의 description 등)도 최종 답과 같은 언어, 같은 말투로 써 주세요. 언어는 사용자의 언어 설정을 따르고, 설정이 없으면 사용자가 쓰는 언어를 따라요. 도구 출력·코드·리마인더의 언어 때문에 응답 언어를 바꾸지 마세요.",
       ].join("\n"),
     },
@@ -345,6 +353,7 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
       // 우리가 시작하지 않은 턴도 승인을 받아야 한다 — 거부하면 하던 일이 거기서 멈춘다.
       const onEvent = t ? t.req.onEvent : s.onAmbientEvent;
       const ask = t ? t.req.requestPermission : s.requestAmbientPermission;
+      // i18n-ignore: prompt
       if (!onEvent || !ask) return { behavior: "deny", message: "진행 중인 턴이 없습니다.", interrupt: false };
       // 도중에 "전부 자동" 으로 바꾼 경우 여기서 끊는다 — 화면까지 왕복하지 않는다.
       // AskUserQuestion 은 권한이 아니라 질문이라 사람이 답해야 한다(빈 답은 거부와 같다).
@@ -383,7 +392,7 @@ async function pump(s: LiveSession) {
     for await (const message of s.q) handleMessage(s, message);
     // 예외 없이 끝났다 = 프로세스가 스스로 스트림을 닫았다.
     if (process.env.WORKBENCH_DEBUG_SDK) console.log(`[sdkend ${s.key.slice(0, 6)}] 정상종료(EOF) turn=${s.turn ? "있음" : "없음"}`);
-    s.onStreamEnded?.(s.closing ?? "프로세스가 스트림을 닫았습니다.", s.closing !== null);
+    s.onStreamEnded?.(s.closing ?? mt("session.msg.streamClosed"), s.closing !== null);
   } catch (e) {
     if (process.env.WORKBENCH_DEBUG_SDK)
       console.log(`[sdkend ${s.key.slice(0, 6)}] 예외 turn=${s.turn ? "있음" : "없음"} ${e instanceof Error ? e.message : String(e)}`);
@@ -395,7 +404,7 @@ async function pump(s: LiveSession) {
     if (live.get(s.key) === s) live.delete(s.key);
     s.dead = true;
     if (s.idleTimer) clearTimeout(s.idleTimer);
-    s.turn?.reject(new Error("Claude 프로세스가 끝났습니다."));
+    s.turn?.reject(new MsgError("session.msg.claudeExited"));
     s.turn = null;
     s.onBackgroundTasks?.(s.sessionId ?? "", [], "cleanup");
   }
@@ -413,6 +422,7 @@ function handleMessage(s: LiveSession, message: SDKMessage) {
       m.status ? `status=${m.status}` : "",
       m.is_error !== undefined ? `is_error=${m.is_error}` : "",
       Array.isArray(m.tasks) ? `tasks=${m.tasks.length}` : "",
+      // i18n-ignore: log
       t ? "" : "(턴밖)",
     ].filter(Boolean).join(" ");
     console.log(`[sdkmsg ${s.key.slice(0, 6)}] ${m.type} ${extra}`);
@@ -563,7 +573,7 @@ export async function warmClaudeSession(runtime: ClaudeRuntime, req: ClaudeWarmR
 }
 
 export async function runClaudeTurn(runtime: ClaudeRuntime, req: ClaudeTurnRequest): Promise<void> {
-  if (req.abort.signal.aborted) throw new Error("중단됨");
+  if (req.abort.signal.aborted) throw new MsgError("session.msg.interrupted");
   const s = await sessionFor(runtime, req);
   if (s.idleTimer) {
     clearTimeout(s.idleTimer);

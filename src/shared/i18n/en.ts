@@ -2,12 +2,16 @@
 // 빈 문자열("")은 넣지 않는다: i18next 는 빈 값을 번역이 있는 것으로 본다.
 
 import { chat } from "./en/chat";
+import { cli } from "./en/cli";
 import { common } from "./en/common";
 import { fanout } from "./en/fanout";
+import { main } from "./en/main";
 import { nav } from "./en/nav";
 import { orchestration } from "./en/orchestration";
 import { panel } from "./en/panel";
+import { repo } from "./en/repo";
 import { schedules } from "./en/schedules";
+import { session } from "./en/session";
 import { settings } from "./en/settings";
 import { shared } from "./en/shared";
 import { toolCard } from "./en/toolCard";
@@ -15,4 +19,4 @@ import { usage } from "./en/usage";
 import type { Dictionary } from "./ko";
 import type { DeepPartial } from "./types";
 
-export const en: DeepPartial<Dictionary> = { chat, common, fanout, nav, orchestration, panel, schedules, settings, shared, toolCard, usage };
+export const en: DeepPartial<Dictionary> = { chat, cli, common, fanout, main, nav, orchestration, panel, repo, schedules, session, settings, shared, toolCard, usage };

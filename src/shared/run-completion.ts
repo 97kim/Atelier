@@ -16,6 +16,8 @@
 //
 // 오르카도 같은 태도다 — 관찰을 잃으면 절대 완료라고 하지 않고 사유를 남긴다.
 
+import type { Msg } from "./i18n/msg";
+
 /** 판정에 쓰는 신호. 어댑터가 보는 것을 그대로 옮긴 것만 둔다. */
 export type RunSignal =
   /** 턴 하나가 끝났다(SDK result). 회차의 끝이라는 뜻은 아니다. */
@@ -27,7 +29,7 @@ export type RunSignal =
   /** 사용자 응답을 기다리는 요청 수(권한·질문). */
   | { kind: "awaiting"; count: number }
   /** 스트림이 끝났다. expected = 우리가 의도적으로 닫았다(탭 닫기·유휴 종료 등). */
-  | { kind: "stream_ended"; reason: string; expected: boolean };
+  | { kind: "stream_ended"; reason: string; expected: boolean; /** reason 이 앱이 만든 문구면 그 키(그릴 때 번역한다). */ reasonMsg?: Msg };
 
 export interface RunState {
   sawResult: boolean;
@@ -45,7 +47,7 @@ export interface RunState {
    */
   liveTasks: number | null;
   awaiting: number;
-  ended: { reason: string; expected: boolean } | null;
+  ended: { reason: string; expected: boolean; reasonMsg?: Msg } | null;
 }
 
 export type RunVerdict =
@@ -54,7 +56,7 @@ export type RunVerdict =
   | { state: "needs_action" }
   | { state: "completed"; isError: boolean }
   /** 끝났는지 알 수 없게 됐다. 성공으로 바꾸지 않는다. */
-  | { state: "interrupted"; reason: string };
+  | { state: "interrupted"; reason: string; reasonMsg?: Msg };
 
 export function newRunState(): RunState {
   return { sawResult: false, followUpExpected: false, resultIsError: false, liveTasks: null, awaiting: 0, ended: null };
@@ -79,7 +81,7 @@ export function applyRunSignal(s: RunState, sig: RunSignal): RunState {
     case "awaiting":
       return { ...s, awaiting: Math.max(0, sig.count) };
     case "stream_ended":
-      return { ...s, ended: { reason: sig.reason, expected: sig.expected } };
+      return { ...s, ended: { reason: sig.reason, expected: sig.expected, ...(sig.reasonMsg ? { reasonMsg: sig.reasonMsg } : {}) } };
   }
 }
 
@@ -91,7 +93,7 @@ function finished(s: RunState): boolean {
 export function runVerdict(s: RunState): RunVerdict {
   // 스트림이 끝났으면 기본은 "모른다" 다. 끝까지 간 것이 확인될 때만 완료로 본다 —
   // 후속 턴을 기다리던 중에 죽은 것을 성공으로 만들면 안 된다.
-  if (s.ended) return finished(s) ? { state: "completed", isError: s.resultIsError } : { state: "interrupted", reason: s.ended.reason };
+  if (s.ended) return finished(s) ? { state: "completed", isError: s.resultIsError } : { state: "interrupted", reason: s.ended.reason, ...(s.ended.reasonMsg ? { reasonMsg: s.ended.reasonMsg } : {}) };
   if (s.awaiting > 0) return { state: "needs_action" };
   return finished(s) ? { state: "completed", isError: s.resultIsError } : { state: "running" };
 }

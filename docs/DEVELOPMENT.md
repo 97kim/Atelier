@@ -54,18 +54,29 @@ DMG로 직접 설치한 앱도 새 버전을 확인할 수 있지만 앱 안에�
 ## 국제화 (i18n)
 
 표시 언어는 한국어(ko)와 영어(en)다. 설정의 `language`(`system`·`ko`·`en`)를 main 이 해석해 `resolvedLocale` 로 내려 주고,
-`system` 은 macOS 의 선호 언어(`app.getPreferredSystemLanguages()[0]`)가 한국어일 때만 ko 다. 화면(renderer) 문구는 모두 사전으로 옮겼고,
-main·CLI 가 만드는 문구(메뉴, 오류, 알림)는 아직 코드의 한국어 그대로다.
+`system` 은 macOS 의 선호 언어(`app.getPreferredSystemLanguages()[0]`)가 한국어일 때만 ko 다. 화면·메뉴·알림·오류·CLI 응답의 문구는 모두 사전에 있다.
+모델에게 보내는 프롬프트만 아직 한국어다(응답 언어 정책과 함께 다룰 예정).
 
-- 사전은 `src/shared/i18n/ko.ts`(원본)와 `en.ts` 다. 영어에 없는 키는 한국어로 보인다. 영어 값에 빈 문자열을 넣지 않는다(번역이 있는 것으로 취급된다).
-- renderer 는 `useTranslation()` 의 `t`, main 은 `mainI18n().t` 를 쓴다. main 이 번역하는 것은 메뉴·macOS 알림처럼 main 이 직접 그리는 문구뿐이다.
-  대화 기록에 남는 문구는 번역해서 저장하지 않는다 — 코드와 값만 남기고 표시할 때 번역한다.
+- 사전은 `src/shared/i18n/ko.ts`(원본)와 `en.ts`, 영역별 파일은 `ko/*.ts`·`en/*.ts` 다. 영어 값에 빈 문자열을 넣지 않는다(번역이 있는 것으로 취급된다).
+  한국어 사전의 모든 키에 영어를 붙인다 — 테스트(`i18n.test.ts`)가 빠진 키를 잡는다.
+- 문구는 어디서 번역하느냐로 나뉜다.
+  - 바로 보이고 사라지는 것(메뉴, macOS 알림, IPC 결과의 오류, CLI 응답): main 이 만든 자리에서 `mt("영역.키", { 값 })`(`src/main/i18n.ts`).
+  - 저장됐다가 다시 그려지는 것(대화 기록의 오류·안내, 검증·리뷰·팬아웃 카드의 앱 문구, 예약 실행 사유, 오케스트레이션 메모): 문장 옆에
+    `Msg`(`{ key, params }`, `src/shared/i18n/msg.ts`)를 함께 저장하고 그릴 때 `msgText(i18n, msg, 문장)` 으로 번역한다. 대화 이벤트는 `...appMsg(key, params)`,
+    그 밖의 필드는 `<필드>Msg` 를 옆에 둔다. 키는 `<영역>.msg.*` 에만 두고, 한 번 내보낸 키와 값 이름은 저장 데이터의 일부라 바꾸지 않는다(문구는 고쳐도 된다).
+    Msg 가 없거나 모르는 키면 함께 저장한 문장이 보인다(예전 기록, 외부 오류).
+  - renderer 는 `useTranslation()` 의 `t`.
+- provider·git·OS 가 준 오류 원문은 번역하지도 덮어쓰지도 않는다. 값(`detail`)으로 넣는다.
 - 번역 결과를 상수나 state 에 담아 두지 않는다. 키와 값을 들고 있다가 그릴 때 번역해야 언어를 바꿨을 때 따라온다.
-- 화면 문구로 동작을 정하지 않는다. 상태는 값으로 두고 문구는 그 값에서 만든다(`src/shared/tool-state.ts` 가 예다).
-- 모델에게 보내는 프롬프트, 외부 오류 문구를 읽는 파서(`usage-limit.ts`), 계산용 로케일(`cron.ts` 의 `en-US`)은 번역 대상이 아니다.
-- `yarn i18n:check` 는 코드에 남은 한국어 문구를 센다(`console.*` 로그는 세지 않는다). `--list <경로>` 로 위치를 본다.
-  화면(`src/renderer`)은 다 옮겼으므로 `yarn i18n:strict` 가 0개여야 한다 — 새 화면 문구는 사전(`src/shared/i18n/ko/*.ts`, `en/*.ts`)에 넣는다.
-- `src/shared` 의 함수가 표시 문구를 만들면 `t: TFunction` 을 인자로 받는다(`verifySummary`, `formatDuration` 이 예다). 문구는 `shared` 영역에 둔다.
+- 화면 문구로 동작을 정하지 않는다. 상태는 값으로 두고 문구는 그 값에서 만든다(`src/shared/tool-state.ts`, `shouldCoalesceSkip` 의 사유 비교가 예다).
+- 자동으로 붙이는 이름(탭 제목, 새 워크스페이스·예약의 기본 이름)은 만드는 시점의 언어로 저장하고 다시 번역하지 않는다.
+  앱이 만든 자리는 이름이 아니라 값으로 찾는다(예약 워크스페이스는 `builtin: "schedules"`). 이름 없는 탭("새 세션")은 저장하지 않고 그릴 때 번역한다.
+- `src/shared` 의 함수가 표시 문구를 만들면 `t: TFunction` 을 첫 인자로 받는다(`verifySummary`, `runSummary`, `fanoutSummary` 가 예다). main 은 `mt`, 테스트는 `createI18n("ko").t` 를 넘긴다.
+- `cli/atelier.cjs` 는 의존성 없이 돌아야 해서 파일 안의 작은 표로 번역한다. 언어는 `ATELIER_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` 순으로 본다.
+- 번역 대상이 아닌 것: 모델에게 보내는 글, 로그, 외부 오류 문구를 읽는 파서(`usage-limit.ts`), 계산용 로케일(`cron.ts` 의 `en-US`).
+- `yarn i18n:check` 는 코드에 남은 한국어 문구를 센다. `--list <경로>` 로 위치를 본다. `console.*`·`log(...)` 호출은 세지 않고,
+  바로 윗줄에 `// i18n-ignore: <이유>` 가 붙은 노드도 건너뛴다 — 프롬프트처럼 화면 문구가 아닌 것에만, 가장 좁은 범위에 붙인다.
+  `yarn i18n:strict` 는 전체가 0개여야 통과한다.
 - 전환 확인은 `e2e/check-i18n-switch.cjs`.
 
 ## 실기기 검증 (e2e)

@@ -24,7 +24,7 @@ export const settings = {
   },
   language: {
     title: "언어",
-    description: "앱 화면에 쓰는 언어입니다. 메뉴와 일부 메시지는 아직 한국어로 보일 수 있습니다.",
+    description: "앱 화면에 쓰는 언어입니다.",
     options: {
       system: { label: "시스템 따라가기", hint: "macOS의 언어 설정을 따릅니다." },
       ko: { label: "한국어", hint: "항상 한국어로 표시합니다." },

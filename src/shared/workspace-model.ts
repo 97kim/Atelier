@@ -13,6 +13,8 @@ export interface Workspace {
   lastUsedAt: number;
   /** 검증 명령(한 번에 순서대로 실행). 없으면 저장소 매니페스트에서 추천한다. */
   verifyCommands?: string[];
+  /** 앱이 만든 자리. 이름은 만든 때의 언어로 저장되므로 이름이 아니라 이 값으로 찾는다. */
+  builtin?: "schedules";
 }
 
 export interface TabMeta {
@@ -63,9 +65,6 @@ export function emptyModel(): WorkbenchModel {
   return { version: 1, workspaces: [], tabs: [], openTabIds: [], activeTabId: null };
 }
 
-/** 이름 없는 탭에 보이는 제목. 제목이 "없는지"는 이 문구와 비교하지 말고 tab.title 로 판단한다. */
-export const UNTITLED_TAB = "새 세션";
-
 /**
  * 이 경로를 작업 경로로 쓰는 탭 전부. worktree 탭에서 분기하면 분기 탭도 같은 폴더를 쓰지만 worktree 정보는 없다 —
  * 하나만 찾으면(닫힌 원본을 먼저 만나면) 열린 분기 탭을 놓쳐 쓰는 중인 폴더를 지운다. 열린 탭을 앞에 둔다.
@@ -75,8 +74,8 @@ export function tabsUsingPath(model: WorkbenchModel, path: string): TabMeta[] {
   return [...users.filter((t) => t.open !== false), ...users.filter((t) => t.open === false)];
 }
 
-/** untitled 는 이름 없는 탭에 보일 문구 — 화면은 번역한 값을 넘기고, main(로그·CLI 출력)은 기본값을 쓴다. */
-export function tabTitle(tab: TabMeta, untitled: string = UNTITLED_TAB): string {
+/** untitled 는 이름 없는 탭에 보일 문구(`shared.untitledTab`) — 호출처가 번역한 값을 넘긴다. 제목이 "없는지"는 이 문구와 비교하지 말고 tab.title 로 판단한다. */
+export function tabTitle(tab: TabMeta, untitled: string): string {
   return tab.title?.trim() || untitled;
 }
 
@@ -122,12 +121,13 @@ export function createWorkspace(
   name: string,
   now: number,
   id: string,
+  builtin?: Workspace["builtin"],
 ): { model: WorkbenchModel; workspace: Workspace } {
-  const workspace: Workspace = { id, path: "", name: name.trim() || "새 워크스페이스", addedAt: now, lastUsedAt: now };
+  const workspace: Workspace = { id, path: "", name: name.trim(), addedAt: now, lastUsedAt: now, ...(builtin ? { builtin } : {}) };
   return { model: { ...m, workspaces: [...m.workspaces, workspace] }, workspace };
 }
 
-export function updateWorkspace(m: WorkbenchModel, workspaceId: string, patch: Partial<Pick<Workspace, "name" | "path" | "verifyCommands">>): WorkbenchModel {
+export function updateWorkspace(m: WorkbenchModel, workspaceId: string, patch: Partial<Pick<Workspace, "name" | "path" | "verifyCommands" | "builtin">>): WorkbenchModel {
   if (!m.workspaces.some((w) => w.id === workspaceId)) return m;
   return {
     ...m,
@@ -138,6 +138,7 @@ export function updateWorkspace(m: WorkbenchModel, workspaceId: string, patch: P
             ...(patch.name !== undefined ? { name: patch.name.trim() || w.name } : {}),
             ...(patch.path !== undefined ? { path: patch.path.replace(/\/+$/, "") } : {}),
             ...(patch.verifyCommands !== undefined ? { verifyCommands: patch.verifyCommands.slice() } : {}),
+            ...(patch.builtin !== undefined ? { builtin: patch.builtin } : {}),
           }
         : w,
     ),
@@ -334,12 +335,6 @@ export function titleFromMessage(text: string): string {
 // ===== 사이드바 "최근" 그룹 =====
 
 export type RecentGroup = "today" | "yesterday" | "week" | "older";
-export const RECENT_GROUP_LABEL: Record<RecentGroup, string> = {
-  today: "오늘",
-  yesterday: "어제",
-  week: "지난 7일",
-  older: "이전",
-};
 
 export function recentGroup(ts: number, now: number): RecentGroup {
   const start = new Date(now);

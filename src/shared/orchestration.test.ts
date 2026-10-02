@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createI18n } from "./i18n";
 import { attention, buildWorkerPrompt, resolveGroup, taskWaves, pendingDelivery, reduceRun, replayRun, runSettled, runSummary, undeliveredFollowups, undeliveredInbox, unreadFollowups, type OrchDispatch, type OrchEvent, type OrchMessage, type OrchRun, type OrchTask } from "./orchestration";
 
 const run: OrchRun = { id: "r1", objective: "로그인 고치기", createdAt: 1, createdBy: { kind: "user" }, coordinator: { kind: "user", epoch: 1, key: "k1" }, status: "active" };
@@ -28,7 +29,7 @@ test("replay: run → task → dispatch 시작 → 질문 → 답 → 보고 →
   assert.equal(s.messages.find((m) => m.id === "q1")?.answer?.body, "예");
   assert.equal(attention(s).questions.length, 0);
   assert.equal(runSettled(s), true);
-  assert.equal(runSummary(s), "1/1 완료");
+  assert.equal(runSummary(createI18n("ko").t, s), "1/1 완료");
   assert.equal(s.revision, events.length - 1);
 });
 

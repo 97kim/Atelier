@@ -1,5 +1,6 @@
 // 프롬프트 스니펫: 자주 붙이는 지시문을 이름으로 저장해 입력창의 "/" 팔레트에서 꺼내 쓴다.
 // 워크스페이스별(workspaceId) 또는 전체(null). 순수 함수만 — 저장은 main/snippets.ts.
+import type { TFunction } from "i18next";
 
 export interface SnippetDto {
   id: string;
@@ -46,6 +47,7 @@ export function filterSnippets(
 
 /** 저장(upsert): 같은 id 는 교체, 없으면 추가. 같은 범위에 같은 이름이 이미 있으면 그것을 덮어쓴다. */
 export function upsertSnippet(
+  t: TFunction,
   snippets: SnippetDto[],
   input: { id?: string; name: string; text: string; workspaceId: string | null },
   now: number,
@@ -53,17 +55,17 @@ export function upsertSnippet(
 ): { snippets: SnippetDto[]; snippet: SnippetDto } | { error: string } {
   const name = normalizeSnippetName(input.name);
   const text = input.text.replace(/\s+$/, "");
-  if (!name) return { error: "이름을 입력하세요." };
-  if (name.length > MAX_NAME) return { error: `이름은 ${MAX_NAME}자 이내여야 합니다.` };
-  if (!text.trim()) return { error: "내용이 비어 있습니다." };
-  if (text.length > MAX_TEXT) return { error: `내용은 ${MAX_TEXT.toLocaleString()}자 이내여야 합니다.` };
+  if (!name) return { error: t("main.snippet.nameRequired") };
+  if (name.length > MAX_NAME) return { error: t("main.snippet.nameTooLong", { max: MAX_NAME }) };
+  if (!text.trim()) return { error: t("main.error.emptyContent") };
+  if (text.length > MAX_TEXT) return { error: t("main.snippet.textTooLong", { max: MAX_TEXT.toLocaleString() }) };
   // 같은 범위·같은 이름은 하나만 — id 로 편집해 다른 스니펫과 이름이 겹치면 그쪽을 흡수한다.
   const dup = snippets.find(
     (s) => s.id !== input.id && s.name === name && s.workspaceId === input.workspaceId,
   );
   const id = input.id ?? dup?.id ?? newId();
   const rest = snippets.filter((s) => s.id !== id && s.id !== dup?.id);
-  if (!input.id && !dup && rest.length >= MAX_COUNT) return { error: `스니펫은 ${MAX_COUNT}개까지 저장할 수 있습니다.` };
+  if (!input.id && !dup && rest.length >= MAX_COUNT) return { error: t("main.snippet.tooMany", { max: MAX_COUNT }) };
   const snippet: SnippetDto = { id, name, text, workspaceId: input.workspaceId, updatedAt: now };
   return { snippets: [...rest, snippet], snippet };
 }

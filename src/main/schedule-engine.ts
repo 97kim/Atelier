@@ -11,13 +11,16 @@ import { nextOccurrence, parseCron } from "@shared/cron";
 import { decideTick, readPrecheck } from "@shared/scheduler-decide";
 import {
   isFinalRunStatus,
+  runReason,
   type PrecheckResult,
   type Run,
+  type RunReason,
   type RunStatus,
   type Schedule,
   type ScheduleTarget,
 } from "@shared/schedules";
 import { applyRunSignal, newRunState, runVerdict, type RunSignal, type RunState } from "@shared/run-completion";
+import { mt } from "./i18n";
 import type { ScheduleStore } from "./schedule-store";
 
 export const TICK_MS = 30_000;
@@ -26,9 +29,9 @@ export interface ScheduleEngineDeps {
   store: ScheduleStore;
   now?(): number;
   /** 대상이 지금 실행 가능한가. 안 되면 사람이 읽을 사유. */
-  checkTarget(target: ScheduleTarget): string | null;
+  checkTarget(target: ScheduleTarget): RunReason | null;
   /** 예산 등으로 지금 시작하면 안 되는 사유. */
-  checkBudget(): string | null;
+  checkBudget(): RunReason | null;
   runPrecheck(input: { command: string; timeoutMs: number; target: ScheduleTarget }): Promise<PrecheckResult>;
   /** 세션을 준비하고 프롬프트를 보낸다. 돌아간 탭 id 를 준다. */
   dispatch(input: { schedule: Schedule; run: Run }): Promise<{ tabId: string }>;
@@ -61,7 +64,8 @@ export class ScheduleEngine {
 
   /** 앱이 켜질 때 한 번. 끝을 못 본 회차를 정리한다. */
   start(): void {
-    const stranded = this.deps.store.reconcileOnStart("앱이 회차의 끝을 보기 전에 종료됐습니다.");
+    const stopped = runReason(mt, "schedules.msg.appStopped");
+    const stranded = this.deps.store.reconcileOnStart(stopped.reason, stopped.reasonMsg);
     if (stranded.length > 0) this.deps.log?.(`[schedules] 끝을 못 본 회차 ${stranded.length}개를 중단으로 정리했습니다.`);
     for (const r of stranded) this.deps.onRunChanged?.(r);
     if (this.timer) return;
@@ -101,9 +105,9 @@ export class ScheduleEngine {
       if (staleGap && schedule.enabled) {
         // 오래 꺼져 있었다. 밀린 회차를 하나씩 따라가면(매분 예약이면 수만 번) 현재에 닿는 데 몇 시간이 걸린다.
         // 한 줄만 남기고 커서를 창 시작점으로 민다 — 현재 회차는 이 틱에서 그대로 처리한다.
-        this.skip(schedule, cursorTo, "skipped_missed", "앱이 오래 꺼져 있어 그동안의 회차를 건너뜁니다.");
+        this.skip(schedule, cursorTo, "skipped_missed", runReason(mt, "schedules.msg.staleGap"));
       }
-      const decision = decideTick({
+      const decision = decideTick(mt, {
         schedule,
         dueAt: due,
         now,
@@ -114,7 +118,7 @@ export class ScheduleEngine {
       });
       if (decision.kind !== "idle") {
         if (decision.kind === "skip") {
-          this.skip(schedule, decision.scheduledFor, decision.status, decision.reason);
+          this.skip(schedule, decision.scheduledFor, decision.status, decision);
         } else {
           await this.run(schedule, decision.scheduledFor, decision.kind === "precheck", "scheduled");
         }
@@ -132,7 +136,7 @@ export class ScheduleEngine {
     const schedule = this.deps.store.schedule(scheduleId);
     if (!schedule) return null;
     if (this.deps.store.liveRuns(scheduleId).length > 0) {
-      return this.skip(schedule, this.now(), "skipped_overlap", "앞 회차가 아직 끝나지 않았습니다.");
+      return this.skip(schedule, this.now(), "skipped_overlap", runReason(mt, "schedules.msg.overlap"));
     }
     const unavailable = this.deps.checkTarget(schedule.target) ?? this.deps.checkBudget();
     if (unavailable) return this.skip(schedule, this.now(), "skipped_unavailable", unavailable);
@@ -187,7 +191,8 @@ export class ScheduleEngine {
     return { prompt: s.prompt, cron: s.cron, timezone: s.timezone, policy: s.policy, provider: s.provider, target: s.target };
   }
 
-  private skip(s: Schedule, scheduledFor: number, status: RunStatus, reason: string): Run {
+  private skip(s: Schedule, scheduledFor: number, status: RunStatus, why: RunReason): Run {
+    const { reason, reasonMsg } = why;
     const now = this.now();
     const make = (): Run => ({
       id: `${s.id}-${scheduledFor}-${Math.random().toString(36).slice(2, 8)}`,
@@ -200,8 +205,9 @@ export class ScheduleEngine {
       endedAt: now,
       tabId: null,
       reason,
+      reasonMsg,
     });
-    const { run, coalesced } = this.deps.store.recordSkip({ scheduleId: s.id, scheduledFor, status, reason, make });
+    const { run, coalesced } = this.deps.store.recordSkip({ scheduleId: s.id, scheduledFor, status, reason, reasonMsg, make });
     if (!coalesced) this.deps.log?.(`[schedules] ${s.name}: ${status} — ${reason}`);
     this.deps.onRunChanged?.(run);
     return run;
@@ -225,9 +231,9 @@ export class ScheduleEngine {
 
     if (withPrecheck && s.precheck) {
       const result = await this.deps.runPrecheck({ command: s.precheck.command, timeoutMs: s.precheck.timeoutMs, target: s.target });
-      const verdict = readPrecheck(result);
+      const verdict = readPrecheck(mt, result);
       if (verdict.kind !== "run") {
-        return this.finish(created.id, verdict.kind === "skip" ? "skipped_precheck" : "failed", verdict.reason, { precheck: result });
+        return this.finish(created.id, verdict.kind === "skip" ? "skipped_precheck" : "failed", verdict, { precheck: result });
       }
       this.deps.store.updateRun(created.id, { precheck: result });
     }
@@ -239,12 +245,12 @@ export class ScheduleEngine {
       this.watching.set(tabId, { runId: created.id, scheduleId: s.id, state: newRunState() });
       return started ?? created;
     } catch (e) {
-      return this.finish(created.id, "failed", `실행을 시작하지 못했습니다: ${e instanceof Error ? e.message : String(e)}`);
+      return this.finish(created.id, "failed", runReason(mt, "schedules.msg.startFailed", { detail: e instanceof Error ? e.message : String(e) }));
     }
   }
 
-  private finish(runId: string, status: RunStatus, reason: string | null, patch: Partial<Run> = {}): Run {
-    const run = this.deps.store.updateRun(runId, { status, reason, endedAt: this.now(), ...patch });
+  private finish(runId: string, status: RunStatus, why: Pick<Run, "reasonMsg"> & { reason: string } | null, patch: Partial<Run> = {}): Run {
+    const run = this.deps.store.updateRun(runId, { status, reason: why?.reason ?? null, reasonMsg: why?.reasonMsg, endedAt: this.now(), ...patch });
     if (run) this.deps.onRunChanged?.(run);
     return run!;
   }
@@ -274,8 +280,8 @@ export class ScheduleEngine {
       return;
     }
     try {
-      if (v.state === "completed") this.finish(w.runId, v.isError ? "failed" : "completed", v.isError ? "모델이 오류로 끝냈습니다." : null);
-      else this.finish(w.runId, "interrupted", v.reason);
+      if (v.state === "completed") this.finish(w.runId, v.isError ? "failed" : "completed", v.isError ? runReason(mt, "schedules.msg.modelError") : null);
+      else this.finish(w.runId, "interrupted", { reason: v.reason, reasonMsg: v.reasonMsg });
     } catch (e) {
       // 저장이 실패하면 감시를 놓지 않는다. 놓으면 회차가 영영 "도는 중" 으로 남고
       // 디스크가 복구돼도 아무도 다시 끝내 주지 않는다.

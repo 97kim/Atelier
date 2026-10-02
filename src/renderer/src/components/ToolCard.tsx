@@ -1,8 +1,9 @@
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
+import { msgText } from "@shared/i18n/msg";
 import type { ToolBlock } from "@shared/session-state";
-import { isToolActive, isToolFailed, isToolWaiting, toolState } from "@shared/tool-state";
+import { CODEX_PERMISSION_TOOL, isToolActive, isToolFailed, isToolWaiting, toolState } from "@shared/tool-state";
 import { DiffView } from "./DiffView";
 import { useOpenFile } from "./FileViewer";
 import { FileChangeList, questionsOf } from "./PermissionPrompt";
@@ -136,7 +137,7 @@ export function ToolCard({ block }: { block: ToolBlock }) {
     const line = Math.max(1, offset ?? 1);
     return { line, endLine: limit !== null && limit > 0 ? line + limit - 1 : undefined };
   })();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const state = toolState(block);
   const waiting = isToolWaiting(state);
   const failed = isToolFailed(state);
@@ -181,7 +182,7 @@ export function ToolCard({ block }: { block: ToolBlock }) {
         {/* MCP 도구 이름은 길고 공백이 없다(mcp__playwright__playwright_evaluate) — flex 항목의 기본
             min-width:auto 로는 줄어들지 못해 카드 밖으로 삐져나온다. 줄이고 말줄임, 전체 이름은 툴팁으로. */}
         <span className="min-w-0 shrink truncate font-medium" title={block.name}>
-          {block.name}
+          {block.name === CODEX_PERMISSION_TOOL ? t("toolCard.permissionTool") : block.name}
         </span>
         {filePath ? (
           // 헤더 버튼(펼치기) 안의 경로만 코드 뷰어로 연결. 펼침 토글은 막는다.
@@ -263,7 +264,7 @@ export function ToolCard({ block }: { block: ToolBlock }) {
               ))}
             </ol>
           )}
-          {block.result && <ToolOutput output={block.result.output} isError={block.result.isError} />}
+          {block.result && <ToolOutput output={msgText(i18n, block.result.outputMsg, block.result.output)} isError={block.result.isError} />}
         </div>
       )}
     </div>

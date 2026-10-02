@@ -6,6 +6,7 @@ import { STATIC_MODELS } from "@shared/models";
 import type { ClaudeRuntime } from "./claude-adapter";
 import type { CodexRuntime } from "./codex-adapter";
 import { CodexAppServer } from "./codex-app-server";
+import { mt } from "./i18n";
 
 const CACHE_MS = 10 * 60_000;
 const cache = new Map<Provider, { at: number; models: ModelOptionDto[] }>();
@@ -43,7 +44,7 @@ export function invalidateModels(provider?: Provider) {
 
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${what} 응답 없음(${ms / 1000}초)`)), ms);
+    const t = setTimeout(() => reject(new Error(mt("session.error.modelTimeout", { what, sec: ms / 1000 }))), ms);
     p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
   });
 }
@@ -75,7 +76,7 @@ async function codexModels(src: ModelSources): Promise<ModelOptionDto[]> {
   const rt = await src.codex();
   const server = new CodexAppServer({ onNotification: () => {}, onServerRequest: () => Promise.reject(new Error("unsupported")), onExit: () => {} });
   try {
-    await withTimeout(server.start(rt.codexPath, rt.env, process.cwd()), 20_000, "codex app-server 시작");
+    await withTimeout(server.start(rt.codexPath, rt.env, process.cwd()), 20_000, mt("session.error.label.appServerStart"));
     const r = await withTimeout(server.request<{ data?: Record<string, unknown>[] }>("model/list", {}, 20_000), 20_000, "codex model/list");
     const rows = Array.isArray(r?.data) ? r.data : [];
     return rows

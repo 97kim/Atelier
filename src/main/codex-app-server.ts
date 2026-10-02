@@ -6,6 +6,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { appMsg, mt } from "./i18n";
 import type { ChatEvent, ModelUsageEntry, TokenUsage } from "@shared/chat-events";
 
 type Json = Record<string, unknown>;
@@ -69,7 +70,7 @@ export class CodexAppServer {
       this.ended = true;
       for (const p of this.pending.values()) {
         clearTimeout(p.timer);
-        p.reject(new AppServerError("exited", error ?? `codex app-server 가 끝났습니다 (${code ?? "?"})`));
+        p.reject(new AppServerError("exited", error ?? mt("session.error.appServerExited", { code: code ?? "?" })));
       }
       this.pending.clear();
       this.handlers.onExit(code, error);
@@ -84,12 +85,12 @@ export class CodexAppServer {
   }
 
   request<T = unknown>(method: string, params: Json, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
-    if (!this.alive) return Promise.reject(new Error("codex app-server 가 실행 중이 아닙니다."));
+    if (!this.alive) return Promise.reject(new Error(mt("session.error.appServerNotRunning")));
     const id = ++this.seq;
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new AppServerError("no_response", `codex app-server 응답 없음: ${method}`, method));
+        reject(new AppServerError("no_response", mt("session.error.appServerNoResponse", { method }), method));
       }, timeoutMs);
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       this.write({ jsonrpc: "2.0", id, method, params });
@@ -162,7 +163,7 @@ export class CodexAppServer {
       clearTimeout(p.timer);
       if (msg.error) {
         const err = msg.error as { message?: string; code?: number };
-        p.reject(new Error(err.message ?? `codex app-server 오류 ${err.code ?? ""}`));
+        p.reject(new Error(err.message ?? mt("session.error.appServerError", { code: err.code ?? "" })));
       } else p.resolve(msg.result);
     }
   }
@@ -221,6 +222,7 @@ export function mapAppServerNotification(method: string, params: Json, ts: numbe
       // 중단(interrupted)을 성공으로 읽으면 안 된다. 예약 회차에서는 "사용자가 세운 것" 이
       // 그대로 completed 로 기록된다.
       const failed = turn.status === "failed" || turn.status === "interrupted";
+      const fallback = failed && turn.error?.message == null ? appMsg(turn.status === "interrupted" ? "session.msg.codexInterrupted" : "session.msg.codexTurnFailed") : null;
       return [
         {
           type: "turn_result",
@@ -231,7 +233,8 @@ export function mapAppServerNotification(method: string, params: Json, ts: numbe
           numTurns: 1,
           modelUsage,
           isError: failed,
-          errorText: failed ? (turn.error?.message ?? (turn.status === "interrupted" ? "중단되었습니다." : "Codex turn 실패")) : undefined,
+          errorText: failed ? (turn.error?.message ?? fallback?.message) : undefined,
+          ...(fallback ? { errorMsg: fallback.msg } : {}),
           // 정상으로 끝난 턴만 분기 지점이 된다(thread/fork lastTurnId)
           ...(turn.status === "completed" && turn.id && threadId ? { forkPoint: { provider: "codex" as const, sessionId: threadId, pointId: turn.id } } : {}),
         },
@@ -241,7 +244,7 @@ export function mapAppServerNotification(method: string, params: Json, ts: numbe
       // willRetry 는 "곧 다시 시도한다" 는 뜻이라 턴의 끝이 아니다. 그 사실을 지우면
       // 예약 회차가 여기서 끝난 것으로 기록되고, 정작 작업은 계속 돈다.
       const err = (params.error ?? {}) as { message?: string; willRetry?: boolean };
-      return [{ type: "error", ts, message: err.message || "Codex 오류", fatal: false, ...(err.willRetry === true ? { willRetry: true } : {}) }];
+      return [{ type: "error", ts, ...(err.message ? { message: err.message } : appMsg("session.msg.codexError")), fatal: false, ...(err.willRetry === true ? { willRetry: true } : {}) }];
     }
     default:
       return [];
@@ -358,5 +361,5 @@ export function classifyResumeFailure(message: string): "conflict" | "missing" {
 }
 
 export function resumeConflictMessage(threadId: string, detail: string): string {
-  return `이전 Codex 스레드(${threadId.slice(0, 8)}…)를 다른 Codex 가 쓰는 중입니다. 터미널에서 \`codex resume\` 으로 연 TUI 가 있으면 그쪽을 /exit 로 닫고 다시 보내세요. 이 탭의 세션은 그대로 둡니다. (${detail})`;
+  return mt("session.error.resumeConflict", { id: threadId.slice(0, 8), detail });
 }

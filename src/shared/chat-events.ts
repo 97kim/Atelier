@@ -2,6 +2,8 @@
 // main 의 adapter 가 SDK 메시지를 이 이벤트로 바꾸고, renderer/persistence 는 이 이벤트만 다룬다.
 // 모든 이벤트에 ts(ms) 를 찍어 threads/*.jsonl 에 그대로 append 할 수 있게 한다.
 
+import type { Msg } from "./i18n/msg";
+
 export type SessionStatus = "idle" | "queued" | "running" | "waiting_permission" | "error";
 
 /** Claude permissionMode / Codex sandbox 정책을 3단으로 통일. */
@@ -114,6 +116,8 @@ export interface ToolResultEvent extends Base {
   type: "tool_result";
   toolUseId: string;
   output: string;
+  /** 앱이 대신 채운 결과 문구의 사전 키. 보일 때 지금 언어로 번역한다. */
+  outputMsg?: Msg;
   isError: boolean;
 }
 
@@ -148,6 +152,8 @@ export interface TurnResultEvent extends Base {
   modelUsage: Record<string, ModelUsageEntry>;
   isError: boolean;
   errorText?: string;
+  /** 앱이 만든 errorText 의 사전 키. provider 가 준 원문에는 없다. */
+  errorMsg?: Msg;
   /**
    * 이 턴 끝에서 대화를 갈라 새 탭으로 이어 갈 수 있는 지점. 정상으로 끝난 일반 턴에만 붙는다.
    * sessionId 는 그 지점이 속한 provider 세션 — 탭의 지금 세션과 다르면(provider 전환 전, 분기로 복사된 턴) 쓸 수 없다.
@@ -192,15 +198,27 @@ export interface ReviewEvent extends Base {
   text: string;
   /** 리뷰 대상 요약(파일 수·줄 수). */
   scope?: string;
+  /** 앱이 만든 문구(scope·실패 text)의 사전 키 — 보일 때 지금 언어로 번역한다. 모델이 쓴 리뷰 본문에는 없다. */
+  scopeMsg?: Msg;
+  textMsg?: Msg;
 }
 
-/** 검증 실행의 명령 하나. output 은 꼬리(마지막 몇 KB)만 든다. */
+/**
+ * 검증 실행의 명령 하나. output 은 꼬리(마지막 몇 KB)만 든 명령의 출력 원문이다.
+ * 앱이 덧붙이는 안내(앞부분 생략·시간 초과 등)는 output 에 섞지 않고 truncated / note / noteMsg 로 따로 남긴다
+ * (예전 기록에는 안내 문장이 output 에 섞여 있다).
+ */
 export interface VerifyCommandResult {
   cmd: string;
   status: "pending" | "running" | "passed" | "failed" | "skipped" | "aborted";
   exitCode?: number | null;
   durationMs?: number;
   output?: string;
+  /** output 의 앞부분을 잘랐다. */
+  truncated?: true;
+  /** 출력 뒤에 붙는 앱 안내(만든 시점의 문장)와 그 사전 키. 화면은 noteMsg 를 지금 언어로 그린다. */
+  note?: string;
+  noteMsg?: Msg;
 }
 
 /**
@@ -236,6 +254,8 @@ export interface FanoutVariant {
   summary?: string;
   durationMs?: number;
   error?: string;
+  /** 앱이 만든 error 문구의 사전 키. */
+  errorMsg?: Msg;
 }
 
 /**
@@ -262,7 +282,7 @@ export interface OrchestrationEvent extends Base {
   objective: string;
   status: "active" | "closed";
   coordinator: "user" | "tab";
-  tasks: { id: string; seq: number; spec: string; status: string; tabId: string | null; provider: "claude" | "codex" | null; execution: string | null; summary: string | null; blocked?: string | null }[];
+  tasks: { id: string; seq: number; spec: string; status: string; tabId: string | null; provider: "claude" | "codex" | null; execution: string | null; summary: string | null; blocked?: string | null; /** 대기 사유의 코드 값. 그릴 때 지금 언어로 번역하고, 없으면(예전 기록) blocked 문장을 쓴다. */ blockedBy?: { kind: "deps"; seqs: (number | "?")[] } | { kind: "gates" } | null }[];
   gates?: number;
   questions: number;
   escalations: number;
@@ -273,6 +293,8 @@ export interface OrchestrationEvent extends Base {
 export interface ErrorEvent extends Base {
   type: "error";
   message: string;
+  /** 앱이 만든 문구면 사전 키와 값. 그릴 때 지금 언어로 번역하고, 없으면(외부 오류·예전 기록) message 를 쓴다. */
+  msg?: Msg;
   /** false 면 턴은 계속된다 (Codex 의 non-fatal error item 등). 기본 true. */
   fatal?: boolean;
   /** provider 가 스스로 다시 시도한다. 이 오류로 턴이 끝난 것이 아니다. */
@@ -286,6 +308,7 @@ export interface ErrorEvent extends Base {
 export interface NoticeEvent extends Base {
   type: "notice";
   message: string;
+  msg?: Msg;
   level: "notice" | "suggestion" | "warning";
   key?: string;
 }

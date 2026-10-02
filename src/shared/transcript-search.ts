@@ -1,4 +1,5 @@
 // 대화 검색·내보내기 순수 함수. 이벤트 로그(threads/*.jsonl)만 입력으로 받는다.
+import type { TFunction } from "i18next";
 import type { ChatEvent } from "./chat-events";
 
 export type SearchBlockKind = "user" | "assistant" | "tool";
@@ -97,12 +98,14 @@ export interface ExportMeta {
   provider: string;
   cwd?: string | null;
   exportedAt: number;
+  /** 시각 표시에 쓰는 Intl 로케일 태그(없으면 ko-KR). */
+  locale?: string;
 }
 
 const TOOL_OUTPUT_MAX = 1500;
 
-function timeOf(ts: number): string {
-  return new Date(ts).toLocaleString("ko-KR", { hour12: false });
+function timeOf(ts: number, locale = "ko-KR"): string {
+  return new Date(ts).toLocaleString(locale, { hour12: false });
 }
 
 function toolLine(name: string, input: unknown): string {
@@ -120,13 +123,13 @@ function toolLine(name: string, input: unknown): string {
 }
 
 /** 이벤트 로그를 읽기 좋은 마크다운으로. 툴 출력은 길면 자른다. */
-export function eventsToMarkdown(events: ChatEvent[], meta: ExportMeta): string {
+export function eventsToMarkdown(t: TFunction, events: ChatEvent[], meta: ExportMeta): string {
   const lines: string[] = [`# ${meta.title}`, ""];
   const head = [
-    meta.workspace ? `워크스페이스: ${meta.workspace}` : null,
+    meta.workspace ? `${t("repo.export.workspace")}: ${meta.workspace}` : null,
     `provider: ${meta.provider}`,
-    meta.cwd ? `경로: ${meta.cwd}` : null,
-    `내보낸 시각: ${timeOf(meta.exportedAt)}`,
+    meta.cwd ? `${t("repo.export.path")}: ${meta.cwd}` : null,
+    `${t("repo.export.exportedAt")}: ${timeOf(meta.exportedAt, meta.locale)}`,
   ].filter(Boolean);
   lines.push(head.map((h) => `- ${h}`).join("\n"), "", "---", "");
 
@@ -154,8 +157,8 @@ export function eventsToMarkdown(events: ChatEvent[], meta: ExportMeta): string 
         tools.set(e.toolUseId, { ...tools.get(e.toolUseId), name: e.name, input: e.input });
         break;
       case "tool_result": {
-        const t = tools.get(e.toolUseId) ?? { name: "tool", input: {} };
-        tools.set(e.toolUseId, { ...t, output: e.output, isError: e.isError });
+        const prev = tools.get(e.toolUseId) ?? { name: "tool", input: {} };
+        tools.set(e.toolUseId, { ...prev, output: e.output, isError: e.isError });
         if (!order.some((o) => o.kind === "tool" && o.ref === e.toolUseId))
           order.push({ kind: "tool", ref: e.toolUseId, ts: e.ts });
         break;
@@ -164,7 +167,7 @@ export function eventsToMarkdown(events: ChatEvent[], meta: ExportMeta): string 
         const key = `${e.ts}-${order.length}`;
         const stat = `${(e.durationMs / 1000).toFixed(1)}s · in ${e.usage.input} / out ${e.usage.output}${
           e.costUsd > 0 ? ` · $${e.costUsd.toFixed(4)}` : ""
-        }${e.isError ? ` · 실패${e.errorText ? `: ${e.errorText}` : ""}` : ""}`;
+        }${e.isError ? ` · ${t("repo.export.failedTurn")}${e.errorText ? `: ${e.errorText}` : ""}` : ""}`;
         turns.set(key, stat);
         order.push({ kind: "turn", ref: key, ts: e.ts });
         break;
@@ -180,7 +183,7 @@ export function eventsToMarkdown(events: ChatEvent[], meta: ExportMeta): string 
   for (const o of order) {
     switch (o.kind) {
       case "user":
-        lines.push(`## 사용자 · ${timeOf(o.ts)}`, "", o.ref, "");
+        lines.push(`## ${t("repo.export.user")} · ${timeOf(o.ts, meta.locale)}`, "", o.ref, "");
         lastRole = "user";
         break;
       case "assistant": {
@@ -192,15 +195,15 @@ export function eventsToMarkdown(events: ChatEvent[], meta: ExportMeta): string 
         break;
       }
       case "tool": {
-        const t = tools.get(o.ref);
-        if (!t) break;
+        const tool = tools.get(o.ref);
+        if (!tool) break;
         if (lastRole !== "assistant") {
           lines.push(`## ${meta.provider}`, "");
           lastRole = "assistant";
         }
-        lines.push(`> 🔧 ${toolLine(t.name, t.input)}${t.isError ? " (오류)" : ""}`);
-        if (t.output && t.output.trim()) {
-          const out = t.output.length > TOOL_OUTPUT_MAX ? `${t.output.slice(0, TOOL_OUTPUT_MAX)}\n… (${t.output.length - TOOL_OUTPUT_MAX}자 생략)` : t.output;
+        lines.push(`> 🔧 ${toolLine(tool.name, tool.input)}${tool.isError ? ` (${t("repo.export.toolError")})` : ""}`);
+        if (tool.output && tool.output.trim()) {
+          const out = tool.output.length > TOOL_OUTPUT_MAX ? `${tool.output.slice(0, TOOL_OUTPUT_MAX)}\n${t("repo.export.truncated", { count: tool.output.length - TOOL_OUTPUT_MAX })}` : tool.output;
           lines.push("", "```", out.replace(/```/g, "'''"), "```");
         }
         lines.push("");

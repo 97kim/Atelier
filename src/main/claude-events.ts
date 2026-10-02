@@ -5,6 +5,8 @@
 // 버린다(dedupe). 스트림이 없던 메시지(파셜 미지원 등)만 최종 메시지로 블록을 만든다.
 
 import type { ChatEvent } from "@shared/chat-events";
+import type { Msg, MsgKey } from "@shared/i18n/msg";
+import { appMsg } from "./i18n";
 import type { ProviderRateLimitDto, RateLimitWindowDto } from "@shared/ipc";
 
 type SDKMessage = import("@anthropic-ai/claude-agent-sdk").SDKMessage;
@@ -335,9 +337,12 @@ export class ClaudeEventMapper {
     }
     const isError = msg.is_error || msg.subtype !== "success";
     let errorText: string | undefined;
-    if (msg.subtype !== "success")
-      errorText = RESULT_ERROR_LABEL[msg.subtype] ?? msg.subtype;
-    else if (msg.is_error) errorText = msg.result;
+    let errorMsg: Msg | undefined;
+    if (msg.subtype !== "success") {
+      const key = RESULT_ERROR_KEY[msg.subtype];
+      if (key) ({ message: errorText, msg: errorMsg } = appMsg(key));
+      else errorText = msg.subtype;
+    } else if (msg.is_error) errorText = msg.result;
     return {
       type: "turn_result",
       ts,
@@ -355,6 +360,7 @@ export class ClaudeEventMapper {
       modelUsage,
       isError,
       errorText,
+      ...(errorMsg ? { errorMsg } : {}),
       // 정상으로 끝난 일반 턴만. 중단·오류·압축만 한 턴(체인 항목 없음)은 분기 지점이 없다.
       ...(!isError && this.lastChainUuid && msg.session_id
         ? { forkPoint: { provider: "claude" as const, sessionId: msg.session_id, pointId: this.lastChainUuid } }
@@ -363,12 +369,11 @@ export class ClaudeEventMapper {
   }
 }
 
-const RESULT_ERROR_LABEL: Record<string, string> = {
-  error_during_execution: "실행 중 오류로 턴이 중단되었습니다.",
-  error_max_turns: "최대 턴 수에 도달했습니다.",
-  error_max_budget_usd: "예산 한도에 도달했습니다.",
-  error_max_structured_output_retries:
-    "구조화 출력 재시도 한도에 도달했습니다.",
+const RESULT_ERROR_KEY: Record<string, MsgKey> = {
+  error_during_execution: "session.msg.result.duringExecution",
+  error_max_turns: "session.msg.result.maxTurns",
+  error_max_budget_usd: "session.msg.result.maxBudget",
+  error_max_structured_output_retries: "session.msg.result.structuredRetries",
 };
 
 function describeAssistantError(error: unknown): string {
@@ -605,6 +610,11 @@ function pluginErrorNotice(raw: unknown, ts: number): ChatEvent[] {
     })
     .filter(Boolean);
   if (items.length === 0) return [];
-  const shown = items.slice(0, 3).join(", ") + (items.length > 3 ? ` 외 ${items.length - 3}개` : "");
-  return [{ type: "notice", ts, level: "warning", key: "plugin-errors", message: `플러그인 ${items.length}개를 불러오지 못했습니다: ${shown}` }];
+  const shown = items.slice(0, 3).join(", ");
+  const more = items.length - 3;
+  const note =
+    more > 0
+      ? appMsg("session.msg.pluginErrors.more", { total: items.length, shown, more })
+      : appMsg("session.msg.pluginErrors.all", { count: items.length, shown });
+  return [{ type: "notice", ts, level: "warning", key: "plugin-errors", ...note }];
 }

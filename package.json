@@ -20,7 +20,7 @@
     "package": "yarn build && electron-builder --config electron-builder.config.cjs --publish never",
     "release": "scripts/release.sh",
     "i18n:check": "node scripts/check-i18n.mjs",
-    "i18n:strict": "node scripts/check-i18n.mjs --strict src/renderer src/preload",
+    "i18n:strict": "node scripts/check-i18n.mjs --strict src/renderer src/preload src/main src/shared cli",
     "postinstall": "node node_modules/electron/install.js && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper"
   },
   "dependencies": {

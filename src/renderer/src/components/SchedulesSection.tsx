@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { intlLocale, type Locale } from "@shared/i18n/locale";
+import { msgText } from "@shared/i18n/msg";
 import type { ScheduleListDto } from "@shared/ipc";
 import type { PermissionPolicy } from "@shared/chat-events";
 import type { ProviderId } from "@shared/workspace-model";
@@ -608,7 +609,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                       <div className="mt-2 flex items-center gap-2 text-[11px]" data-last-run={last.status}>
                         <span className={STATUS_TONE[last.status]}>{t(`schedules.status.${last.status}`)}</span>
                         <span className="mono text-muted-2">{when(t, locale, last.endedAt ?? last.startedAt ?? last.scheduledFor)}</span>
-                        {last.reason && <span className="min-w-0 flex-1 truncate text-muted-2">{last.reason}</span>}
+                        {last.reason && <span className="min-w-0 flex-1 truncate text-muted-2">{msgText(i18n, last.reasonMsg, last.reason)}</span>}
                       </div>
                     )}
                   </div>

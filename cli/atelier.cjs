@@ -29,7 +29,25 @@ function socketPath() {
   return path.join(ud, "control.sock");
 }
 
-const USAGE = `atelier — 실행 중인 Atelier 를 제어한다. 출력은 항상 JSON.
+// 사용자에게 보이는 문구 표. 의존성 0 을 지키려고 i18next 없이 이 파일 안에서 고른다.
+// 언어: ATELIER_LANG → LC_ALL → LC_MESSAGES → LANG 중 먼저 값이 있는 것이 ko 로 시작하면 한국어, 아니면 영어.
+const MESSAGES = {
+  // i18n-ignore: 한국어 문구 표
+  ko: {
+    valueNeeded: "--{{flag}} 에는 값이 필요합니다.",
+    timeout: "응답이 {{sec}}초 안에 오지 않았습니다.",
+    badResponse: "응답을 읽지 못했습니다: {{line}}",
+    disconnected: "응답 전에 연결이 끊겼습니다(앱이 종료 중일 수 있습니다).",
+    notRunning: "Atelier 가 실행 중이 아닙니다(제어 소켓 없음). 앱을 먼저 여세요.",
+    unknownGuide: "모르는 가이드: {{name}}",
+    noAgents: "Claude Code(~/.claude)도 Codex(~/.codex)도 이 PC 에 없습니다.",
+    installedNote: "새 세션부터 스킬이 보입니다(Claude Code: /atelier-cli, Codex: $atelier-cli).",
+    unknownSkillsCmd: "skills {{cmd}}: 모르는 명령. 'get' 또는 'install'.",
+    questionRequired: "--question 이 필요합니다.",
+    resumeAfterError: "{{message}} (질문 id {{id}} — --resume {{id}} 로 다시 기다리세요)",
+    resumeAfterTransport: "{{message}} (질문은 남아 있습니다 — --resume {{id}} 로 다시 기다리세요)",
+    unknownCommand: "모르는 명령: {{cmd}}. --help 를 보세요.",
+    help: `atelier — 실행 중인 Atelier 를 제어한다. 출력은 항상 JSON.
 
   atelier status
   atelier ws list
@@ -74,7 +92,81 @@ const USAGE = `atelier — 실행 중인 Atelier 를 제어한다. 출력은 항
 
   <sel> = active | 탭 id | 정확한 제목 | 유일한 제목 접두
   --text / --prompt 에 "-" 를 주면 stdin 에서 읽는다.
-`;
+`,
+  },
+  en: {
+    valueNeeded: "--{{flag}} needs a value.",
+    timeout: "No response within {{sec}} seconds.",
+    badResponse: "Could not read the response: {{line}}",
+    disconnected: "The connection closed before a response arrived (the app may be quitting).",
+    notRunning: "Atelier is not running (no control socket). Open the app first.",
+    unknownGuide: "Unknown guide: {{name}}",
+    noAgents: "Neither Claude Code (~/.claude) nor Codex (~/.codex) exists on this computer.",
+    installedNote: "The skill shows up from the next new session (Claude Code: /atelier-cli, Codex: $atelier-cli).",
+    unknownSkillsCmd: "skills {{cmd}}: unknown command. Use 'get' or 'install'.",
+    questionRequired: "--question is required.",
+    resumeAfterError: "{{message}} (question id {{id}} — wait again with --resume {{id}})",
+    resumeAfterTransport: "{{message}} (the question is still open — wait again with --resume {{id}})",
+    unknownCommand: "Unknown command: {{cmd}}. See --help.",
+    help: `atelier — control a running Atelier. Output is always JSON.
+
+  atelier status
+  atelier ws list
+  atelier ws add --path /abs/dir
+  atelier tab list [--ws <id|name>] [--all]
+  atelier tab new [--ws <id|name>] [--cwd /abs/dir] [--provider claude|codex] [--policy ask|auto_edit|full]
+                  [--model <id>] [--title <text>] [--prompt <text>] [--activate]
+  atelier tab status --tab <sel>
+  atelier tab send --tab <sel> --text <text> [--wait] [--timeout-ms N]
+  atelier tab wait --tab <sel> [--timeout-ms N]
+  atelier tab read --tab <sel> [--last N]
+  atelier tab activate --tab <sel>
+  atelier tab close --tab <sel>
+  atelier tab abort --tab <sel>
+  atelier tab verify --tab <sel> [--cmd <command>]... [--wait] [--timeout-ms N]   # run the saved verify commands (or --cmd) -> card
+  atelier tab verify-abort --tab <sel>
+  atelier tab fanout --tab <sel> --prompt <text> --provider claude --provider codex [--policy ask|auto_edit|full] [--wait] [--timeout-ms N]
+                                       # one prompt to N isolated sessions (worktrees) at once -> fan-out card on the original tab
+  atelier file open --path /abs/file [--line N] [--tab <sel>]
+  atelier browser open --url https://… [--tab <sel>]
+  atelier browser read [--tab <sel>]                     visible text and clickable things (with selectors)
+  atelier browser click (--selector <css> | --text <text>) [--tab <sel>]
+  atelier browser fill --selector <css> --value <value> [--tab <sel>]
+  atelier orch run-create --objective <text> [--coordinator active|<tab>]   # orchestration Run (the coordinator is a person or a tab)
+  atelier orch worker-start --run <id> [--key <k>] (--spec <text> | --task <id>) [--agent claude|codex] [--model <id>]
+                            [--policy ask|auto_edit|full] [--cwd /abs] [--worktree] [--request-id <id>]
+  atelier orch check --run <id> [--key <k>] [--wait] [--types worker_done,question,escalation,note] [--ack <delivery>] [--peek] [--timeout-ms N]
+  atelier orch reply --run <id> [--key <k>] --id <question> --body <text>
+  atelier orch send --run <id> ... --type followup --to dispatch:<id>|@all|@claude|@codex|@idle --body <text>   # coordinator -> worker (groups allowed)
+  atelier orch send --run <id> --dispatch <id> --capability <c> --type worker_done|escalation ...   # worker -> coordinator
+  atelier orch ask --run <id> --dispatch <id> --capability <c> (--question <text> [--options a,b] | --resume <msg>) [--timeout-ms N]
+  atelier orch task-create --run <id> --key <k> --spec <text> [--deps <task>,<task>]     # DAG: a Task can start only after the Tasks it depends on succeeded
+  atelier orch task-list --run <id> [--ready]                                            # --ready: only the ones that can start now
+  atelier orch gate-create --run <id> --key <k> --task <id> --question <text> --options a,b   # decision before start (owned by the coordinator)
+  atelier orch gate-resolve --run <id> --key <k> --id <gate> --resolution <choice> | gate-list --run <id> [--task <id>]
+  atelier orch worker-start ... [--terminal <tab>]     # reuse the tab of a settled worker (same provider and path)
+  atelier orch worker-cleanup --run <id> --key <k> --dispatch <id>   # close the settled worker's tab + delete its worktree (forced)
+  atelier orch run-list | run-show --run <id> | run-close --run <id>
+  atelier orch worker-list --run <id> | worker-show|worker-retain|worker-release|worker-stop|worker-abandon --run <id> --dispatch <id>
+  atelier skills get [atelier-cli]      # the agent guide for this app version (markdown)
+  atelier skills install                # install skill stubs into Claude Code (~/.claude/skills) and Codex (~/.codex/skills)
+
+  <sel> = active | tab id | exact title | unique title prefix
+  Pass "-" to --text / --prompt to read it from stdin.
+`,
+  },
+};
+
+function pickLang() {
+  const v = [process.env.ATELIER_LANG, process.env.LC_ALL, process.env.LC_MESSAGES, process.env.LANG].find((x) => x);
+  return v && /^ko/i.test(v) ? "ko" : "en";
+}
+const LANG = pickLang();
+
+function t(key, vars) {
+  const text = MESSAGES[LANG][key];
+  return vars ? text.replace(/\{\{(\w+)\}\}/g, (_, k) => String(vars[k])) : text;
+}
 
 function parseArgs(argv) {
   const pos = [];
@@ -103,7 +195,7 @@ function parseArgs(argv) {
 /** 값이 있어야 하는 플래그. `--tab` 처럼 값 없이 쓰면 서버가 active 로 오해하기 전에 여기서 거절한다. */
 const VALUE_FLAGS = ["tab", "text", "prompt", "ws", "cwd", "provider", "policy", "model", "title", "path", "url", "line", "last", "timeoutMs", "cmd", "run", "key", "spec", "task", "agent", "dispatch", "capability", "question", "options", "resume", "id", "body", "subject", "type", "to", "outcome", "filesModified", "types", "ack", "objective", "coordinator", "reason", "requestId", "deps", "terminal", "resolution", "name", "cron", "timezone", "precheck", "precheckTimeout", "grace", "workspace", "enabled"];
 function checkValueFlags(flags) {
-  for (const k of VALUE_FLAGS) if (flags[k] === true || (Array.isArray(flags[k]) && flags[k].includes(true))) fail(`--${k.replace(/([A-Z])/g, (m) => "-" + m.toLowerCase())} 에는 값이 필요합니다.`, "bad_request");
+  for (const k of VALUE_FLAGS) if (flags[k] === true || (Array.isArray(flags[k]) && flags[k].includes(true))) fail(t("valueNeeded", { flag: k.replace(/([A-Z])/g, (m) => "-" + m.toLowerCase()) }), "bad_request");
 }
 
 function readStdinIfDash(v) {
@@ -126,7 +218,7 @@ function request(method, params, deadlineMs) {
       sock.destroy();
       fn(v);
     };
-    const timer = setTimeout(() => finish(reject, Object.assign(new Error(`응답이 ${Math.round(deadlineMs / 1000)}초 안에 오지 않았습니다.`), { code: "timeout" })), deadlineMs);
+    const timer = setTimeout(() => finish(reject, Object.assign(new Error(t("timeout", { sec: Math.round(deadlineMs / 1000) })), { code: "timeout" })), deadlineMs);
     sock.setEncoding("utf8");
     sock.on("connect", () => sock.write(JSON.stringify({ id: 1, method, params }) + "\n"));
     sock.on("data", (d) => {
@@ -137,13 +229,13 @@ function request(method, params, deadlineMs) {
       try {
         finish(resolve, JSON.parse(line));
       } catch {
-        finish(reject, new Error("응답을 읽지 못했습니다: " + line.slice(0, 200)));
+        finish(reject, new Error(t("badResponse", { line: line.slice(0, 200) })));
       }
     });
-    sock.on("end", () => finish(reject, Object.assign(new Error("응답 전에 연결이 끊겼습니다(앱이 종료 중일 수 있습니다)."), { code: "disconnected" })));
-    sock.on("close", () => finish(reject, Object.assign(new Error("응답 전에 연결이 끊겼습니다(앱이 종료 중일 수 있습니다)."), { code: "disconnected" })));
+    sock.on("end", () => finish(reject, Object.assign(new Error(t("disconnected")), { code: "disconnected" })));
+    sock.on("close", () => finish(reject, Object.assign(new Error(t("disconnected")), { code: "disconnected" })));
     sock.on("error", (e) => {
-      if (e.code === "ENOENT" || e.code === "ECONNREFUSED") finish(reject, Object.assign(new Error("Atelier 가 실행 중이 아닙니다(제어 소켓 없음). 앱을 먼저 여세요."), { code: "not_running" }));
+      if (e.code === "ENOENT" || e.code === "ECONNREFUSED") finish(reject, Object.assign(new Error(t("notRunning")), { code: "not_running" }));
       else finish(reject, e);
     });
   });
@@ -163,7 +255,7 @@ const SKILL_GUIDE = path.join(__dirname, "skill-guide.md");
 async function main() {
   const { pos, flags } = parseArgs(process.argv.slice(2));
   if (flags.help || flags.h || pos.length === 0) {
-    process.stdout.write(USAGE);
+    process.stdout.write(t("help"));
     return;
   }
   if (flags.version) {
@@ -178,7 +270,7 @@ async function main() {
   if (group === "skills") {
     if (cmd === "get") {
       const name = pos[2] || "atelier-cli";
-      if (name !== "atelier-cli") return fail(`모르는 가이드: ${name}`, "not_found");
+      if (name !== "atelier-cli") return fail(t("unknownGuide", { name }), "not_found");
       process.stdout.write(fs.readFileSync(SKILL_GUIDE, "utf8"));
       return;
     }
@@ -198,18 +290,18 @@ async function main() {
         fs.writeFileSync(path.join(t.dir, "SKILL.md"), stub);
         installed.push(path.join(t.dir, "SKILL.md"));
       }
-      if (installed.length === 0) return fail("Claude Code(~/.claude)도 Codex(~/.codex)도 이 PC 에 없습니다.", "not_found");
-      out({ installed, skipped, note: "새 세션부터 스킬이 보입니다(Claude Code: /atelier-cli, Codex: $atelier-cli)." });
+      if (installed.length === 0) return fail(t("noAgents"), "not_found");
+      out({ installed, skipped, note: t("installedNote") });
       return;
     }
-    return fail(`skills ${cmd ?? ""}: 모르는 명령. 'get' 또는 'install'.`);
+    return fail(t("unknownSkillsCmd", { cmd: cmd ?? "" }));
   }
 
   // orch ask: 질문을 먼저 만들어 message_id 를 확보한 뒤 기다린다 — 대기 중 연결이 끊겨도 --resume 할 id 를 알 수 있게.
   // 같은 질문을 다시 실행하면(재시도) requestId(질문 본문의 해시)로 중복 생성을 막는다.
   if (group === "orch" && cmd === "ask" && flags.resume === undefined) {
     const question = flags.question !== undefined ? readStdinIfDash(String(flags.question)) : undefined;
-    if (!question) return fail("--question 이 필요합니다.", "bad_request");
+    if (!question) return fail(t("questionRequired"), "bad_request");
     const requestId = flags.requestId ?? require("crypto").createHash("sha1").update(String(flags.dispatch) + "\n" + question).digest("hex").slice(0, 16);
     const base = { run: flags.run, dispatch: flags.dispatch, capability: flags.capability, requestId };
     let created;
@@ -223,10 +315,10 @@ async function main() {
     const messageId = created.result.messageId;
     try {
       const waited = await request("orch.ask", { ...base, resume: messageId, timeoutMs }, (timeoutMs ?? 600000) + 15000);
-      if (waited.error) return fail(`${waited.error.message} (질문 id ${messageId} — --resume ${messageId} 로 다시 기다리세요)`, waited.error.code || "error");
+      if (waited.error) return fail(t("resumeAfterError", { message: waited.error.message, id: messageId }), waited.error.code || "error");
       return out(waited.result);
     } catch (e) {
-      return fail(`${e.message} (질문은 남아 있습니다 — --resume ${messageId} 로 다시 기다리세요)`, e.code || "transport");
+      return fail(t("resumeAfterTransport", { message: e.message, id: messageId }), e.code || "transport");
     }
   }
 
@@ -287,7 +379,7 @@ async function main() {
   else if (group === "browser" && cmd === "read") { method = "browser.read"; params = { tab: flags.tab }; }
   else if (group === "browser" && cmd === "click") { method = "browser.click"; params = { tab: flags.tab, selector: flags.selector, text: flags.text }; }
   else if (group === "browser" && cmd === "fill") { method = "browser.fill"; params = { tab: flags.tab, selector: flags.selector, value: flags.value }; }
-  else return fail(`모르는 명령: ${[group, cmd].filter(Boolean).join(" ")}. --help 를 보세요.`, "unknown_command");
+  else return fail(t("unknownCommand", { cmd: [group, cmd].filter(Boolean).join(" ") }), "unknown_command");
 
   for (const k of Object.keys(params)) if (params[k] === undefined) delete params[k];
   // --tab 을 안 주면 서버가 active 로 본다(선택자 규칙은 서버에)

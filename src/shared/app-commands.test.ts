@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { modelFromArg, parseAppCommand, withAppCommands } from "./app-commands";
+import { createI18n } from "./i18n";
+const { t } = createI18n("ko");
 
 test("parseAppCommand: 이름·인자 분리, 다른 입력은 null", () => {
   assert.deepEqual(parseAppCommand("/model"), { name: "model", arg: "" });
@@ -14,7 +16,7 @@ test("parseAppCommand: 이름·인자 분리, 다른 입력은 null", () => {
 });
 
 test("withAppCommands: 앱 커맨드가 앞에, CLI 의 같은 이름은 대체", () => {
-  const out = withAppCommands([
+  const out = withAppCommands(t, [
     { name: "model", description: "cli", argumentHint: "" },
     { name: "compact", description: "c", argumentHint: "" },
   ]);

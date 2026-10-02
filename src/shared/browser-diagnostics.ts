@@ -28,6 +28,7 @@ export const DIAG_MAX_NET = 30;
 /** 한 줄이 이보다 길면 자른다(로그 한 줄에 base64 나 거대한 JSON 이 통째로 오는 일이 흔하다). */
 export const DIAG_MAX_LINE = 500;
 
+// i18n-ignore: prompt
 const clip = (s: string, max = DIAG_MAX_LINE) => (s.length <= max ? s : `${s.slice(0, max)}… (${s.length}자)`);
 const levelName = (l: number) => (l >= 3 ? "error" : l === 2 ? "warn" : l === 1 ? "info" : "log");
 
@@ -45,6 +46,7 @@ function dedupe(lines: string[]): string[] {
   let n = 0;
   const flush = () => {
     if (!last) return;
+    // i18n-ignore: prompt
     out.push(n > 1 ? `${last} (${n}번)` : last);
   };
   for (const l of lines) {
@@ -95,17 +97,23 @@ export function formatDiagnostics(d: DiagnosticsInput): string {
 
   const head = [
     "```text",
+    // i18n-ignore: prompt
     `브라우저 진단 — ${d.url}`,
+    // i18n-ignore: prompt
     d.title ? `제목: ${clip(d.title, 120)}` : null,
+    // i18n-ignore: prompt
     `시각: ${new Date(d.at).toLocaleString("ko-KR")}${d.viewport ? ` · 보이는 영역 ${d.viewport.width}×${d.viewport.height}` : ""}`,
     "",
+    // i18n-ignore: prompt
     `콘솔 경고·오류 (${conLines.length === 0 ? "없음" : `${conLines.length}건`})`,
     ...(conLines.length === 0 ? [] : conLines.map((l) => `  ${l}`)),
     "",
+    // i18n-ignore: prompt
     `실패한 요청 (${netLines.length === 0 ? "없음" : `${netLines.length}건`})`,
     ...(netLines.length === 0 ? [] : netLines.map((l) => `  ${l}`)),
     "```",
   ].filter((l): l is string => l !== null);
+  // i18n-ignore: prompt
   if (d.hasScreenshot) head.push("위는 지금 보이는 화면의 캡처입니다.");
   return head.join("\n");
 }

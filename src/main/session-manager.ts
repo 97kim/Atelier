@@ -30,6 +30,7 @@ import type { LimitWaitDto, QueueInfoDto } from "@shared/ipc";
 import fs from "node:fs";
 import path from "node:path";
 import { CompanionMirror } from "./companion-mirror";
+import { appMsg, MsgError, mt } from "./i18n";
 import { staleRunEvents } from "@shared/stale-runs";
 import {
   TranscriptWatcher,
@@ -398,11 +399,11 @@ export class SessionManager {
       type: "error",
       ts: Date.now(),
       fatal: false,
-      message: until
-        ? `사용 한도에 도달했습니다. ${new Date(until).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 에 자동으로 다시 시도합니다 (${attempts}번째).`
+      ...(until
+        ? appMsg("session.msg.limit.retryAt", { until, attempts })
         : attempts > USAGE_LIMIT_MAX_RETRIES
-          ? `사용 한도에 도달했습니다. 자동 재시도 ${USAGE_LIMIT_MAX_RETRIES}회를 넘겨 멈춥니다.`
-          : "사용 한도에 도달했습니다. 리셋 시각을 알 수 없어 자동 재시도는 예약하지 않았습니다.",
+          ? appMsg("session.msg.limit.gaveUp", { max: USAGE_LIMIT_MAX_RETRIES })
+          : appMsg("session.msg.limit.unknownReset")),
     });
     this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
   }
@@ -521,10 +522,10 @@ export class SessionManager {
     const s = this.ensure(tabId);
     const p = s.promptQueue.find((x) => x.id === id);
     const fail = (error: string) => ({ ok: false as const, error, snapshot: this.snapshot(tabId) });
-    if (!p) return fail("대기열에 없는 지시입니다.");
+    if (!p) return fail(mt("session.error.queueMissing"));
     if (s.provider !== "codex" || s.controller !== "app" || (s.status !== "running" && s.status !== "waiting_permission"))
-      return fail("Codex 가 작업 중일 때만 바로 반영할 수 있습니다.");
-    if (s.steeringId) return fail("다른 지시를 반영하는 중입니다.");
+      return fail(mt("session.error.steerCodexOnly"));
+    if (s.steeringId) return fail(mt("session.error.steerBusy"));
     // 보낸 그대로를 기록한다 — 응답을 기다리는 사이 항목이 바뀌어도(수정·삭제는 막지만) 보낸 것과 어긋나지 않게
     const sent = { text: p.text, images: p.images, userEvent: p.userEvent };
     s.steeringId = id;
@@ -576,7 +577,7 @@ export class SessionManager {
           type: "error",
           ts: Date.now(),
           fatal: false,
-          message: `대기열의 지시를 보내지 못했습니다: ${r.error}\n${next.text.slice(0, 200)}`,
+          ...appMsg("session.msg.queueSendFailed", { detail: r.error, text: next.text.slice(0, 200) }),
         });
     });
   }
@@ -598,11 +599,11 @@ export class SessionManager {
     if (this.isBusy(tabId))
       return {
         ok: false,
-        error: "실행 중인 턴이 끝난 뒤에 터미널로 넘길 수 있습니다.",
+        error: mt("session.error.terminalAfterTurn"),
       };
-    if (!s.cwd) return { ok: false, error: "작업 경로를 먼저 정하세요." };
+    if (!s.cwd) return { ok: false, error: mt("session.error.cwdFirst") };
     if (!this.deps.terminalCli)
-      return { ok: false, error: "터미널 모드를 쓸 수 없습니다." };
+      return { ok: false, error: mt("session.error.terminalUnavailable") };
     // 같은 세션 id 에 앱의 SDK 프로세스와 CLI 가 동시에 붙으면 안 된다 — 살아 있던 프로세스를 먼저 내린다.
     closeProviderSessions(tabId);
     const isNew = !s.sessionId;
@@ -695,7 +696,7 @@ export class SessionManager {
       const roots = this.deps.transcriptRoots;
       const file =
         e.transcriptPath && fs.existsSync(e.transcriptPath) ? e.transcriptPath : roots ? findClaudeTranscript(roots.claude, e.sessionId) : null;
-      this.switchToTranscript(s, e.sessionId, file, e.ts, "터미널에서");
+      this.switchToTranscript(s, e.sessionId, file, e.ts);
     }
   }
 
@@ -703,7 +704,7 @@ export class SessionManager {
    * 세션을 갈아탄다(TUI 의 /resume, 통합 터미널에서 직접 띄운 CLI 등): 그 세션의 지금까지 기록을 채팅에 불러오고,
    * 안내 한 줄을 사이에 두고, 미러는 읽은 바이트 뒤부터 잇는다. 이 탭의 기존 기록은 지우지 않는다. 탭의 세션 id 는 새 것으로.
    */
-  private switchToTranscript(s: Session, sessionId: string, file: string | null, ts: number, where: string) {
+  private switchToTranscript(s: Session, sessionId: string, file: string | null, ts: number) {
     s.mirror?.stop();
     s.mirror = null;
     const history = file ? this.readTranscript(file, s.provider) : { events: [], bytes: 0 };
@@ -726,7 +727,7 @@ export class SessionManager {
       type: "error",
       ts,
       fatal: false,
-      message: `${where} 다른 세션(${sessionId.slice(0, 8)})으로 갈아탔습니다. ${turns > 0 ? `그 세션의 이전 대화 ${turns}턴을 아래에 불러왔고, ` : ""}이어지는 대화도 여기 표시됩니다.`,
+      ...appMsg(turns > 0 ? "session.msg.switched.withTurns" : "session.msg.switched.noTurns", { id: sessionId.slice(0, 8), count: turns }),
     });
     for (const h of fresh) this.record(s, h);
     this.record(s, { type: "session", ts, sessionId, provider: s.provider });
@@ -750,7 +751,7 @@ export class SessionManager {
         type: "error",
         ts: Date.now(),
         fatal: false,
-        message: `터미널에서 ${PROVIDER_LABEL[provider]} 를 띄웠지만 이 세션은 ${PROVIDER_LABEL[s.provider]} 입니다. 헤더에서 ${PROVIDER_LABEL[provider]} 로 바꾸면 그 대화가 여기에도 표시됩니다.`,
+        ...appMsg("session.msg.providerMismatch", { launched: PROVIDER_LABEL[provider], current: PROVIDER_LABEL[s.provider] }),
       });
       return;
     }
@@ -772,7 +773,7 @@ export class SessionManager {
       const file =
         provider === "codex" ? findCodexRollout(roots0.codex, { sessionId: resumeId }) : findClaudeTranscript(roots0.claude, resumeId);
       if (!file) this.deps.log?.(tabId, `[external] resume 세션 ${resumeId} 의 기록 파일을 찾지 못했습니다`);
-      else if (resumeId !== s.sessionId) this.switchToTranscript(s, resumeId, file, Date.now(), "터미널에서");
+      else if (resumeId !== s.sessionId) this.switchToTranscript(s, resumeId, file, Date.now());
       // 이 탭이 이미 붙어 있던 세션을 터미널에서 그대로 이어받았다: 대화는 화면에 있으니 다시 불러오지 않고 뒤만 잇는다.
       // 아래 tick 은 같은 세션이면 넘기므로, 여기서 켜지 않으면 미러가 영영 시작되지 않는다.
       else this.startMirror(s, false, file, null);
@@ -782,7 +783,7 @@ export class SessionManager {
       if (!cur || cur.external === null) return;
       const found = this.newestTranscriptSince(cur.provider, cur.external.cwd, cur.external.since);
       if (!found || found.sessionId === cur.sessionId) return;
-      this.switchToTranscript(cur, found.sessionId, found.file, Date.now(), "터미널에서");
+      this.switchToTranscript(cur, found.sessionId, found.file, Date.now());
     };
     s.external.watch = setInterval(tick, 1000);
     tick();
@@ -1021,15 +1022,15 @@ export class SessionManager {
     | { ok: true; point: ForkPoint; cwd: string; provider: Provider; model?: string; policy: PermissionPolicy; prefix: ChatEvent[] }
     | { ok: false; error: string } {
     const s = this.ensure(tabId);
-    if (s.controller !== "app") return { ok: false, error: "터미널이 이 세션을 제어하는 동안에는 분기할 수 없습니다." };
-    if (this.isBusy(tabId)) return { ok: false, error: "작업이 끝난 뒤 분기할 수 있습니다." };
-    if (!s.cwd) return { ok: false, error: "작업 경로가 없습니다." };
+    if (s.controller !== "app") return { ok: false, error: mt("session.error.forkTerminal") };
+    if (this.isBusy(tabId)) return { ok: false, error: mt("session.error.forkBusy") };
+    if (!s.cwd) return { ok: false, error: mt("session.error.noCwd") };
     const events = this.loadEvents(s);
     const idx = events.findIndex((e) => e.type === "turn_result" && e.forkPoint?.pointId === pointId);
     const point = idx >= 0 ? (events[idx] as TurnResultEvent).forkPoint! : null;
-    if (!point) return { ok: false, error: "분기할 턴을 찾지 못했습니다." };
+    if (!point) return { ok: false, error: mt("session.error.forkPointMissing") };
     if (point.provider !== s.provider || point.sessionId !== s.sessionId)
-      return { ok: false, error: "지금 이어지는 대화의 턴이 아니라 분기할 수 없습니다." };
+      return { ok: false, error: mt("session.error.forkNotCurrent") };
     const carried = new Set<ChatEvent["type"]>(["review", "verify", "fanout", "orchestration", "thinking_delta", "subagent_activity"]);
     const prefix = events.slice(0, idx + 1).filter((e) => !carried.has(e.type));
     return { ok: true, point, cwd: s.cwd, provider: s.provider, model: s.model, policy: s.policy, prefix };
@@ -1049,7 +1050,7 @@ export class SessionManager {
     for (const e of prefix) this.record(s, e);
     this.record(s, { type: "session", ts: now, sessionId: cfg.sessionId, provider: cfg.provider, ...(cfg.model ? { model: cfg.model } : {}) });
     this.record(s, { type: "status", ts: now, status: "idle" });
-    this.record(s, { type: "notice", ts: now, level: "notice", message: "여기서 대화를 분기했습니다. 원래 탭과 같은 작업 폴더를 쓰며, 파일은 되돌리지 않았습니다." });
+    this.record(s, { type: "notice", ts: now, level: "notice", ...appMsg("session.msg.forked") });
     const snap = this.snapshot(tabId);
     this.deps.onSnapshot?.(tabId, snap);
     return snap;
@@ -1202,14 +1203,18 @@ export class SessionManager {
       type: "error",
       ts: Date.now(),
       fatal: false,
-      message:
-        from === opts.provider
-          ? handoff
-            ? `컨텍스트를 비우고 새 세션으로 시작합니다. 대화 요약(${handoff.stats.messages}개 메시지, ${handoff.stats.files}개 파일)을 다음 메시지에 함께 보냅니다.`
-            : "새 세션으로 시작합니다."
-          : handoff
-            ? `${PROVIDER_LABEL[from]} → ${PROVIDER_LABEL[opts.provider]} 로 전환. 대화 요약(${handoff.stats.messages}개 메시지, ${handoff.stats.files}개 파일)을 다음 메시지에 함께 보냅니다.`
-            : `${PROVIDER_LABEL[from]} → ${PROVIDER_LABEL[opts.provider]} 로 전환. 새 세션으로 시작합니다.`,
+      ...(from === opts.provider
+        ? handoff
+          ? appMsg("session.msg.reset.withSummary", { messages: handoff.stats.messages, files: handoff.stats.files })
+          : appMsg("session.msg.reset.fresh")
+        : handoff
+          ? appMsg("session.msg.switchProvider.withSummary", {
+              from: PROVIDER_LABEL[from],
+              to: PROVIDER_LABEL[opts.provider],
+              messages: handoff.stats.messages,
+              files: handoff.stats.files,
+            })
+          : appMsg("session.msg.switchProvider.fresh", { from: PROVIDER_LABEL[from], to: PROVIDER_LABEL[opts.provider] })),
     });
     return this.snapshot(tabId);
   }
@@ -1239,14 +1244,13 @@ export class SessionManager {
     if (s.controller === "terminal")
       return {
         ok: false,
-        error:
-          "터미널이 이 세션을 제어 중입니다. CLI 를 종료하면 채팅으로 돌아옵니다.",
+        error: mt("session.error.terminalControlling"),
       };
-    if (!s.cwd) return { ok: false, error: "작업 경로가 없습니다." };
+    if (!s.cwd) return { ok: false, error: mt("session.error.noCwd") };
     if (this.isBusy(tabId) || s.limitWait) {
       // 턴 진행 중(또는 한도 재시도 대기 중): 큐에 넣고, 이 턴이 끝나면 자동으로 보낸다.
       if (s.promptQueue.length >= MAX_PROMPT_QUEUE)
-        return { ok: false, error: `대기 중인 지시가 ${MAX_PROMPT_QUEUE}개를 넘었습니다.` };
+        return { ok: false, error: mt("session.error.queueFull", { max: MAX_PROMPT_QUEUE }) };
       s.promptQueue.push({ id: randomUUID(), text, images, userEvent });
       this.persistQueue(s);
       this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
@@ -1378,7 +1382,7 @@ export class SessionManager {
           this.record(s, {
             type: "error",
             ts: Date.now(),
-            message: "중단됨",
+            ...appMsg("session.msg.interrupted"),
             fatal: false,
           });
           this.setStatus(s, "idle");
@@ -1386,7 +1390,11 @@ export class SessionManager {
           this.record(s, {
             type: "error",
             ts: Date.now(),
-            message: describeError(e),
+            ...(/ENOENT/.test(describeRaw(e))
+              ? appMsg("session.msg.cliNotFound", { detail: describeRaw(e) })
+              : e instanceof MsgError
+                ? { message: e.message, msg: e.msg }
+                : { message: describeError(e) }),
           });
           this.setStatus(s, "error");
         }
@@ -1489,7 +1497,7 @@ export class SessionManager {
       this.record(s, {
         type: "error",
         ts: Date.now(),
-        message: "대기열에서 취소됨",
+        ...appMsg("session.msg.queueCancelled"),
         fatal: false,
       });
       this.setStatus(s, "idle");
@@ -1505,7 +1513,7 @@ export class SessionManager {
         this.rejectAllPending(s);
         s.ambientStopped = true;
         s.turnStartedAt = null;
-        this.record(s, { type: "error", ts: Date.now(), message: "중단됨", fatal: false });
+        this.record(s, { type: "error", ts: Date.now(), ...appMsg("session.msg.interrupted"), fatal: false });
         this.setStatus(s, "idle");
         this.deps.onSnapshot?.(tabId, this.snapshot(tabId));
         return true;
@@ -1695,7 +1703,7 @@ export class SessionManager {
   private loadEvents(s: Session): ChatEvent[] {
     if (s.events) return s.events;
     const events = this.deps.store?.readEvents(s.tabId) ?? [];
-    for (const e of staleRunEvents(events)) {
+    for (const e of staleRunEvents(mt, events)) {
       events.push(e);
       this.deps.store?.appendEvent(s.tabId, e);
     }
@@ -1776,8 +1784,12 @@ export function summarizeToolInput(
   return keys.length ? firstLine(JSON.stringify(input)).slice(0, 120) : "";
 }
 
+function describeRaw(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 function describeError(e: unknown): string {
-  const msg = e instanceof Error ? e.message : String(e);
-  if (/ENOENT/.test(msg)) return `CLI 실행 파일을 찾지 못했습니다: ${msg}`;
+  const msg = describeRaw(e);
+  if (/ENOENT/.test(msg)) return mt("session.error.cliNotFound", { detail: msg });
   return msg;
 }

@@ -1,6 +1,7 @@
 // 팬아웃 카드 — 세션별 진행 상태·변경 통계·답변 요약. 끝나면 "비교" 로 diff 를 나란히 보고 채택, "정리" 로 worktree 와 탭을 지운다.
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { msgText } from "@shared/i18n/msg";
 import type { FanoutVariant } from "@shared/chat-events";
 import type { FanoutBlock } from "@shared/session-state";
 import { PROVIDER_NAME, fanoutSummary } from "@shared/fanout";
@@ -26,7 +27,7 @@ function VariantStatus({ v }: { v: FanoutVariant }) {
 }
 
 export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; tabId: string; onCompare: (fanoutId: string) => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const running = block.status === "running";
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -53,7 +54,7 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
         <Icon name="sparkles" size={13} className="shrink-0 text-accent" />
         <span className="shrink-0 font-medium">{t("fanout.card.title")}</span>
         <span className="text-[11px] text-muted" data-fanout-summary>
-          {fanoutSummary(block.variants)}
+          {fanoutSummary(t, block.variants)}
         </span>
         {running && secs >= 3 && <span className="mono text-[10.5px] text-muted-2">{secs >= 60 ? t("fanout.card.elapsedMinSec", { min: Math.floor(secs / 60), sec: secs % 60 }) : t("fanout.card.elapsedSec", { sec: secs })}</span>}
         <span className="flex-1" />
@@ -121,7 +122,7 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
                   {v.summary}
                 </div>
               )}
-              {v.error && <div className="mt-0.5 text-[11.5px] text-err">{v.error}</div>}
+              {v.error && <div className="mt-0.5 text-[11.5px] text-err">{msgText(i18n, v.errorMsg, v.error)}</div>}
             </div>
           </div>
         ))}

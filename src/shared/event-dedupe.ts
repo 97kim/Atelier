@@ -15,7 +15,7 @@
 // uuid 는 파일마다 새로 매겨져 재개 뒤에는 짝이 맞지 않는다 — 두 기록을 대조해 확인했다(일치 0건).
 
 import type { ChatEvent } from "./chat-events";
-import { STALE_NOTE } from "./stale-runs";
+import { STALE_NOTE, STALE_NOTE_KEY } from "./stale-runs";
 
 export interface DedupeIndex {
   keys: Set<string>;
@@ -51,7 +51,7 @@ export function newDedupeIndex(): DedupeIndex {
  * 치면 나중에 도착한 진짜 결과가 같은 id 라는 이유로 잘려 나간다.
  */
 function isStalePlaceholder(e: ChatEvent): boolean {
-  return e.type === "tool_result" && e.isError && e.output === STALE_NOTE;
+  return e.type === "tool_result" && e.isError && (e.outputMsg?.key === STALE_NOTE_KEY || e.output === STALE_NOTE);
 }
 
 /**

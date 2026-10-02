@@ -26,7 +26,7 @@ export const settings: DeepPartial<typeof ko> = {
   },
   language: {
     title: "Language",
-    description: "The language used in the app. Menus and some messages may still appear in Korean.",
+    description: "The language used in the app.",
     options: {
       system: { label: "Match system", hint: "Follows the macOS language setting." },
       ko: { label: "한국어", hint: "Always use Korean." },

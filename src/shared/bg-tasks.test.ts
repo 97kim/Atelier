@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseLiveTasks, parseTaskFinished, taskLabel, taskSummary } from "@shared/bg-tasks";
+import { createI18n } from "@shared/i18n";
+const { t } = createI18n("ko");
 
 test("살아 있는 작업 목록을 읽는다", () => {
   const r = parseLiveTasks([
@@ -30,13 +32,13 @@ test("모양이 틀린 항목은 버린다", () => {
 });
 
 test("종류 이름은 아는 것만 우리말로, 모르는 것은 그대로", () => {
-  assert.equal(taskLabel("shell"), "명령");
+  assert.equal(taskLabel(t, "shell"), "명령");
   // 실제로 오는 값은 원본 판별자 쪽이다(앱에서 관측: local_bash)
-  assert.equal(taskLabel("local_bash"), "명령");
-  assert.equal(taskLabel("local_agent"), "하위 에이전트");
-  assert.equal(taskLabel("subagent"), "하위 에이전트");
-  assert.equal(taskLabel("weird_new_type"), "weird_new_type");
-  assert.equal(taskLabel(""), "작업");
+  assert.equal(taskLabel(t, "local_bash"), "명령");
+  assert.equal(taskLabel(t, "local_agent"), "하위 에이전트");
+  assert.equal(taskLabel(t, "subagent"), "하위 에이전트");
+  assert.equal(taskLabel(t, "weird_new_type"), "weird_new_type");
+  assert.equal(taskLabel(t, ""), "작업");
 });
 
 test("설명은 한 줄로 줄인다", () => {

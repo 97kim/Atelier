@@ -64,7 +64,7 @@ export function OrchestrationCard({ block, onOpen }: { block: OrchestrationBlock
                   <span className="min-w-0 truncate text-[12px]" title={task.spec}>
                     {task.spec}
                   </span>
-                  <span className={`label shrink-0 ${tone}`}>{task.status === "pending" && task.blocked ? task.blocked : label}</span>
+                  <span className={`label shrink-0 ${tone}`}>{task.status === "pending" && (task.blockedBy || task.blocked) ? (task.blockedBy ? (task.blockedBy.kind === "deps" ? t("cli.blocked.deps", { seqs: task.blockedBy.seqs.join(",") }) : t("cli.blocked.gates")) : task.blocked) : label}</span>
                   {task.status === "running" && exec && <span className="shrink-0 text-[10.5px] text-muted-2">{t(`orchestration.card.execution.${exec}`)}</span>}
                   <span className="flex-1" />
                   {task.tabId && (

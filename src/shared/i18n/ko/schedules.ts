@@ -1,5 +1,7 @@
 // 설정 > 예약.
 export const schedules = {
+  workspaceName: "예약",
+  defaultName: "예약",
   title: "예약",
   description: "정해진 시각에 AI에 메시지를 보내고 실행 결과를 남깁니다.",
   newSchedule: "새 예약",
@@ -84,5 +86,36 @@ export const schedules = {
     runNow: "지금 한 번 실행",
     edit: "고치기",
     remove: "예약과 이력을 지웁니다",
+  },
+  error: {
+    notReady: "예약이 아직 준비되지 않았습니다.",
+    nameRequired: "이름을 적어 주세요.",
+    promptRequired: "보낼 말을 적어 주세요.",
+    cronInvalid: "cron 형식이 아닙니다(분 시 일 월 요일).",
+    folderRequired: "실행할 폴더를 고르세요.",
+    workspaceFailed: "예약 탭을 둘 워크스페이스를 만들지 못했습니다.",
+    sessionFailed: "세션을 만들지 못했습니다.",
+    sessionFailedUndo: "세션을 만들지 못했고, 만들어 둔 worktree도 치우지 못했습니다({{path}}): {{detail}}",
+    saveFailed: "예약 기록을 저장하지 못했습니다: {{detail}}",
+  },
+  notify: {
+    needsAction: "예약이 승인을 기다립니다 · {{name}}",
+    failed: "예약 실패 · {{name}}",
+  },
+  // 예약 실행 기록의 사유로 저장되는 문구(Run.reasonMsg).
+  msg: {
+    missedGrace: "앱이 꺼져 있거나 늦게 깨어나 유예 시간을 넘겼습니다.",
+    overlap: "앞 회차가 아직 끝나지 않았습니다.",
+    staleGap: "앱이 오래 꺼져 있어 그동안의 회차를 건너뜁니다.",
+    appStopped: "앱이 회차의 끝을 보기 전에 종료됐습니다.",
+    noFolder: "예약에 실행할 폴더가 없습니다.",
+    budgetExceeded: "이번 달 추정 비용이 예산을 넘겼습니다(${{spent}} / ${{budget}}).",
+    startFailed: "실행을 시작하지 못했습니다: {{detail}}",
+    modelError: "모델이 오류로 끝냈습니다.",
+    precheckTimeout: "선조건 명령이 제한 시간을 넘겨 중단했습니다.",
+    precheckSpawnFailed: "선조건 명령을 실행하지 못했습니다: {{detail}}",
+    precheckNoExit: "선조건 명령이 종료 코드를 남기지 않았습니다.",
+    precheckNothingToDo: "선조건이 지금은 할 일이 없다고 했습니다(종료 코드 1).",
+    precheckExit: "선조건 명령이 종료 코드 {{code}} 로 끝났습니다.",
   },
 };

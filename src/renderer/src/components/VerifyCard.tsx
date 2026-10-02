@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { VerifyCommandResult } from "@shared/chat-events";
 import type { VerifyBlock } from "@shared/session-state";
 import { formatOutputAttachment } from "@shared/attachments";
-import { failedCommandTitle, formatDuration, verifySummary } from "@shared/verify";
+import { failedCommandTitle, formatDuration, verifyOutputText, verifySummary } from "@shared/verify";
 import { appendComposerDraft } from "../composer-draft";
 import { Icon } from "./Icon";
 
@@ -27,12 +27,13 @@ function StatusDot({ status }: { status: VerifyCommandResult["status"] }) {
 }
 
 function CommandRow({ c, tabId, live }: { c: VerifyCommandResult; tabId: string; live: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // 실패·실행 중은 출력을 펼쳐 두고, 통과한 것은 접어 둔다(클릭으로 펼침)
   const [open, setOpen] = useState<boolean | null>(null);
   const expanded = open ?? (c.status === "failed" || c.status === "running");
-  const hasOutput = !!c.output?.trim();
-  const attach = () => appendComposerDraft(tabId, formatOutputAttachment({ title: failedCommandTitle(c), text: c.output ?? "" }));
+  const outputText = verifyOutputText(i18n, c);
+  const hasOutput = !!outputText.trim();
+  const attach = () => appendComposerDraft(tabId, formatOutputAttachment({ title: failedCommandTitle(c), text: outputText }));
   return (
     <div className="border-t border-line first:border-t-0" data-verify-cmd={c.status}>
       <div className="flex items-center gap-2 px-3 py-1.5">
@@ -70,7 +71,7 @@ function CommandRow({ c, tabId, live }: { c: VerifyCommandResult; tabId: string;
             if (el && live) el.scrollTop = el.scrollHeight;
           }}
         >
-          {c.output}
+          {outputText}
         </pre>
       )}
     </div>

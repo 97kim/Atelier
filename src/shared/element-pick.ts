@@ -150,11 +150,15 @@ export function parsePickMessage(message: string, nonce: string): { kind: "picke
 /** 입력창에 붙일 텍스트: 어디의 무엇인지 + HTML 펜스 + 계산된 스타일 + 크기. 스크린샷은 이미지 첨부로 따로 간다. */
 export function formatElementAttachment(el: PickedElement, url: string): string {
   const fence = el.html.includes("```") ? "````" : "```";
+  // i18n-ignore: prompt
   const lines = [`브라우저 요소 · ${url}`, `선택자: ${el.selector}`];
+  // i18n-ignore: prompt
   if (el.text) lines.push(`텍스트: ${el.text}`);
   lines.push(`${fence}html`, el.html.trim(), fence);
   const styles = Object.entries(el.styles);
+  // i18n-ignore: prompt
   if (styles.length) lines.push(`계산된 스타일: ${styles.map(([k, v]) => `${k}: ${v}`).join("; ")}`);
+  // i18n-ignore: prompt
   lines.push(`크기: ${Math.round(el.rect.width)}×${Math.round(el.rect.height)} @ (${Math.round(el.rect.x)}, ${Math.round(el.rect.y)})`);
   return lines.join("\n");
 }

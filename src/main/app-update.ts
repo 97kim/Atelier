@@ -5,6 +5,7 @@
 // 허용을 이어받으므로 업그레이드 뒤에도 Gatekeeper 경고가 다시 뜨지 않는다.
 
 import { execFileSync, spawn } from "node:child_process";
+import { mt } from "./i18n";
 
 export const RELEASE_REPO = "97kim/Atelier";
 /** 탭까지 붙인 전체 이름. 같은 이름의 다른 cask 가 생겨도 이 탭의 것을 올린다. */
@@ -40,9 +41,9 @@ export async function fetchLatestRelease(fetchImpl: typeof fetch = fetch): Promi
     headers: { Accept: "application/vnd.github+json", "User-Agent": "atelier" },
     signal: AbortSignal.timeout(15_000),
   });
-  if (!res.ok) throw new Error(`GitHub 응답 ${res.status}`);
+  if (!res.ok) throw new Error(mt("main.update.githubStatus", { status: res.status }));
   const body = (await res.json()) as { tag_name?: unknown; html_url?: unknown };
-  if (typeof body.tag_name !== "string" || parts(body.tag_name).length === 0) throw new Error("릴리즈 버전을 읽지 못했습니다.");
+  if (typeof body.tag_name !== "string" || parts(body.tag_name).length === 0) throw new Error(mt("main.update.versionUnreadable"));
   return {
     version: body.tag_name.replace(/^v/i, ""),
     url: typeof body.html_url === "string" ? body.html_url : `https://github.com/${RELEASE_REPO}/releases/latest`,
@@ -104,7 +105,7 @@ export function runBrew(args: string[], env: NodeJS.ProcessEnv, timeoutMs = UPGR
       const closing = new Promise<void>((r) => (closed = r));
       void waitGone(tracked, killGraceMs)
         .then(() => Promise.race([closing, new Promise((r) => setTimeout(r, 1000))]))
-        .then(() => resolve({ code: null, out: tail(`${out}\n시간 초과`) }));
+        .then(() => resolve({ code: null, out: tail(`${out}\n${mt("main.update.timedOut")}`) }));
     }, timeoutMs);
     child.stdout.on("data", (d) => (out = tail(out + d)));
     child.stderr.on("data", (d) => (out = tail(out + d)));
@@ -162,11 +163,11 @@ export async function caskVersion(env: NodeJS.ProcessEnv): Promise<string | null
  */
 export async function brewUpgrade(env: NodeJS.ProcessEnv, target: string): Promise<{ ok: true; version: string } | { ok: false; error: string }> {
   const update = await runBrew(["update", "--quiet"], env);
-  if (update.code !== 0) return { ok: false, error: `brew update 실패\n${update.out.trim()}` };
+  if (update.code !== 0) return { ok: false, error: `${mt("main.update.brewUpdateFailed")}\n${update.out.trim()}` };
   const upgrade = await runBrew(["upgrade", "--cask", CASK], { ...env, HOMEBREW_NO_AUTO_UPDATE: "1" });
-  if (upgrade.code !== 0) return { ok: false, error: `brew upgrade 실패\n${upgrade.out.trim()}` };
+  if (upgrade.code !== 0) return { ok: false, error: `${mt("main.update.brewUpgradeFailed")}\n${upgrade.out.trim()}` };
   const version = await caskVersion(env);
   if (!version || compareVersions(version, target) < 0)
-    return { ok: false, error: `Homebrew에 아직 ${target} 버전이 올라오지 않았습니다(설치된 버전 ${version ?? "알 수 없음"}). 잠시 뒤 다시 시도하세요.` };
+    return { ok: false, error: mt("main.update.notYetOnHomebrew", { target, installed: version ?? mt("main.update.unknownVersion") }) };
   return { ok: true, version };
 }

@@ -5,8 +5,10 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { VerifyCommandResult, VerifyEvent } from "@shared/chat-events";
-import { VERIFY_COMMAND_TIMEOUT_MS, overallStatus, suggestVerifyCommands, tailOutput } from "@shared/verify";
+import { VERIFY_COMMAND_TIMEOUT_MS, cutOutput, overallStatus, suggestVerifyCommands } from "@shared/verify";
+import type { Msg } from "@shared/i18n/msg";
 import { sanitizeCliEnv } from "./cli-env";
+import { appMsg, mt } from "./i18n";
 
 export interface VerifyRunOptions {
   tabId: string;
@@ -77,8 +79,8 @@ export class VerifyRunner {
 
   /** 실행을 시작하고 runId 를 돌려준다. 같은 탭에 진행 중인 실행이 있으면 거부. */
   async start(o: VerifyRunOptions): Promise<{ ok: true; runId: string } | { ok: false; error: string }> {
-    if (o.commands.length === 0) return { ok: false, error: "검증 명령이 없습니다." };
-    if (this.running(o.tabId)) return { ok: false, error: "이 탭에서 검증이 이미 진행 중입니다." };
+    if (o.commands.length === 0) return { ok: false, error: mt("repo.verify.noCommands") };
+    if (this.running(o.tabId)) return { ok: false, error: mt("repo.verify.alreadyRunning") };
     const runId = randomUUID();
     const env = sanitizeCliEnv({ ...o.env, FORCE_COLOR: "0", NO_COLOR: "1", CI: "1", TERM: "dumb" });
     const run: Run = {
@@ -100,7 +102,7 @@ export class VerifyRunner {
     }
     if (run.aborted) {
       this.runs.delete(runId);
-      return { ok: false, error: "시작 전에 중단되었습니다." };
+      return { ok: false, error: mt("repo.verify.abortedBeforeStart") };
     }
     this.emit(run, false);
     run.done = this.execute(run, env).finally(() => this.runs.delete(runId));
@@ -166,12 +168,18 @@ export class VerifyRunner {
       const r = await this.runOne(run, c, env);
       c.durationMs = Date.now() - started;
       c.exitCode = r.exitCode;
-      c.output = tailOutput(r.output);
+      const cut = cutOutput(r.output);
+      c.output = cut.text;
+      if (cut.truncated) c.truncated = true;
+      // 시간 초과 안내가 종료 신호 안내를 대신한다
+      const note = r.timedOut && !run.aborted ? appMsg("repo.msg.verify.timeout", { minutes: Math.round(VERIFY_COMMAND_TIMEOUT_MS / 60000) }) : r.note;
+      if (note) {
+        c.note = note.message;
+        c.noteMsg = note.msg;
+      }
       if (run.aborted) c.status = "aborted";
-      else if (r.timedOut) {
-        c.status = "failed";
-        c.output = tailOutput(r.output + `\n(시간 초과: ${Math.round(VERIFY_COMMAND_TIMEOUT_MS / 60000)}분)`);
-      } else c.status = r.exitCode === 0 ? "passed" : "failed";
+      else if (r.timedOut) c.status = "failed";
+      else c.status = r.exitCode === 0 ? "passed" : "failed";
       if (c.status !== "passed") {
         // 실패·중단 뒤의 명령은 돌리지 않는다
         for (let j = i + 1; j < run.commands.length; j++) run.commands[j].status = run.aborted ? "aborted" : "skipped";
@@ -181,7 +189,7 @@ export class VerifyRunner {
     this.emit(run, false);
   }
 
-  private runOne(run: Run, c: VerifyCommandResult, env: NodeJS.ProcessEnv): Promise<{ exitCode: number | null; output: string; timedOut: boolean }> {
+  private runOne(run: Run, c: VerifyCommandResult, env: NodeJS.ProcessEnv): Promise<{ exitCode: number | null; output: string; timedOut: boolean; note?: { message: string; msg: Msg } }> {
     return new Promise((resolve) => {
       let output = "";
       let timedOut = false;
@@ -197,7 +205,9 @@ export class VerifyRunner {
       const ticker = setInterval(() => {
         if (!dirty) return;
         dirty = false;
-        c.output = tailOutput(output);
+        const cut = cutOutput(output);
+        c.output = cut.text;
+        if (cut.truncated) c.truncated = true;
         this.emit(run, true);
       }, PROGRESS_INTERVAL_MS);
       const onData = (d: Buffer) => {
@@ -212,26 +222,26 @@ export class VerifyRunner {
         timedOut = true;
         this.killTree(child);
       }, VERIFY_COMMAND_TIMEOUT_MS);
-      const finish = (exitCode: number | null, extra?: string) => {
+      const finish = (exitCode: number | null, extra?: string, note?: { message: string; msg: Msg }) => {
         clearInterval(ticker);
         clearTimeout(timer);
         run.child = null;
-        resolve({ exitCode, output: extra ? output + extra : output, timedOut });
+        resolve({ exitCode, output: extra ? output + extra : output, timedOut, note });
       };
       let finished = false;
-      const once = (exitCode: number | null, extra?: string) => {
+      const once = (exitCode: number | null, extra?: string, note?: { message: string; msg: Msg }) => {
         if (finished) return;
         finished = true;
-        finish(exitCode, extra);
+        finish(exitCode, extra, note);
       };
       child.on("error", (e) => once(null, `\n${e.message}`));
-      child.on("close", (code, signal) => once(code, signal && code === null ? `\n(${signal} 로 종료)` : undefined));
+      child.on("close", (code, signal) => once(code, undefined, signal && code === null ? appMsg("repo.msg.verify.signal", { signal }) : undefined));
       // 부모는 끝났는데 stdout 을 물려받은 자식이 남아 close 가 안 오는 경우: 잠깐 기다렸다가 그룹을 정리하고 끝낸다
       child.on("exit", (code, signal) => {
         setTimeout(() => {
           if (finished) return;
           this.killTree(child);
-          once(code, `\n(출력 스트림을 잡은 자식 프로세스가 남아 정리했습니다)${signal && code === null ? ` (${signal} 로 종료)` : ""}`);
+          once(code, undefined, signal && code === null ? appMsg("repo.msg.verify.orphanSignal", { signal }) : appMsg("repo.msg.verify.orphan"));
         }, 1500).unref();
       });
     });

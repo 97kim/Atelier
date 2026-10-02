@@ -1,7 +1,7 @@
 // 팬아웃(지시 하나 → 격리 세션 N개)의 순수 부분 — 세션 이름·제목·요약·비교용 파일 합집합. 실행은 main/index.ts startFanout.
+import type { TFunction } from "i18next";
 import type { FanoutVariant } from "./chat-events";
 import type { GitChangeDto } from "./ipc";
-import { UNTITLED_TAB } from "./workspace-model";
 
 export const FANOUT_MAX_VARIANTS = 4;
 export const FANOUT_MIN_VARIANTS = 2;
@@ -15,10 +15,10 @@ export function variantLabel(index: number): string {
   return String.fromCharCode(65 + index);
 }
 
-/** 세션 탭 제목: "팬아웃 A · Codex". 원래 탭 제목이 있으면 뒤에 붙인다. */
-export function fanoutTabTitle(label: string, provider: "claude" | "codex", originTitle?: string | null): string {
-  const base = `팬아웃 ${label} · ${PROVIDER_NAME[provider]}`;
-  return originTitle && originTitle !== UNTITLED_TAB ? `${base} · ${originTitle.slice(0, 24)}` : base;
+/** 세션 탭 제목: "팬아웃 A · Codex". 원래 탭에 이름이 있으면 뒤에 붙인다 — originTitle 은 저장된 제목(이름 없는 탭이면 null)이다. */
+export function fanoutTabTitle(t: TFunction, label: string, provider: "claude" | "codex", originTitle?: string | null): string {
+  const base = t("main.fanout.tabTitle", { label, provider: PROVIDER_NAME[provider] });
+  return originTitle ? `${base} · ${originTitle.slice(0, 24)}` : base;
 }
 
 export function excerpt(text: string, max: number): string {
@@ -27,15 +27,15 @@ export function excerpt(text: string, max: number): string {
 }
 
 /** 세션 진행 요약: "2/3 완료 · 1 응답 필요". */
-export function fanoutSummary(variants: FanoutVariant[]): string {
+export function fanoutSummary(t: TFunction, variants: FanoutVariant[]): string {
   const done = variants.filter((v) => v.status === "done").length;
   const waiting = variants.filter((v) => v.status === "waiting").length;
   const failed = variants.filter((v) => v.status === "failed").length;
   const cleaned = variants.filter((v) => v.status === "cleaned").length;
-  if (cleaned === variants.length) return "비교 종료";
-  const parts = [`${done}/${variants.length} 완료`];
-  if (waiting) parts.push(`${waiting} 응답 필요`);
-  if (failed) parts.push(`${failed} 실패`);
+  if (cleaned === variants.length) return t("main.fanout.summary.cleaned");
+  const parts = [t("main.fanout.summary.done", { done, total: variants.length })];
+  if (waiting) parts.push(t("main.fanout.summary.waiting", { count: waiting }));
+  if (failed) parts.push(t("main.fanout.summary.failed", { count: failed }));
   return parts.join(" · ");
 }
 
@@ -56,20 +56,20 @@ export function allSettled(variants: FanoutVariant[]): boolean {
 }
 
 /** 시작 요청 검증 — 렌더러·CLI 입력 공통. */
-export function validateFanoutRequest(o: { prompt: unknown; variants: unknown; policy?: unknown }): { ok: true; prompt: string; variants: { provider: "claude" | "codex"; model?: string }[]; policy: "ask" | "auto_edit" | "full" } | { ok: false; error: string } {
+export function validateFanoutRequest(t: TFunction, o: { prompt: unknown; variants: unknown; policy?: unknown }): { ok: true; prompt: string; variants: { provider: "claude" | "codex"; model?: string }[]; policy: "ask" | "auto_edit" | "full" } | { ok: false; error: string } {
   const prompt = typeof o.prompt === "string" ? o.prompt.trim() : "";
-  if (!prompt) return { ok: false, error: "AI에 보낼 요청을 입력하세요." };
-  if (!Array.isArray(o.variants)) return { ok: false, error: "세션 목록을 읽을 수 없습니다. 세션을 다시 선택해 주세요." };
+  if (!prompt) return { ok: false, error: t("main.fanout.validate.promptRequired") };
+  if (!Array.isArray(o.variants)) return { ok: false, error: t("main.fanout.validate.variantsUnreadable") };
   const variants: { provider: "claude" | "codex"; model?: string }[] = [];
   for (const v of o.variants) {
     const provider = typeof v === "string" ? v : v && typeof v === "object" ? (v as { provider?: unknown }).provider : undefined;
-    if (provider !== "claude" && provider !== "codex") return { ok: false, error: `세션에 사용할 CLI는 Claude Code 또는 Codex를 선택하세요. 전달된 값: ${String(provider)}` };
+    if (provider !== "claude" && provider !== "codex") return { ok: false, error: t("main.fanout.validate.badProvider", { value: String(provider) }) };
     const model = v && typeof v === "object" && typeof (v as { model?: unknown }).model === "string" ? ((v as { model: string }).model.trim() || undefined) : undefined;
     variants.push(model ? { provider, model } : { provider });
   }
-  if (variants.length < FANOUT_MIN_VARIANTS) return { ok: false, error: `세션을 ${FANOUT_MIN_VARIANTS}개 이상 추가하세요.` };
-  if (variants.length > FANOUT_MAX_VARIANTS) return { ok: false, error: `세션은 최대 ${FANOUT_MAX_VARIANTS}개까지 추가할 수 있습니다.` };
+  if (variants.length < FANOUT_MIN_VARIANTS) return { ok: false, error: t("main.fanout.validate.tooFew", { min: FANOUT_MIN_VARIANTS }) };
+  if (variants.length > FANOUT_MAX_VARIANTS) return { ok: false, error: t("main.fanout.validate.tooMany", { max: FANOUT_MAX_VARIANTS }) };
   const policy = o.policy === undefined ? "auto_edit" : o.policy;
-  if (policy !== "ask" && policy !== "auto_edit" && policy !== "full") return { ok: false, error: "작업 권한을 다시 선택해 주세요. 허용되는 값: ask · auto_edit · full" };
+  if (policy !== "ask" && policy !== "auto_edit" && policy !== "full") return { ok: false, error: t("main.fanout.validate.badPolicy") };
   return { ok: true, prompt, variants, policy };
 }

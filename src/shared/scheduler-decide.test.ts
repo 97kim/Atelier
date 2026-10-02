@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { decideTick, readPrecheck } from "@shared/scheduler-decide";
+import { createI18n } from "@shared/i18n";
 import { isFinalRunStatus, missedBeyondGrace, shouldCoalesceSkip, type Run, type Schedule } from "@shared/schedules";
+
+const { t } = createI18n("ko");
+const en = createI18n("en").t;
 
 const TICK = 30_000;
 const base: Schedule = {
@@ -18,8 +22,8 @@ const base: Schedule = {
   createdAt: 0,
   activeSince: 0,
 };
-const tick = (over: Partial<Parameters<typeof decideTick>[0]> = {}) =>
-  decideTick({ schedule: base, dueAt: 1_000_000, now: 1_000_000, tickMs: TICK, liveRuns: [], targetUnavailable: null, budgetBlocked: null, ...over });
+const tick = (over: Partial<Parameters<typeof decideTick>[1]> = {}) =>
+  decideTick(t, { schedule: base, dueAt: 1_000_000, now: 1_000_000, tickMs: TICK, liveRuns: [], targetUnavailable: null, budgetBlocked: null, ...over });
 const liveRun = (): Run => ({
   id: "r1", scheduleId: "s1", scheduledFor: 999_000, trigger: "scheduled", status: "running",
   snapshot: { prompt: base.prompt, cron: base.cron, timezone: base.timezone, policy: base.policy, provider: base.provider, target: base.target },
@@ -63,18 +67,18 @@ test("앞 회차가 살아 있으면 겹침으로 건너뛴다", () => {
 });
 
 test("대상이 없거나 예산을 넘기면 건너뛴다 — 사유를 그대로 남긴다", () => {
-  const a = tick({ targetUnavailable: "탭이 사라졌습니다." });
+  const a = tick({ targetUnavailable: { reason: "탭이 사라졌습니다.", reasonMsg: { key: "schedules.msg.noFolder" } } });
   assert.equal(a.kind === "skip" && a.reason, "탭이 사라졌습니다.");
-  const b = tick({ budgetBlocked: "이번 달 예산을 넘겼습니다." });
+  const b = tick({ budgetBlocked: { reason: "이번 달 예산을 넘겼습니다.", reasonMsg: { key: "schedules.msg.budgetExceeded" } } });
   assert.equal(b.kind === "skip" && b.status, "skipped_unavailable");
 });
 
 test("precheck 결과: 조건 불충족과 고장을 구분한다", () => {
-  assert.deepEqual(readPrecheck({ exitCode: 0, timedOut: false, error: null }), { kind: "run" });
-  assert.equal(readPrecheck({ exitCode: 1, timedOut: false, error: null }).kind, "skip");
-  assert.equal(readPrecheck({ exitCode: 127, timedOut: false, error: null }).kind, "failed", "명령 없음은 고장이다");
-  assert.equal(readPrecheck({ exitCode: null, timedOut: true, error: null }).kind, "failed");
-  assert.equal(readPrecheck({ exitCode: null, timedOut: false, error: "spawn ENOENT" }).kind, "failed");
+  assert.deepEqual(readPrecheck(t, { exitCode: 0, timedOut: false, error: null }), { kind: "run" });
+  assert.equal(readPrecheck(t, { exitCode: 1, timedOut: false, error: null }).kind, "skip");
+  assert.equal(readPrecheck(t, { exitCode: 127, timedOut: false, error: null }).kind, "failed", "명령 없음은 고장이다");
+  assert.equal(readPrecheck(t, { exitCode: null, timedOut: true, error: null }).kind, "failed");
+  assert.equal(readPrecheck(t, { exitCode: null, timedOut: false, error: "spawn ENOENT" }).kind, "failed");
 });
 
 test("끝난 상태만 이력에서 지울 수 있다", () => {
@@ -88,4 +92,19 @@ test("같은 사유의 건너뜀은 합친다 — 이력이 밀려나지 않게"
   assert.equal(shouldCoalesceSkip(skipped, "skipped_overlap", "다른 사유"), false);
   assert.equal(shouldCoalesceSkip(skipped, "completed", null), false, "완료는 합치지 않는다");
   assert.equal(shouldCoalesceSkip(null, "skipped_missed", "x"), false);
+});
+
+test("같은 사유는 언어가 달라 문장이 달라도 합친다 — Msg 가 있으면 키와 값으로 비교", () => {
+  const overlapKo = { ...liveRun(), status: "skipped_overlap" as const, reason: "앞 회차가 아직 끝나지 않았습니다.", reasonMsg: { key: "schedules.msg.overlap" as const } };
+  assert.equal(shouldCoalesceSkip(overlapKo, "skipped_overlap", en("schedules.msg.overlap"), { key: "schedules.msg.overlap" }), true);
+  assert.equal(shouldCoalesceSkip(overlapKo, "skipped_overlap", "앞 회차가 아직 끝나지 않았습니다.", { key: "schedules.msg.missedGrace" }), false);
+  const exitKo = { ...overlapKo, status: "skipped_unavailable" as const, reasonMsg: { key: "schedules.msg.budgetExceeded" as const, params: { spent: "1.00", budget: "2.00" } } };
+  assert.equal(shouldCoalesceSkip(exitKo, "skipped_unavailable", "x", { key: "schedules.msg.budgetExceeded", params: { spent: "1.00", budget: "2.00" } }), true);
+  assert.equal(shouldCoalesceSkip(exitKo, "skipped_unavailable", "x", { key: "schedules.msg.budgetExceeded", params: { spent: "1.50", budget: "2.00" } }), false);
+});
+
+test("Msg 없는 예전 기록은 문장으로 비교한다", () => {
+  const old: Run = { ...liveRun(), status: "skipped_overlap", reason: "앞 회차가 아직 끝나지 않았습니다." };
+  assert.equal(shouldCoalesceSkip(old, "skipped_overlap", "앞 회차가 아직 끝나지 않았습니다.", { key: "schedules.msg.overlap" }), true);
+  assert.equal(shouldCoalesceSkip(old, "skipped_overlap", "The previous run hasn't finished yet.", { key: "schedules.msg.overlap" }), false);
 });

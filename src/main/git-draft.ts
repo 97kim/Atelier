@@ -5,15 +5,18 @@ import type { GitDraftResult } from "@shared/ipc";
 import type { ClaudeRuntime } from "./claude-adapter";
 import { importClaudeSdk } from "./esm";
 import { gitDiffFor, gitRecentSubjects } from "./git";
+import { mt } from "./i18n";
 
 export const DRAFT_MODEL = "haiku";
 
 export function buildDraftPrompt(diff: string, recentSubjects: string[]): string {
+  // i18n-ignore: prompt
   const style =
     recentSubjects.length > 0
       ? `이 저장소의 최근 커밋 제목(스타일·언어를 따르세요):\n${recentSubjects.map((s) => `- ${s}`).join("\n")}\n\n`
       : "";
   return (
+    // i18n-ignore: prompt
     `${style}아래 diff 에 대한 git 커밋 메시지를 작성하세요.\n` +
     `규칙: 첫 줄은 72자 이내의 제목(마침표 없음). 변경이 여러 갈래면 빈 줄 뒤에 "- " 불릿 본문을 2~5줄. ` +
     `무엇을 왜 바꿨는지에 집중하고, 파일 이름 나열이나 "이 커밋은" 같은 서두는 쓰지 마세요. ` +
@@ -48,7 +51,7 @@ export async function draftCommitMessage(
     gitDiffFor(cwd, runtime.env, paths),
     gitRecentSubjects(cwd, runtime.env),
   ]);
-  if (!diff.trim()) return { ok: false, error: "선택한 파일의 diff가 없습니다. 커밋할 파일을 다시 선택하세요." };
+  if (!diff.trim()) return { ok: false, error: mt("repo.git.draft.noDiff") };
   const { query } = await importClaudeSdk();
   const abort = new AbortController();
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
@@ -76,17 +79,17 @@ export async function draftCommitMessage(
   try {
     for await (const m of q) {
       if (m.type === "result") {
-        if (m.subtype !== "success") return { ok: false, error: `커밋 메시지 초안을 받지 못했습니다. 다시 시도하거나 직접 입력하세요. (${m.subtype})` };
+        if (m.subtype !== "success") return { ok: false, error: mt("repo.git.draft.noResult", { subtype: m.subtype }) };
         text = m.result;
         // 결과를 받았으면 바로 닫는다 — 프로세스 종료를 기다리면 수십 초가 더 걸린다.
         break;
       }
     }
   } catch (e) {
-    return { ok: false, error: `커밋 메시지 초안을 만들지 못했습니다. 다시 시도하거나 직접 입력하세요. 상세: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, error: mt("repo.git.draft.failed", { detail: e instanceof Error ? e.message : String(e) }) };
   } finally {
     abort.abort();
   }
   const message = cleanDraft(text);
-  return message ? { ok: true, message } : { ok: false, error: "커밋 메시지 초안을 받지 못했습니다. 다시 시도하거나 직접 입력하세요." };
+  return message ? { ok: true, message } : { ok: false, error: mt("repo.git.draft.empty") };
 }

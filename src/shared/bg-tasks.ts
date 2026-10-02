@@ -11,6 +11,8 @@
 //
 // ambient 는 CLI 살림용이라 화면에 세지 않는다(SDK 가 그렇게 하라고 표시해 준다).
 
+import type { TFunction } from "i18next";
+
 /** 살아 있는 백그라운드 작업 하나. */
 export interface LiveBackgroundTask {
   id: string;
@@ -20,20 +22,20 @@ export interface LiveBackgroundTask {
 }
 
 // SDK 가 두 갈래로 준다 — 원본 판별자(local_bash …)와 사람용 이름(shell …). 둘 다 받아 둔다.
-const LABEL: Record<string, string> = {
-  shell: "명령",
-  local_bash: "명령",
-  subagent: "하위 에이전트",
-  local_agent: "하위 에이전트",
-  workflow: "워크플로",
-  local_workflow: "워크플로",
-  mcp_task: "MCP 작업",
-  monitor: "감시",
-};
+const LABEL = {
+  shell: "session.bgTask.shell",
+  local_bash: "session.bgTask.shell",
+  subagent: "session.bgTask.subagent",
+  local_agent: "session.bgTask.subagent",
+  workflow: "session.bgTask.workflow",
+  local_workflow: "session.bgTask.workflow",
+  mcp_task: "session.bgTask.mcp",
+  monitor: "session.bgTask.monitor",
+} as const;
 
 /** 화면에 쓸 종류 이름. 모르는 종류는 온 그대로 보여 준다(숨기는 것보다 낫다). */
-export function taskLabel(type: string): string {
-  return LABEL[type] ?? (type.trim() || "작업");
+export function taskLabel(t: TFunction, type: string): string {
+  return type in LABEL ? t(LABEL[type as keyof typeof LABEL]) : type.trim() || t("session.bgTask.generic");
 }
 
 /** 한 줄로 줄인다. SDK 가 1000자까지 보내므로 목록에 그대로 쓰면 길다. */

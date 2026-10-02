@@ -8,6 +8,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isActiveJob, mergeJobs, parseBackgroundJob, type BackgroundJobDto } from "@shared/background-jobs";
+import { mt } from "./i18n";
 
 /** 파일이 바뀐 뒤 이만큼 조용하면 다시 읽는다(한 번 쓰는 데 여러 이벤트가 온다). */
 const DEBOUNCE_MS = 400;
@@ -58,7 +59,7 @@ async function readJobs(file: string): Promise<BackgroundJobDto[]> {
     const j = JSON.parse(text) as { jobs?: unknown };
     if (!Array.isArray(j.jobs)) return [];
     const root = file;
-    return j.jobs.map((x) => parseBackgroundJob(x, root)).filter((x): x is BackgroundJobDto => x !== null);
+    return j.jobs.map((x) => parseBackgroundJob(mt, x, root)).filter((x): x is BackgroundJobDto => x !== null);
   } catch {
     return []; // 쓰는 중이라 반쪽인 JSON — 다음 읽기에 잡힌다
   }

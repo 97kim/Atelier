@@ -13,7 +13,12 @@ import type { ChatSendResult, FanoutStartDto, FanoutStartResult, Provider, Works
 import { OrchError, type Orchestrator } from "./orchestration";
 import { replaySession, type Block } from "@shared/session-state";
 import { clickScript, fillScript, readScript } from "@shared/browser-control";
-import { tabTitle, type TabMeta } from "@shared/workspace-model";
+import { tabTitle as sharedTabTitle, type TabMeta } from "@shared/workspace-model";
+import { mainI18n, mt } from "./i18n";
+import { verifyOutputText } from "@shared/verify";
+
+/** 이름 없는 탭의 표시 제목은 지금 언어로. */
+const tabTitle = (t: TabMeta): string => sharedTabTitle(t, mt("shared.untitledTab"));
 
 export interface ControlSnapshot {
   status: SessionStatus;
@@ -134,7 +139,7 @@ function compactBlock(b: Block): Json {
         runId: b.id,
         status: b.status,
         head: b.head,
-        commands: b.commands.map((c) => ({ cmd: c.cmd, status: c.status, ...(c.exitCode !== undefined ? { exitCode: c.exitCode } : {}), ...(c.durationMs !== undefined ? { durationMs: c.durationMs } : {}), ...(c.output ? { output: c.output } : {}) })),
+        commands: b.commands.map((c) => ({ cmd: c.cmd, status: c.status, ...(c.exitCode !== undefined ? { exitCode: c.exitCode } : {}), ...(c.durationMs !== undefined ? { durationMs: c.durationMs } : {}), ...(verifyOutputText(mainI18n(), c) ? { output: verifyOutputText(mainI18n(), c) } : {}) })),
       };
     default: {
       // 블록 종류가 늘면 여기서 컴파일 오류가 난다 — 빠뜨리면 tab read 에 null 이 섞인다
@@ -213,7 +218,7 @@ export class ControlServer {
     sock.on("data", (chunk: string) => {
       buf += chunk;
       if (Buffer.byteLength(buf) > MAX_LINE_BYTES) {
-        sock.write(JSON.stringify({ id: null, error: { code: "too_large", message: `요청 한 줄은 ${MAX_LINE_BYTES} 바이트 이하여야 합니다.` } }) + "\n");
+        sock.write(JSON.stringify({ id: null, error: { code: "too_large", message: mt("cli.control.tooLarge", { max: MAX_LINE_BYTES }) } }) + "\n");
         sock.destroy();
         return;
       }
@@ -223,7 +228,7 @@ export class ControlServer {
         buf = buf.slice(i + 1);
         if (!line) continue;
         if (inflight >= MAX_INFLIGHT) {
-          sock.write(JSON.stringify({ id: null, error: { code: "too_many", message: `연결 하나에 동시 요청은 ${MAX_INFLIGHT}개까지입니다.` } }) + "\n");
+          sock.write(JSON.stringify({ id: null, error: { code: "too_many", message: mt("cli.control.tooMany", { max: MAX_INFLIGHT }) } }) + "\n");
           continue;
         }
         inflight++;
@@ -233,7 +238,7 @@ export class ControlServer {
           try {
             sock.write(JSON.stringify(out) + "\n");
           } catch (e) {
-            sock.write(JSON.stringify({ id: null, error: { code: "error", message: `응답을 만들지 못했습니다: ${e instanceof Error ? e.message : String(e)}` } }) + "\n");
+            sock.write(JSON.stringify({ id: null, error: { code: "error", message: mt("cli.control.responseFailed", { detail: e instanceof Error ? e.message : String(e) }) } }) + "\n");
           }
         });
       }
@@ -249,7 +254,7 @@ export class ControlServer {
       const req = JSON.parse(line) as { id?: unknown; method?: unknown; params?: unknown };
       // id 는 그대로 돌려주므로 문자열·유한 숫자·null 만 받는다(중첩 객체를 되돌려 주다 직렬화가 터지지 않게)
       id = typeof req.id === "string" || (typeof req.id === "number" && Number.isFinite(req.id)) ? req.id : null;
-      if (typeof req.method !== "string") throw new ControlError("method 가 없습니다.");
+      if (typeof req.method !== "string") throw new ControlError(mt("cli.control.methodMissing"));
       const params = (req.params && typeof req.params === "object" && !Array.isArray(req.params) ? req.params : {}) as Params;
       const result = await this.dispatch(req.method, params, signal);
       return { id, result };
@@ -281,7 +286,7 @@ export class ControlServer {
       }
       case "ws.add": {
         const path = this.requireString(params, "path");
-        if (!path.startsWith("/")) throw new ControlError("--path 는 절대 경로여야 합니다.");
+        if (!path.startsWith("/")) throw new ControlError(mt("cli.control.pathAbsolute"));
         this.deps.approveRoot(path);
         const r = this.deps.addWorkspace(path);
         return { workspaceId: r.workspaceId, tabId: r.tabId };
@@ -309,15 +314,15 @@ export class ControlServer {
       case "schedule.add": {
         const api = this.requireSchedules();
         const cron = this.requireString(params, "cron");
-        if (!parseCron(cron)) throw new ControlError("cron 형식이 아닙니다(분 시 일 월 요일).");
+        if (!parseCron(cron)) throw new ControlError(mt("cli.control.cronInvalidFormat"));
         const policy = params.policy !== undefined ? this.requireString(params, "policy") : "ask";
-        if (!["ask", "auto_edit", "full"].includes(policy)) throw new ControlError("--policy 는 ask, auto_edit, full 중 하나.");
+        if (!["ask", "auto_edit", "full"].includes(policy)) throw new ControlError(mt("cli.control.policyInvalid"));
         const provider = params.provider !== undefined ? this.requireString(params, "provider") : "claude";
-        if (provider !== "claude" && provider !== "codex") throw new ControlError("--provider 는 claude 또는 codex.");
+        if (provider !== "claude" && provider !== "codex") throw new ControlError(mt("cli.control.providerInvalid"));
         // --cwd 를 안 주면 워크스페이스 기본 경로로 돈다. 이름만으로 만든 워크스페이스에는 그 값이 없어
         // 저장이 막히므로, 그때는 --cwd 로 직접 준다(화면의 "폴더 고르기" 와 같은 값이다).
         const cwd = params.cwd !== undefined ? this.requireString(params, "cwd") : undefined;
-        if (cwd !== undefined && !cwd.startsWith("/")) throw new ControlError("--cwd 는 절대 경로여야 합니다.");
+        if (cwd !== undefined && !cwd.startsWith("/")) throw new ControlError(mt("cli.control.cwdAbsolute"));
         const target = {
           kind: "fresh",
           cwd,
@@ -345,7 +350,7 @@ export class ControlServer {
         if (params.enabled !== undefined) patch.enabled = params.enabled === true || params.enabled === "true";
         if (params.cron !== undefined) {
           const cron = this.requireString(params, "cron");
-          if (!parseCron(cron)) throw new ControlError("cron 형식이 아닙니다.");
+          if (!parseCron(cron)) throw new ControlError(mt("cli.control.cronInvalid"));
           patch.cron = cron;
         }
         if (params.prompt !== undefined) patch.prompt = this.requireString(params, "prompt");
@@ -360,7 +365,7 @@ export class ControlServer {
       case "schedule.run": {
         const api = this.requireSchedules();
         const run = await api.runNow(this.requireString(params, "id"));
-        if (!run) throw new ControlError("그 예약이 없습니다.");
+        if (!run) throw new ControlError(mt("cli.control.scheduleNotFound"));
         return { run: { id: run.id, status: run.status, tabId: run.tabId, reason: run.reason } };
       }
       case "schedule.runs": {
@@ -392,20 +397,20 @@ export class ControlServer {
       case "tab.new": {
         const st = this.deps.state();
         const ws = params.workspace !== undefined ? this.resolveWorkspace(this.requireString(params, "workspace")) : (st.model.workspaces.find((w) => w.id === st.model.tabs.find((t) => t.id === st.model.activeTabId)?.workspaceId) ?? st.model.workspaces[0]);
-        if (!ws) throw new ControlError("워크스페이스가 없습니다. 먼저 `ws add --path` 로 만드세요.");
+        if (!ws) throw new ControlError(mt("cli.control.noWorkspace"));
         // 탭을 만들기 전에 인자를 전부 검증한다 — 잘못된 호출이 빈 탭을 남기지 않게
         const cwd = params.cwd !== undefined ? this.requireString(params, "cwd") : undefined;
-        if (cwd && !cwd.startsWith("/")) throw new ControlError("--cwd 는 절대 경로여야 합니다.");
+        if (cwd && !cwd.startsWith("/")) throw new ControlError(mt("cli.control.cwdAbsolute"));
         const patch: Parameters<ControlDeps["configure"]>[1] = {};
         if (cwd) patch.cwd = cwd;
         const provider = params.provider !== undefined ? this.requireString(params, "provider") : undefined;
         if (provider) {
-          if (provider !== "claude" && provider !== "codex") throw new ControlError("--provider 는 claude 또는 codex.");
+          if (provider !== "claude" && provider !== "codex") throw new ControlError(mt("cli.control.providerInvalid"));
           patch.provider = provider;
         }
         const policy = params.policy !== undefined ? this.requireString(params, "policy") : undefined;
         if (policy) {
-          if (!["ask", "auto_edit", "full"].includes(policy)) throw new ControlError("--policy 는 ask, auto_edit, full 중 하나.");
+          if (!["ask", "auto_edit", "full"].includes(policy)) throw new ControlError(mt("cli.control.policyInvalid"));
           patch.policy = policy as PermissionPolicy;
         }
         const model = params.model !== undefined ? this.requireString(params, "model") : undefined;
@@ -413,12 +418,12 @@ export class ControlServer {
         const title = params.title !== undefined ? this.requireString(params, "title") : undefined;
         const prompt = params.prompt !== undefined ? this.requireString(params, "prompt") : undefined;
         // 프롬프트를 보내려면 작업 경로가 있어야 한다: --cwd 나 워크스페이스 기본 경로. 없으면 만들기 전에 거절.
-        if (prompt && !cwd && !ws.path) throw new ControlError("프롬프트를 보내려면 작업 경로가 필요합니다. --cwd 를 주거나 기본 경로가 있는 워크스페이스를 고르세요.");
+        if (prompt && !cwd && !ws.path) throw new ControlError(mt("cli.control.promptNeedsCwd"));
         if (cwd) this.deps.approveRoot(cwd);
         // createTab 은 새 탭을 활성화한다 — --activate 가 아니면 보고 있던 탭으로 되돌린다(사람의 화면을 빼앗지 않게)
         const prevActive = st.model.activeTabId;
         const tabId = this.deps.createTab(ws.id);
-        if (!tabId) throw new ControlError("탭을 만들지 못했습니다.");
+        if (!tabId) throw new ControlError(mt("cli.control.tabCreateFailed"));
         if (Object.keys(patch).length > 0) this.deps.configure(tabId, patch);
         if (title) this.deps.renameTab(tabId, title);
         if (params.activate === true) this.deps.activateTab(tabId);
@@ -426,7 +431,7 @@ export class ControlServer {
         let sent: ChatSendResult | null = null;
         if (prompt) {
           sent = await this.deps.send(tabId, prompt);
-          if (!sent.ok) throw new ControlError(`탭은 만들었지만 프롬프트를 보내지 못했습니다: ${sent.error}`, "send_failed", { tabId });
+          if (!sent.ok) throw new ControlError(mt("cli.control.tabCreatedSendFailed", { detail: sent.error }), "send_failed", { tabId });
         }
         const tab = this.deps.state().model.tabs.find((t) => t.id === tabId)!;
         return { tab: this.tabInfo(tab), ...(sent ? { send: sent } : {}) };
@@ -479,7 +484,7 @@ export class ControlServer {
         if (params.commands !== undefined) {
           // 명시했는데 모양이 틀리면 저장된 명령으로 대체하지 않고 거절
           if (!Array.isArray(params.commands) || params.commands.length === 0 || !params.commands.every((c) => typeof c === "string" && c.trim().length > 0))
-            throw new ControlError("commands 는 비어 있지 않은 문자열 배열이어야 합니다.");
+            throw new ControlError(mt("cli.control.commandsInvalid"));
           commands = params.commands as string[];
         }
         const since = this.deps.events(tab.id).length;
@@ -495,7 +500,7 @@ export class ControlServer {
         const tab = this.resolveTab(params.tab);
         const prompt = this.requireString(params, "prompt");
         const providers = Array.isArray(params.providers) ? params.providers : Array.isArray(params.variants) ? params.variants : undefined;
-        if (!providers) throw new ControlError("providers 가 필요합니다(예: [\"claude\",\"codex\"]).");
+        if (!providers) throw new ControlError(mt("cli.control.providersRequired"));
         const since = this.deps.events(tab.id).length;
         const r = await this.deps.fanout(tab.id, { prompt, variants: providers.map((p) => (typeof p === "string" ? { provider: p as Provider } : (p as { provider: Provider; model?: string }))), ...(params.policy !== undefined ? { policy: params.policy as PermissionPolicy } : {}) });
         if (!r.ok) throw new ControlError(r.error, "fanout_failed");
@@ -512,14 +517,14 @@ export class ControlServer {
       case "file.open": {
         const tab = this.resolveTab(params.tab);
         const path = this.requireString(params, "path");
-        if (!path.startsWith("/")) throw new ControlError("--path 는 절대 경로여야 합니다.");
+        if (!path.startsWith("/")) throw new ControlError(mt("cli.control.pathAbsolute"));
         this.deps.openFile(tab.id, path, num(params.line));
         return { tab: tab.id, path };
       }
       case "browser.open": {
         const tab = this.resolveTab(params.tab);
         const url = this.requireString(params, "url");
-        if (!/^https?:\/\//i.test(url)) throw new ControlError("--url 은 http(s) 주소여야 합니다.");
+        if (!/^https?:\/\//i.test(url)) throw new ControlError(mt("cli.control.urlInvalid"));
         this.deps.openBrowser(tab.id, url);
         return { tab: tab.id, url };
       }
@@ -532,8 +537,8 @@ export class ControlServer {
         const tab = this.resolveTab(params.tab);
         const selector = params.selector !== undefined ? this.requireString(params, "selector") : undefined;
         const text = params.text !== undefined ? this.requireString(params, "text") : undefined;
-        if (!selector && !text) throw new ControlError("--selector 나 --text 중 하나가 필요합니다.");
-        const r = await this.deps.runInBrowser(tab.id, clickScript({ selector, text }));
+        if (!selector && !text) throw new ControlError(mt("cli.control.selectorOrText"));
+        const r = await this.deps.runInBrowser(tab.id, clickScript(mt, { selector, text }));
         return { tab: tab.id, ...r };
       }
       case "browser.fill": {
@@ -541,31 +546,31 @@ export class ControlServer {
         const selector = this.requireString(params, "selector");
         // 빈 문자열은 "지우기" 라는 뜻이므로 requireString 을 쓰지 않는다(str 은 공백을 undefined 로 만든다).
         const value = typeof params.value === "string" ? params.value : "";
-        const r = await this.deps.runInBrowser(tab.id, fillScript(selector, value));
+        const r = await this.deps.runInBrowser(tab.id, fillScript(mt, selector, value));
         return { tab: tab.id, ...r };
       }
       case "skills.get": {
         const name = params.name !== undefined ? this.requireString(params, "name") : "atelier-cli";
         const text = this.deps.guide(name);
-        if (!text) throw new ControlError(`모르는 가이드: ${name}`, "not_found");
+        if (!text) throw new ControlError(mt("cli.control.unknownGuide", { name }), "not_found");
         return { name, text };
       }
       default:
-        throw new ControlError(`모르는 명령: ${method}`, "unknown_method");
+        throw new ControlError(mt("cli.control.unknownMethod", { method }), "unknown_method");
     }
   }
 
   /** 값이 있는 문자열 인자. 플래그만 있고 값이 없으면(true) 뚜렷하게 거절한다 — `--tab` 만 쓰고 활성 탭을 닫는 사고를 막는다. */
   private requireString(params: Params, key: string): string {
     const s = str(params[key]);
-    if (!s) throw new ControlError(`--${key} 값이 필요합니다.`);
+    if (!s) throw new ControlError(mt("cli.control.valueRequired", { key }));
     return s;
   }
 
   /** orch.* — 오케스트레이션. 코디네이터 명령은 --run/--key, 워커 명령은 --run/--dispatch/--capability(preamble 값). */
   private async dispatchOrch(cmd: string, p: Params, signal?: AbortSignal): Promise<Json> {
     const orch = this.deps.orchestrator?.();
-    if (!orch) throw new ControlError("이 앱은 오케스트레이션을 지원하지 않습니다.", "unsupported");
+    if (!orch) throw new ControlError(mt("cli.control.orchUnsupported"), "unsupported");
     const runId = str(p.run);
     const key = str(p.key);
     const strList = (v: unknown): string[] | undefined => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : typeof v === "string" && v.trim() ? v.split(",").map((s) => s.trim()).filter(Boolean) : undefined);
@@ -575,7 +580,7 @@ export class ControlServer {
     const actor = dispatchId ? ({ kind: "dispatch", dispatchId } as const) : ({ kind: "tab", tabId: str(p.coordinatorTab) ?? "cli" } as const);
     const coordActor = { kind: "tab", tabId: str(p.coordinatorTab) ?? "cli" } as const;
     const needRun = () => {
-      if (!runId) throw new ControlError("--run <id> 가 필요합니다.");
+      if (!runId) throw new ControlError(mt("cli.control.runRequired"));
       return runId;
     };
     switch (cmd) {
@@ -585,7 +590,9 @@ export class ControlServer {
         const c = str(p.coordinator);
         if (c) coordinatorTabId = c === "active" ? this.deps.state().model.activeTabId : this.resolveTab(c).id;
         const r = orch.runCreate({ objective, coordinatorTabId });
-        return { run: r.run, coordinatorKey: r.coordinatorKey, note: coordinatorTabId ? "이 탭이 코디네이터입니다. --key 를 모든 코디네이터 명령에 붙이세요." : "사람이 코디네이터입니다. 앱의 오케스트레이션 패널에서 질문에 답하고 보고를 확인합니다." };
+        // i18n-ignore: prompt
+        const tabNote = "이 탭이 코디네이터입니다. --key 를 모든 코디네이터 명령에 붙이세요.";
+        return { run: r.run, coordinatorKey: r.coordinatorKey, note: coordinatorTabId ? tabNote : mt("cli.orch.runNoteHuman") };
       }
       case "run-list":
         return { runs: orch.list().map((s) => ({ id: s.run.id, objective: s.run.objective, status: s.run.status, coordinator: s.run.coordinator.kind, createdAt: s.run.createdAt, summary: orch.cardView(s.run.id) })) };
@@ -607,9 +614,9 @@ export class ControlServer {
         return { worker: await orch.workerCleanup({ runId: needRun(), actor: coordActor, key, dispatchId: this.requireString(p, "dispatch") }) };
       case "worker-start": {
         const provider = str(p.agent) ?? str(p.provider) ?? "claude";
-        if (provider !== "claude" && provider !== "codex") throw new ControlError("--agent 는 claude 또는 codex 입니다.");
+        if (provider !== "claude" && provider !== "codex") throw new ControlError(mt("cli.control.agentInvalid"));
         const policy = str(p.policy);
-        if (policy !== undefined && policy !== "ask" && policy !== "auto_edit" && policy !== "full") throw new ControlError("--policy 는 ask · auto_edit · full 중 하나입니다.");
+        if (policy !== undefined && policy !== "ask" && policy !== "auto_edit" && policy !== "full") throw new ControlError(mt("cli.control.agentPolicyInvalid"));
         const wt = p.worktree;
         const worktree = wt === true || wt === "true" || wt === "new";
         const terminal = str(p.terminal);
@@ -638,7 +645,7 @@ export class ControlServer {
         // 워커의 --ack 는 seq 숫자, 코디네이터의 --ack 는 Delivery id
         return orch.check({ runId: needRun(), actor, key, dispatchId, capability: str(p.capability), wait: p.wait === true, types: strList(p.types), ack: dispatchId ? undefined : str(p.ack), ackSeq: dispatchId ? num(p.ack) : undefined, peek: p.peek === true, timeoutMs: num(p.timeoutMs), signal });
       default:
-        throw new ControlError(`모르는 orch 명령: ${cmd}`, "unknown_command");
+        throw new ControlError(mt("cli.control.unknownOrch", { cmd }), "unknown_command");
     }
   }
 
@@ -699,12 +706,12 @@ export class ControlServer {
   /** 선택자: 생략하면 활성 탭. "active" · 탭 id · 정확한 제목 · 유일한 제목 접두(대소문자 무시). 열린 탭만 본다. 값 없는 플래그는 거절. */
   private resolveTab(sel: unknown): TabMeta {
     const st = this.deps.state();
-    if (sel !== undefined && typeof sel !== "string") throw new ControlError("--tab 값이 필요합니다(active · 탭 id · 제목).");
+    if (sel !== undefined && typeof sel !== "string") throw new ControlError(mt("cli.control.tabValueRequired"));
     const key = str(sel) ?? "active";
     const open = st.model.tabs.filter((t) => t.open);
     if (key === "active") {
       const t = open.find((x) => x.id === st.model.activeTabId);
-      if (!t) throw new ControlError("활성 탭이 없습니다.", "not_found");
+      if (!t) throw new ControlError(mt("cli.control.noActiveTab"), "not_found");
       return t;
     }
     const byId = open.find((t) => t.id === key);
@@ -714,8 +721,8 @@ export class ControlServer {
     if (exact.length === 1) return exact[0];
     const pool = exact.length > 1 ? exact : open.filter((t) => tabTitle(t).toLowerCase().startsWith(lower));
     if (pool.length === 1) return pool[0];
-    if (pool.length > 1) throw new ControlError(`탭 선택자가 여러 개에 맞습니다: ${pool.map((t) => `${tabTitle(t)} (${t.id})`).join(", ")}`, "ambiguous", { candidates: pool.map((t) => ({ id: t.id, title: tabTitle(t) })) });
-    throw new ControlError(`탭을 찾지 못했습니다: ${key}`, "not_found");
+    if (pool.length > 1) throw new ControlError(mt("cli.control.tabAmbiguous", { candidates: pool.map((t) => `${tabTitle(t)} (${t.id})`).join(", ") }), "ambiguous", { candidates: pool.map((t) => ({ id: t.id, title: tabTitle(t) })) });
+    throw new ControlError(mt("cli.control.tabNotFound", { key }), "not_found");
   }
 
   /** 워크스페이스 선택자: id → 정확한 경로 → 이름(대소문자 무시). 같은 이름이 여럿이면 후보를 돌려주며 거절. */
@@ -726,21 +733,21 @@ export class ControlServer {
       new Intl.DateTimeFormat("en-US", { timeZone: tz });
       return tz;
     } catch {
-      throw new ControlError(`시간대를 알 수 없습니다: ${tz}`);
+      throw new ControlError(mt("cli.control.timezoneUnknown", { tz }));
     }
   }
 
   /** 유예 상한. 훑는 창이 12시간이라 그보다 큰 값을 받으면 지킬 수 없는 약속이 된다. */
   private requireGrace(params: Params): number {
     const n = Number(params.grace);
-    if (!Number.isFinite(n) || n < 0) throw new ControlError("--grace 는 0 이상의 분입니다.");
-    if (n > 720) throw new ControlError("--grace 는 720분(12시간)까지입니다.");
+    if (!Number.isFinite(n) || n < 0) throw new ControlError(mt("cli.control.graceMin"));
+    if (n > 720) throw new ControlError(mt("cli.control.graceMax"));
     return Math.round(n);
   }
 
   private requireSchedules() {
     const api = this.deps.schedules?.();
-    if (!api) throw new ControlError("이 빌드에는 예약 기능이 없습니다.");
+    if (!api) throw new ControlError(mt("cli.control.noSchedules"));
     return api;
   }
 
@@ -752,8 +759,8 @@ export class ControlServer {
     if (byPath) return byPath;
     const byName = st.model.workspaces.filter((x) => x.name.toLowerCase() === sel.toLowerCase());
     if (byName.length === 1) return byName[0];
-    if (byName.length > 1) throw new ControlError(`같은 이름의 워크스페이스가 여러 개입니다. id 나 경로로 고르세요: ${byName.map((w) => `${w.id} (${w.path || "경로 없음"})`).join(", ")}`, "ambiguous", { candidates: byName.map((w) => ({ id: w.id, name: w.name, path: w.path || null })) });
-    throw new ControlError(`워크스페이스를 찾지 못했습니다: ${sel}`, "not_found");
+    if (byName.length > 1) throw new ControlError(mt("cli.control.workspaceAmbiguous", { candidates: byName.map((w) => `${w.id} (${w.path || mt("cli.control.noPath")})`).join(", ") }), "ambiguous", { candidates: byName.map((w) => ({ id: w.id, name: w.name, path: w.path || null })) });
+    throw new ControlError(mt("cli.control.workspaceNotFound", { sel }), "not_found");
   }
 
   private settled(tabId: string): { done: boolean; status: SessionStatus } {

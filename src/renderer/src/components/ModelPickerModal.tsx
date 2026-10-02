@@ -28,7 +28,7 @@ export function ModelPickerModal({
     };
   }, [provider]);
   const { models, source } = useModels(provider);
-  const options = modelOptions(models, current, defaultModel).map((o) => (o.description ? { ...o, label: `${o.label} — ${o.description}` } : o));
+  const options = modelOptions(t, models, current, defaultModel).map((o) => (o.description ? { ...o, label: `${o.label} — ${o.description}` } : o));
   void source;
   const known = options.some((o) => o.id === (current ?? ""));
   const [custom, setCustom] = useState(known ? "" : (current ?? ""));

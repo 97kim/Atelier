@@ -2,6 +2,7 @@ import type { toolCard as ko } from "../ko/toolCard";
 import type { DeepPartial } from "../types";
 
 export const toolCard: DeepPartial<typeof ko> = {
+  permissionTool: "Permissions",
   state: {
     partial: "Preparing input",
     waiting_permission: "Awaiting permission",

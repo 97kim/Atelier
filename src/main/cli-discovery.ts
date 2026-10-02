@@ -21,6 +21,7 @@
 import { execFile } from "child_process";
 import fs from "fs";
 import path from "path";
+import { mt } from "./i18n";
 
 // ===== Public Types =====
 
@@ -272,21 +273,21 @@ class FileBasedUserOverrideStore implements UserOverrideStore {
         return {
           ok: false,
           reason: "permission_denied",
-          message: `권한 거부: ${this.filePath}에 쓸 수 없습니다.`,
+          message: mt("session.error.cli.permissionDenied", { path: this.filePath }),
         };
       }
       if (code === "ENOSPC") {
         return {
           ok: false,
           reason: "disk_full",
-          message: "디스크가 가득 찼습니다.",
+          message: mt("session.error.cli.diskFull"),
         };
       }
       if (code === "EROFS") {
         return {
           ok: false,
           reason: "readonly_fs",
-          message: "읽기 전용 파일시스템입니다.",
+          message: mt("session.error.cli.readonlyFs"),
         };
       }
       return {
@@ -294,8 +295,8 @@ class FileBasedUserOverrideStore implements UserOverrideStore {
         reason: "unknown",
         message:
           e instanceof Error
-            ? `저장 실패: ${e.message}`
-            : "알 수 없는 이유로 저장에 실패했습니다.",
+            ? mt("session.error.cli.saveFailed", { detail: e.message })
+            : mt("session.error.cli.saveFailedUnknown"),
       };
     }
   }
@@ -324,6 +325,7 @@ class FileBasedUserOverrideStore implements UserOverrideStore {
         return parsed as Record<string, string>;
       }
       // valid JSON이지만 객체 아님 — 손상으로 간주
+      // i18n-ignore: log
       throw new Error("override JSON이 객체 형태가 아닙니다.");
     } catch (e) {
       const backup = `${this.filePath}.broken-${Date.now()}`;
@@ -394,7 +396,7 @@ class DefaultCliDiscovery implements CliDiscovery {
             installed: false,
             path: null,
             source: "override",
-            error: `사용자 지정 경로 ${override}이(가) --version 응답 없음`,
+            error: mt("session.error.cli.overrideNoResponse", { path: override }),
           };
       this.cache.set(provider, status);
       return status;
@@ -421,7 +423,7 @@ class DefaultCliDiscovery implements CliDiscovery {
         installed: false,
         path: null,
         source: "auto",
-        error: `${command} CLI를 PATH 또는 알려진 설치 위치에서 찾지 못했습니다.`,
+        error: mt("session.error.cli.notFound", { command }),
       };
       this.cache.set(provider, status);
       return status;
@@ -445,12 +447,14 @@ class DefaultCliDiscovery implements CliDiscovery {
 
     // 모든 후보 verify 실패
     const preview = failed.slice(0, 3).join(", ");
-    const more = failed.length > 3 ? ` 외 ${failed.length - 3}개` : "";
     const status: CliStatus = {
       installed: false,
       path: null,
       source: "auto",
-      error: `${failed.length}개 후보(${preview}${more}) 모두 --version 응답이 없습니다.`,
+      error:
+        failed.length > 3
+          ? mt("session.error.cli.noResponseMore", { total: failed.length, preview, more: failed.length - 3 })
+          : mt("session.error.cli.noResponse", { count: failed.length, preview }),
     };
     this.cache.set(provider, status);
     return status;
@@ -475,7 +479,7 @@ class DefaultCliDiscovery implements CliDiscovery {
         isFile = false;
       }
       if (!isFile) {
-        return { ok: false, reason: "not_found", message: `실행 파일이 없습니다: ${binPath}` };
+        return { ok: false, reason: "not_found", message: mt("session.error.cli.noExecutable", { path: binPath }) };
       }
     }
     const result = this.userOverride.set(provider, binPath);

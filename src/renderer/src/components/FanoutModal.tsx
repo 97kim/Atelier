@@ -32,7 +32,7 @@ function VariantModelSelect({ provider, value, onChange }: { provider: Provider;
       data-fanout-model
       data-models-source={source}
     >
-      {modelOptions(models, value, defaultModel).map((o) => (
+      {modelOptions(t, models, value, defaultModel).map((o) => (
         <option key={o.id} value={o.id} title={o.description}>
           {o.label}
         </option>

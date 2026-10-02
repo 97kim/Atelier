@@ -144,7 +144,7 @@ export function ProviderSwitchModal({
                   className="mono rounded-md border border-line bg-panel px-2.5 py-1.5 disabled:opacity-50"
                   title={selected ? "" : t("nav.providerSwitch.pickAgentFirst")}
                 >
-                  {modelOptions(targetModels, model, status[selected ?? current]?.defaultModel).map((m) => (
+                  {modelOptions(t, targetModels, model, status[selected ?? current]?.defaultModel).map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.label}
                     </option>
