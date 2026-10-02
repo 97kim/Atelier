@@ -5,6 +5,18 @@ export const settings = {
     description: "화면과 알림, 브라우저, Claude·Codex의 실행 방식을 설정합니다.",
   },
   update: {
+    phase: {
+      checking: "확인 중…",
+      downloading: "내려받는 중…",
+      downloadingPercent: "내려받는 중 {{percent}}%",
+      installing: "설치 중…",
+    },
+    sidebarRun: "v{{version}} 업데이트",
+    sidebarRunTitle: "새 버전({{version}})으로 업데이트합니다. 끝나면 다시 시작을 눌러 주세요.",
+    sidebarAvailable: "새 버전 v{{version}}",
+    sidebarAvailableTitle: "새 버전이 있습니다. 릴리즈 페이지에서 DMG를 받아 주세요.",
+    sidebarFailed: "업데이트 실패",
+    sidebarFailedTitle: "업데이트하지 못했습니다. 눌러서 설정에서 내용을 확인하세요.",
     title: "업데이트",
     description: "GitHub에 올라온 최신 버전과 비교합니다. Homebrew로 설치했다면 여기서 바로 업데이트할 수 있습니다.",
     currentVersion: "현재 버전",

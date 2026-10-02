@@ -30,6 +30,7 @@ import { ProviderLogo } from "../components/ProviderLogo";
 import { shorten } from "../components/ContextPanel";
 import { getLinkOpenMode, setLinkOpenMode, type LinkOpenMode } from "../components/Markdown";
 import { useSnippets } from "../hooks/useSnippets";
+import { updatePhaseLabel, useUpdateStatus } from "../hooks/useUpdate";
 import { snippetSummary, type SnippetDto } from "@shared/snippets";
 
 export type SettingsSection = "general" | "cli" | "mcp" | "snippets" | "schedules";
@@ -353,6 +354,7 @@ function UpdateCard() {
   const { t } = useTranslation();
   const [version, setVersion] = useState<string | null>(null);
   const [st, setSt] = useState<UpdateState>({ kind: "idle" });
+  const status = useUpdateStatus();
   /** 진행 중인 업데이트에 붙는다. 이미 도는 중이면 main 이 같은 작업의 결과를 돌려준다. */
   const follow = async (target: string, r?: UpdateCheckDto) => {
     setSt({ kind: "upgrading", target, r });
@@ -364,9 +366,30 @@ function UpdateCard() {
     // 카드는 화면을 옮기면 사라지지만 업데이트는 main 에서 계속된다 — 돌아오면 이어서 보인다
     window.workbench.app.updateStatus().then((u) => {
       if (u.installed) setSt({ kind: "done", version: u.installed });
-      else if (u.running) void follow(u.running);
+      else if (u.running) void follow(u.running, u.check ?? undefined);
+      // 앱이 스스로 확인해 둔 결과가 있으면 그것부터 보여 준다
+      else if (u.error) setSt({ kind: "error", text: u.error, r: u.check ?? undefined });
+      else if (u.check) setSt({ kind: "checked", r: u.check });
     });
   }, []);
+  // 카드가 열려 있는 동안 앱이 스스로 확인한 결과도 반영한다(확인 중이거나 올리는 중이면 건드리지 않는다)
+  const latestCheck = status?.check ?? null;
+  useEffect(() => {
+    if (latestCheck) setSt((cur) => (cur.kind === "idle" || cur.kind === "checked" ? { kind: "checked", r: latestCheck } : cur));
+  }, [latestCheck]);
+  // 사이드바에서 시작한 업데이트도 이 카드가 이어서 보여 준다
+  const runningTarget = status?.running ?? null;
+  useEffect(() => {
+    if (runningTarget) setSt((cur) => (cur.kind === "upgrading" ? cur : { kind: "upgrading", target: runningTarget, r: status?.check ?? undefined }));
+  }, [runningTarget]);
+  useEffect(() => {
+    if (!status || status.running) return;
+    setSt((cur) => {
+      if (cur.kind !== "upgrading") return cur;
+      if (status.installed) return { kind: "done", version: status.installed };
+      return status.error ? { kind: "error", text: status.error, r: cur.r } : cur;
+    });
+  }, [status]);
 
   const check = async () => {
     setSt({ kind: "checking" });
@@ -400,7 +423,11 @@ function UpdateCard() {
             {st.kind === "checking" && t("settings.update.checking")}
             {st.kind === "checked" && (st.r.available ? <span className="text-warn">{t("settings.update.available", { version: st.r.latest })}</span> : <span className="text-ok">{t("settings.update.latest")}</span>)}
             {st.kind === "checked" && st.r.available && !st.r.brew && ` ${t("settings.update.notBrew")}`}
-            {st.kind === "upgrading" && t("settings.update.upgrading", { version: st.target })}
+            {st.kind === "upgrading" && (
+              <span data-update-phase={status?.phase}>
+                {t("settings.update.upgrading", { version: st.target })} <span className="text-accent">{status?.running ? updatePhaseLabel(t, status) : ""}</span>
+              </span>
+            )}
             {st.kind === "done" && <span className="text-ok">{t("settings.update.done", { version: st.version })}</span>}
           </div>
         </div>

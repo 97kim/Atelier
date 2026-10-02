@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { brewUpgrade, caskVersion, runBrew, compareVersions, fetchLatestRelease } from "./app-update";
+import { brewUpgrade, caskVersion, downloadProgress, runBrew, compareVersions, fetchLatestRelease, type UpdateProgress } from "./app-update";
 
 test("버전은 자리마다 숫자로 비교한다", () => {
   assert.ok(compareVersions("0.9.30", "0.9.29") > 0);
@@ -32,7 +32,8 @@ function fakeBrewEnv(installed: string | null): NodeJS.ProcessEnv {
   const list = installed ? `echo "atelier ${installed}"` : "exit 1";
   writeFileSync(join(dir, "brew"), `#!/bin/sh\nif [ "$1" = list ]; then ${list}; fi\nexit 0\n`);
   chmodSync(join(dir, "brew"), 0o755);
-  return { ...process.env, PATH: `${dir}:${process.env.PATH}` };
+  // 캐시도 가짜 폴더로 — 진행률을 재려고 실제 Homebrew 캐시를 읽지 않게
+  return { ...process.env, PATH: `${dir}:${process.env.PATH}`, HOMEBREW_CACHE: join(dir, "cache") };
 }
 
 test("brew upgrade 가 성공해도 설치 버전이 목표에 못 미치면 실패", async () => {
@@ -91,3 +92,44 @@ test("brew 자신이 TERM 을 무시해 close 가 오지 않아도 KILL 로 끝�
 
 test("TERM 을 무시하는 자손이 출력 파이프를 물고 있어도 KILL 로 끝내고 돌려준다", () =>
   assertCleanedUp("set -m\nsh -c 'trap \"\" TERM; exec sleep 30' &\necho $!\nwait"));
+
+test("릴리즈에 붙은 DMG 의 크기를 함께 준다(진행률의 분모)", async () => {
+  const r = await fetchLatestRelease(
+    fakeFetch(200, { tag_name: "v0.9.30", html_url: "u", assets: [{ name: "atelier-0.9.30-arm64.dmg.blockmap", size: 10 }, { name: "atelier-0.9.30-arm64.dmg", size: 143_000_000 }] }),
+  );
+  assert.equal(r.dmgSize, 143_000_000);
+});
+
+test("내려받는 중인 캐시 파일로 단계와 진행률을 정한다", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brew-dl-"));
+  assert.equal(downloadProgress(join(dir, "없는폴더"), "0.9.30", 1000), null);
+  assert.equal(downloadProgress(dir, "0.9.30", 1000), null, "아직 받기 전");
+  // 다른 버전의 파일은 보지 않는다
+  writeFileSync(join(dir, "aaa--atelier-0.9.29-arm64.dmg"), "x");
+  assert.equal(downloadProgress(dir, "0.9.30", 1000), null);
+  const partial = join(dir, "bbb--atelier-0.9.30-arm64.dmg.incomplete");
+  writeFileSync(partial, Buffer.alloc(430));
+  assert.deepEqual(downloadProgress(dir, "0.9.30", 1000), { phase: "downloading", percent: 43 });
+  assert.deepEqual(downloadProgress(dir, "0.9.30"), { phase: "downloading" }, "크기를 모르면 퍼센트 없이");
+  writeFileSync(partial, Buffer.alloc(1000));
+  assert.deepEqual(downloadProgress(dir, "0.9.30", 1000), { phase: "downloading", percent: 99 }, "받는 동안에는 100 을 넘기지 않는다");
+  renameSync(partial, join(dir, "bbb--atelier-0.9.30-arm64.dmg"));
+  assert.deepEqual(downloadProgress(dir, "0.9.30", 1000), { phase: "installing" });
+});
+
+test("업그레이드하는 동안 확인 → 내려받기(%) → 설치 순서로 알린다", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "fake-brew-"));
+  const downloads = join(dir, "cache", "downloads");
+  mkdirSync(downloads, { recursive: true });
+  const f = join(downloads, "ccc--atelier-0.9.30-arm64.dmg");
+  // upgrade: 반쯤 받은 파일을 잠깐 두었다가 다 받은 이름으로 바꾸고 조금 더 머문다(설치)
+  writeFileSync(
+    join(dir, "brew"),
+    `#!/bin/sh\nif [ "$1" = list ]; then echo "atelier 0.9.30"; fi\nif [ "$1" = upgrade ]; then head -c 500 /dev/zero > "${f}.incomplete"; sleep 0.4; mv "${f}.incomplete" "${f}"; sleep 0.4; fi\nexit 0\n`,
+  );
+  chmodSync(join(dir, "brew"), 0o755);
+  const seen: UpdateProgress[] = [];
+  const r = await brewUpgrade({ ...process.env, PATH: `${dir}:${process.env.PATH}`, HOMEBREW_CACHE: join(dir, "cache") }, "0.9.30", { dmgSize: 1000, pollMs: 50, onProgress: (p) => seen.push(p) });
+  assert.deepEqual(r, { ok: true, version: "0.9.30" });
+  assert.deepEqual(seen, [{ phase: "checking" }, { phase: "downloading", percent: 50 }, { phase: "installing" }]);
+});

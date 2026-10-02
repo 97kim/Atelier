@@ -82,7 +82,7 @@ import { ScheduleEngine } from "./schedule-engine";
 import { runPrecheckCommand } from "./precheck";
 import { isScheduleWorkspace, runReason, type Run, type Schedule, type ScheduleTarget } from "@shared/schedules";
 import { createFileLogger, type FileLogger } from "./logger";
-import { brewUpgrade, caskVersion, compareVersions, fetchLatestRelease } from "./app-update";
+import { brewUpgrade, caskVersion, compareVersions, fetchLatestRelease, type UpdateProgress } from "./app-update";
 import { Store } from "./persistence";
 import { RendererState } from "./renderer-state";
 import { claudeHookSettings, shellQuote } from "./transcript-mirror";
@@ -1686,34 +1686,70 @@ function registerIpc() {
   );
   // cask 가 깔려 있어도 지금 띄운 것이 그 앱이어야 한다 — 다른 곳의 빌드에서 누르면 /Applications 의 앱이 바뀐다.
   const fromCask = () => app.isPackaged && /^\/Applications\/Atelier\.app\//.test(realpathSync(process.execPath));
-  // 업데이트 진행·완료는 main 이 들고 있다 — 카드가 화면에서 빠졌다 돌아와도 이어 보이게.
-  let latestSeen: string | null = null;
-  let update: { target: string; job: Promise<UpdateRunResult> } | null = null;
+  // 업데이트 상태는 main 이 들고 있다 — 설정 카드와 사이드바가 같은 것을 보고, 화면을 옮겼다 돌아와도 이어 보이게.
+  let lastCheck: UpdateCheckDto | null = null;
+  let dmgSize: number | undefined;
+  let update: { target: string; job: Promise<UpdateRunResult>; progress: UpdateProgress } | null = null;
   let installed: string | null = null;
-  ipcMain.handle(IPC.appUpdateCheck, async (): Promise<UpdateCheckDto> => {
+  let updateError: string | undefined;
+  const updateStatus = (): UpdateStatusDto => ({
+    running: update?.target ?? null,
+    installed,
+    ...(update ? { phase: update.progress.phase, ...(update.progress.percent !== undefined ? { percent: update.progress.percent } : {}) } : {}),
+    check: lastCheck,
+    ...(updateError ? { error: updateError } : {}),
+  });
+  const announceUpdate = () => sendAll(IPC.appUpdateChanged, updateStatus());
+  const checkUpdate = async (): Promise<UpdateCheckDto> => {
     const current = app.getVersion();
     const [latest, cask] = await Promise.all([fetchLatestRelease(), fromCask() ? caskVersion(await cliDiscovery().buildEnv()) : null]);
-    latestSeen = latest.version;
-    return { current, latest: latest.version, available: compareVersions(latest.version, current) > 0, releaseUrl: latest.url, brew: cask !== null };
-  });
-  ipcMain.handle(IPC.appUpdateStatus, (): UpdateStatusDto => ({ running: update?.target ?? null, installed }));
+    dmgSize = latest.dmgSize;
+    lastCheck = { current, latest: latest.version, available: compareVersions(latest.version, current) > 0, releaseUrl: latest.url, brew: cask !== null };
+    updateError = undefined;
+    announceUpdate();
+    return lastCheck;
+  };
+  ipcMain.handle(IPC.appUpdateCheck, checkUpdate);
+  // 새 버전은 앱이 스스로 알아본다 — 설정에 들어가 확인을 누르지 않아도 사이드바에 보이게. 네트워크가 없으면 조용히 넘어간다.
+  const autoCheck = () => {
+    if (update || installed) return;
+    checkUpdate().catch((e) => console.log(`[update] 자동 확인 실패: ${e instanceof Error ? e.message : String(e)}`));
+  };
+  setTimeout(autoCheck, 10_000);
+  setInterval(autoCheck, 6 * 60 * 60 * 1000);
+  ipcMain.handle(IPC.appUpdateStatus, updateStatus);
   ipcMain.handle(IPC.appUpdateRun, (): Promise<UpdateRunResult> => {
     if (update) return update.job;
     // 진행 상태를 본 뒤 다시 붙기 전에 끝났을 수 있다 — 다시 돌리지 않고 결과를 준다
     if (installed) return Promise.resolve({ ok: true, version: installed });
     if (!fromCask()) return Promise.resolve({ ok: false, error: mt("main.update.caskOnly") });
-    const target = latestSeen;
+    const target = lastCheck?.latest;
     if (!target) return Promise.resolve({ ok: false, error: mt("main.update.checkFirst") });
     const job = cliDiscovery()
       .buildEnv()
-      .then((env) => brewUpgrade(env, target))
+      .then((env) =>
+        brewUpgrade(env, target, {
+          dmgSize,
+          onProgress: (p) => {
+            if (!update) return;
+            update.progress = p;
+            announceUpdate();
+          },
+        }),
+      )
       .then((r) => {
         console.log(r.ok ? `[update] brew upgrade 완료 (${r.version})` : `[update] ${r.error}`);
         if (r.ok) installed = r.version;
+        else updateError = r.error;
         return r;
       })
-      .finally(() => (update = null));
-    update = { target, job };
+      .finally(() => {
+        update = null;
+        announceUpdate();
+      });
+    updateError = undefined;
+    update = { target, job, progress: { phase: "checking" } };
+    announceUpdate();
     return job;
   });
   ipcMain.handle(IPC.appRelaunch, () => {

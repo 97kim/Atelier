@@ -12,6 +12,7 @@ import {
   type RendererErrorDto,
   type ShortcutName,
   type ControlOpenDto,
+  type UpdateStatusDto,
   type UsageSettingsDto,
   type WorkspaceStateDto,
   type FanoutStartDto,
@@ -29,6 +30,11 @@ const api: WorkbenchApi = {
     checkUpdate: () => ipcRenderer.invoke(IPC.appUpdateCheck),
     runUpdate: () => ipcRenderer.invoke(IPC.appUpdateRun),
     updateStatus: () => ipcRenderer.invoke(IPC.appUpdateStatus),
+    onUpdateChanged: (listener) => {
+      const handler = (_e: IpcRendererEvent, status: UpdateStatusDto) => listener(status);
+      ipcRenderer.on(IPC.appUpdateChanged, handler);
+      return () => ipcRenderer.removeListener(IPC.appUpdateChanged, handler);
+    },
     relaunch: () => ipcRenderer.invoke(IPC.appRelaunch),
     models: (provider: Provider, opts?: { force?: boolean }) => ipcRenderer.invoke(IPC.appModels, provider, opts),
     onShortcut: (listener) => {

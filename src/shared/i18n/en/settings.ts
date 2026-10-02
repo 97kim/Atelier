@@ -7,6 +7,18 @@ export const settings: DeepPartial<typeof ko> = {
     description: "Appearance, notifications, the browser, and how Claude and Codex run.",
   },
   update: {
+    phase: {
+      checking: "Checking…",
+      downloading: "Downloading…",
+      downloadingPercent: "Downloading {{percent}}%",
+      installing: "Installing…",
+    },
+    sidebarRun: "Update to v{{version}}",
+    sidebarRunTitle: "Update to the new version ({{version}}). When it finishes, click Restart.",
+    sidebarAvailable: "New version v{{version}}",
+    sidebarAvailableTitle: "A new version is available. Download the DMG from the release page.",
+    sidebarFailed: "Update failed",
+    sidebarFailedTitle: "The update didn't finish. Click to see the details in Settings.",
     title: "Updates",
     description: "Compares this app with the latest release on GitHub. If you installed with Homebrew, you can update right here.",
     currentVersion: "Current version",

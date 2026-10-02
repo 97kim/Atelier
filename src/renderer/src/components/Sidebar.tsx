@@ -14,6 +14,7 @@ import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
 import { Logo } from "./Logo";
 import { SidebarLimits } from "./SidebarLimits";
+import { SidebarUpdate } from "./SidebarUpdate";
 import { attentionLabel, StatusDot } from "./StatusDot";
 
 export type View = "chat" | "usage" | "settings";
@@ -891,9 +892,12 @@ export function Sidebar({
 
       <div className="px-4 py-3">
         <div className="text-[12px] font-medium">{info?.userName ?? ""}</div>
-        <div className="mono text-[10px] text-muted">
-          {t("nav.sidebar.workspaceCount", { count: model.workspaces.length })}{" "}
-          {info ? `· v${info.version}` : ""}
+        <div className="mono flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted">
+          <span>
+            {t("nav.sidebar.workspaceCount", { count: model.workspaces.length })}{" "}
+            {info ? `· v${info.version}` : ""}
+          </span>
+          <SidebarUpdate onOpenSettings={() => onView("settings")} />
         </div>
       </div>
     </aside>

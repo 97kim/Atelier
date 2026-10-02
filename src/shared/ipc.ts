@@ -82,10 +82,20 @@ export interface UpdateCheckDto {
 
 export type UpdateRunResult = { ok: true; version: string } | { ok: false; error: string };
 
+/** 업데이트가 지금 하는 일. downloading 만 진행률을 낼 수 있다. */
+export type UpdatePhase = "checking" | "downloading" | "installing";
+
 /** main 이 들고 있는 업데이트 상태. running 은 올리는 중인 목표 버전, installed 는 이번 실행에서 brew 로 설치를 마친 버전. */
 export interface UpdateStatusDto {
   running: string | null;
   installed: string | null;
+  /** running 일 때의 단계와, 내려받는 중이면 진행률(0~100, 크기를 모르면 없음). */
+  phase?: UpdatePhase;
+  percent?: number;
+  /** 마지막으로 확인한 결과. 앱이 스스로 확인한 것도 포함한다(시작 직후와 몇 시간마다). 아직 확인 전이면 null. */
+  check: UpdateCheckDto | null;
+  /** 마지막 업데이트 시도가 실패했으면 그 내용. 다시 시도하거나 확인하면 지운다. */
+  error?: string;
 }
 
 /** 예열 대상: 보고 있는 탭(활성화·설정 변경·시작 때 프로세스를 미리 띄움) 또는 끔. */
@@ -168,6 +178,7 @@ export const IPC = {
   appSettingsGet: "app:settings-get",
   appSettingsSet: "app:settings-set",
   appSettingsChanged: "app:settings-changed",
+  appUpdateChanged: "app:update-changed",
   appUpdateCheck: "app:update-check",
   appUpdateRun: "app:update-run",
   appUpdateStatus: "app:update-status",
@@ -755,6 +766,8 @@ export interface WorkbenchApi {
     /** brew 로 cask 를 마지막으로 확인한 최신 버전까지 올린다. 이미 도는 중이면 그 결과를 기다린다. 끝나도 지금 앱은 옛 버전이니 relaunch 로 다시 시작해야 한다. */
     runUpdate(): Promise<UpdateRunResult>;
     updateStatus(): Promise<UpdateStatusDto>;
+    /** 업데이트 상태가 바뀔 때(새 버전 발견·단계·진행률·완료·실패). */
+    onUpdateChanged(listener: (status: UpdateStatusDto) => void): () => void;
     relaunch(): Promise<void>;
     /** provider 의 모델 목록(CLI 에 물어 온 것, 실패하면 정적 폴백). force 면 캐시를 무시한다. */
     models(provider: Provider, opts?: { force?: boolean }): Promise<{ models: ModelOptionDto[]; source: "cli" | "static" }>;

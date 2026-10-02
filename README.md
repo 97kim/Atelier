@@ -170,7 +170,7 @@ brew install --cask atelier
 
 - `brew tap` adds the repository that hosts the Atelier cask to Homebrew.
 - `brew trust` is a step Homebrew 7 and later requires. For a cask outside the official list, you have to tell Homebrew once that you trust it. The command above trusts only Atelier, not the whole tap.
-- Get new versions in the app under **Settings → General → Updates**, or in a terminal with `brew update && brew upgrade --cask atelier`. Running `brew upgrade` alone doesn't refresh the tap, so it won't find the new version.
+- When a new version is out, an update button appears next to the version at the bottom left of the sidebar. Click it to see the progress, then restart when it finishes. You can also update under **Settings → General → Updates**, or in a terminal with `brew update && brew upgrade --cask atelier`. Running `brew upgrade` alone doesn't refresh the tap, so it won't find the new version.
 
 **First launch**: The app isn't signed or notarized, so macOS blocks it once. Try opening the app, and when the block notice appears, go to **System Settings → Privacy & Security** and click "Open Anyway". Once you allow it, the permission carries over to later updates.
 

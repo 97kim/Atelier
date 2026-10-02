@@ -5,6 +5,10 @@
 // 허용을 이어받으므로 업그레이드 뒤에도 Gatekeeper 경고가 다시 뜨지 않는다.
 
 import { execFileSync, spawn } from "node:child_process";
+import fs from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { UpdatePhase } from "@shared/ipc";
 import { mt } from "./i18n";
 
 export const RELEASE_REPO = "97kim/Atelier";
@@ -36,18 +40,27 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-export async function fetchLatestRelease(fetchImpl: typeof fetch = fetch): Promise<{ version: string; url: string }> {
+export async function fetchLatestRelease(fetchImpl: typeof fetch = fetch): Promise<{ version: string; url: string; dmgSize?: number }> {
   const res = await fetchImpl(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, {
     headers: { Accept: "application/vnd.github+json", "User-Agent": "atelier" },
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(mt("main.update.githubStatus", { status: res.status }));
-  const body = (await res.json()) as { tag_name?: unknown; html_url?: unknown };
+  const body = (await res.json()) as { tag_name?: unknown; html_url?: unknown; assets?: unknown };
   if (typeof body.tag_name !== "string" || parts(body.tag_name).length === 0) throw new Error(mt("main.update.versionUnreadable"));
   return {
     version: body.tag_name.replace(/^v/i, ""),
     url: typeof body.html_url === "string" ? body.html_url : `https://github.com/${RELEASE_REPO}/releases/latest`,
+    ...(dmgSizeOf(body.assets) ? { dmgSize: dmgSizeOf(body.assets) } : {}),
   };
+}
+
+/** 릴리즈에 붙은 DMG 의 크기(바이트). 내려받기 진행률의 분모로 쓴다. 못 찾으면 undefined — 그때는 퍼센트 없이 단계만 보인다. */
+function dmgSizeOf(assets: unknown): number | undefined {
+  if (!Array.isArray(assets)) return undefined;
+  for (const a of assets as { name?: unknown; size?: unknown }[])
+    if (typeof a?.name === "string" && a.name.endsWith("-arm64.dmg") && typeof a.size === "number" && a.size > 0) return a.size;
+  return undefined;
 }
 
 function tail(s: string): string {
@@ -147,6 +160,58 @@ async function waitGone(pids: number[], graceMs: number): Promise<void> {
   }
 }
 
+export interface UpdateProgress {
+  phase: UpdatePhase;
+  /** 내려받기 진행률(0~100). 릴리즈의 DMG 크기를 알 때만. */
+  percent?: number;
+}
+
+/** 같은 값을 되풀이해 알리지 않는다(0.5초마다 재지만 화면은 바뀔 때만 다시 그리게). */
+function progressReporter(onProgress?: (p: UpdateProgress) => void): (p: UpdateProgress | null) => void {
+  let last = "";
+  return (p) => {
+    if (!p || !onProgress) return;
+    const key = `${p.phase}:${p.percent ?? ""}`;
+    if (key === last) return;
+    last = key;
+    onProgress(p);
+  };
+}
+
+/** Homebrew 의 캐시 폴더. HOMEBREW_CACHE 가 먼저고, 없으면 brew 에 묻고, 그것도 안 되면 기본 위치. */
+async function brewCacheDir(env: NodeJS.ProcessEnv): Promise<string> {
+  if (env.HOMEBREW_CACHE?.trim()) return env.HOMEBREW_CACHE.trim();
+  const r = await runBrew(["--cache"], env, 15_000);
+  const dir = r.code === 0 ? r.out.trim().split("\n").pop()?.trim() : "";
+  return dir || join(env.HOME || homedir(), "Library", "Caches", "Homebrew");
+}
+
+/**
+ * 캐시 폴더에서 target 버전의 DMG 를 찾아 단계를 정한다. brew 는 "<해시>--atelier-<버전>-arm64.dmg" 로 받고,
+ * 받는 동안에는 뒤에 ".incomplete" 가 붙는다. 다 받은 파일이 있으면 설치 중이다. 아직 없으면(받기 전) null.
+ */
+export function downloadProgress(downloadsDir: string, target: string, dmgSize?: number): UpdateProgress | null {
+  const done = `--${CASK_NAME}-${target}-arm64.dmg`;
+  let names: string[];
+  try {
+    names = fs.readdirSync(downloadsDir);
+  } catch {
+    return null;
+  }
+  const partial = names.find((n) => n.endsWith(`${done}.incomplete`));
+  if (partial) {
+    if (!dmgSize) return { phase: "downloading" };
+    try {
+      const size = fs.statSync(join(downloadsDir, partial)).size;
+      // 다 받고 이름을 바꾸기 직전에도 100 을 넘기지 않는다
+      return { phase: "downloading", percent: Math.max(0, Math.min(99, Math.floor((size / dmgSize) * 100))) };
+    } catch {
+      return { phase: "downloading" };
+    }
+  }
+  return names.some((n) => n.endsWith(done)) ? { phase: "installing" } : null;
+}
+
 /** cask 로 설치된 버전. brew 가 없거나 cask 로 설치하지 않았으면 null. */
 export async function caskVersion(env: NodeJS.ProcessEnv): Promise<string | null> {
   const r = await runBrew(["list", "--cask", "--versions", CASK_NAME], env, 30_000);
@@ -161,10 +226,24 @@ export async function caskVersion(env: NodeJS.ProcessEnv): Promise<string | null
  * cask 가 이미 최신이면 brew upgrade 는 경고만 내고 0 으로 끝난다 — 릴리즈는 올라왔는데 탭 갱신 전인
  * 구간이 있으므로, 끝난 뒤 설치 버전이 target 에 닿았는지 확인한다.
  */
-export async function brewUpgrade(env: NodeJS.ProcessEnv, target: string): Promise<{ ok: true; version: string } | { ok: false; error: string }> {
+export async function brewUpgrade(
+  env: NodeJS.ProcessEnv,
+  target: string,
+  opts: { dmgSize?: number; onProgress?: (p: UpdateProgress) => void; pollMs?: number } = {},
+): Promise<{ ok: true; version: string } | { ok: false; error: string }> {
+  const report = progressReporter(opts.onProgress);
+  report({ phase: "checking" });
   const update = await runBrew(["update", "--quiet"], env);
   if (update.code !== 0) return { ok: false, error: `${mt("main.update.brewUpdateFailed")}\n${update.out.trim()}` };
-  const upgrade = await runBrew(["upgrade", "--cask", CASK], { ...env, HOMEBREW_NO_AUTO_UPDATE: "1" });
+  // brew 는 파이프로 돌리면 진행률을 내지 않는다 — 내려받는 중인 캐시 파일의 크기를 재서 대신한다.
+  const downloads = join(await brewCacheDir(env), "downloads");
+  const watch = setInterval(() => report(downloadProgress(downloads, target, opts.dmgSize)), opts.pollMs ?? 500);
+  let upgrade: { code: number | null; out: string };
+  try {
+    upgrade = await runBrew(["upgrade", "--cask", CASK], { ...env, HOMEBREW_NO_AUTO_UPDATE: "1" });
+  } finally {
+    clearInterval(watch);
+  }
   if (upgrade.code !== 0) return { ok: false, error: `${mt("main.update.brewUpgradeFailed")}\n${upgrade.out.trim()}` };
   const version = await caskVersion(env);
   if (!version || compareVersions(version, target) < 0)
