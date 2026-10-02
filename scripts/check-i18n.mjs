@@ -41,7 +41,8 @@ function scan(file) {
     ignored.add(l.slice(0, at).trim() === "" ? i + 1 : i);
   });
   const add = (node, value) => {
-    if (!HANGUL.test(value)) return;
+    // 표시용 로케일을 한국어로 고정한 것도 잡는다(문구는 아니지만 영어 화면에 한국어 날짜가 나온다)
+    if (!HANGUL.test(value) && value !== "ko-KR") return;
     const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
     hits.push({ line: line + 1, text: value.replace(/\s+/g, " ").trim().slice(0, 80) });
   };

@@ -104,7 +104,7 @@ export interface ExportMeta {
 
 const TOOL_OUTPUT_MAX = 1500;
 
-function timeOf(ts: number, locale = "ko-KR"): string {
+function timeOf(ts: number, locale?: string): string {
   return new Date(ts).toLocaleString(locale, { hour12: false });
 }
 

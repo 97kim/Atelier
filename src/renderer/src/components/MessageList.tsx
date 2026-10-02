@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { clearReveal, onReveal, pendingReveal } from "../reveal";
 import type { ForkPoint, SessionStatus } from "@shared/chat-events";
+import { intlLocale, type Locale } from "@shared/i18n/locale";
 import { msgText } from "@shared/i18n/msg";
 import type { Provider } from "@shared/ipc";
 import type { Block, ReviewBlock } from "@shared/session-state";
@@ -413,9 +414,10 @@ function Group({
 
   const isUser = group.kind === "user";
   const first = group.blocks[0];
+  const dateLocale = intlLocale(i18n.language as Locale);
   const ts = first.kind === "user" ? first.ts : null;
   const time = ts
-    ? new Date(ts).toLocaleTimeString("ko-KR", {
+    ? new Date(ts).toLocaleTimeString(dateLocale, {
         hour: "2-digit",
         minute: "2-digit",
       })
@@ -424,7 +426,7 @@ function Group({
   // 올려 두면 그 자리에서 날짜로 바뀐다(기본 툴팁은 1초를 기다려야 떠서 그것만으로는 부족하다).
   // 말풍선 아래 오른쪽 끝에 홀로 있는 줄이라, 길어져도 왼쪽으로 늘어날 뿐 다른 것을 밀지 않는다.
   const dated = ts
-    ? new Date(ts).toLocaleString("ko-KR", {
+    ? new Date(ts).toLocaleString(dateLocale, {
         month: "long",
         day: "numeric",
         weekday: "short",
@@ -434,7 +436,7 @@ function Group({
     : null;
   // 연도·초까지 필요하면 조금 머물러 기본 툴팁으로 본다.
   const timeFull = ts
-    ? new Date(ts).toLocaleString("ko-KR", {
+    ? new Date(ts).toLocaleString(dateLocale, {
         year: "numeric",
         month: "long",
         day: "numeric",
