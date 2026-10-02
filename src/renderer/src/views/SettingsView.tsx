@@ -349,60 +349,55 @@ type UpdateState =
   | { kind: "done"; version: string }
   | { kind: "error"; text: string; r?: UpdateCheckDto };
 
-/** GitHub 최신 릴리즈와 비교하고, Homebrew 로 설치한 앱이면 brew 로 올린 뒤 다시 시작한다. */
+/**
+ * GitHub 최신 릴리즈와 비교하고, Homebrew 로 설치한 앱이면 brew 로 올린 뒤 다시 시작한다.
+ * 진행·완료·실패는 main 이 들고 있는 상태에서 그대로 그린다(사이드바와 같은 것을 본다) — 이 카드가 따로 들고 있는 것은
+ * "지금 확인을 눌러 기다리는 중" 과 그 확인이 실패한 내용뿐이다.
+ */
 function UpdateCard() {
   const { t } = useTranslation();
   const [version, setVersion] = useState<string | null>(null);
-  const [st, setSt] = useState<UpdateState>({ kind: "idle" });
   const status = useUpdateStatus();
-  /** 진행 중인 업데이트에 붙는다. 이미 도는 중이면 main 이 같은 작업의 결과를 돌려준다. */
-  const follow = async (target: string, r?: UpdateCheckDto) => {
-    setSt({ kind: "upgrading", target, r });
-    const res = await window.workbench.app.runUpdate().catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
-    setSt(res.ok ? { kind: "done", version: res.version } : { kind: "error", text: res.error, r });
-  };
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
   useEffect(() => {
     window.workbench.app.info().then((i) => setVersion(i.version));
-    // 카드는 화면을 옮기면 사라지지만 업데이트는 main 에서 계속된다 — 돌아오면 이어서 보인다
-    window.workbench.app.updateStatus().then((u) => {
-      if (u.installed) setSt({ kind: "done", version: u.installed });
-      else if (u.running) void follow(u.running, u.check ?? undefined);
-      // 앱이 스스로 확인해 둔 결과가 있으면 그것부터 보여 준다
-      else if (u.error) setSt({ kind: "error", text: u.error, r: u.check ?? undefined });
-      else if (u.check) setSt({ kind: "checked", r: u.check });
-    });
   }, []);
-  // 카드가 열려 있는 동안 앱이 스스로 확인한 결과도 반영한다(확인 중이거나 올리는 중이면 건드리지 않는다)
-  const latestCheck = status?.check ?? null;
-  useEffect(() => {
-    if (latestCheck) setSt((cur) => (cur.kind === "idle" || cur.kind === "checked" ? { kind: "checked", r: latestCheck } : cur));
-  }, [latestCheck]);
-  // 사이드바에서 시작한 업데이트도 이 카드가 이어서 보여 준다
-  const runningTarget = status?.running ?? null;
-  useEffect(() => {
-    if (runningTarget) setSt((cur) => (cur.kind === "upgrading" ? cur : { kind: "upgrading", target: runningTarget, r: status?.check ?? undefined }));
-  }, [runningTarget]);
-  useEffect(() => {
-    if (!status || status.running) return;
-    setSt((cur) => {
-      if (cur.kind !== "upgrading") return cur;
-      if (status.installed) return { kind: "done", version: status.installed };
-      return status.error ? { kind: "error", text: status.error, r: cur.r } : cur;
-    });
-  }, [status]);
+
+  const r = status?.check ?? undefined;
+  const st: UpdateState = status?.installed
+    ? { kind: "done", version: status.installed }
+    : status?.running
+      ? { kind: "upgrading", target: status.running, r }
+      : checking
+        ? { kind: "checking" }
+        : status?.error
+          ? { kind: "error", text: status.error, r }
+          : checkError
+            ? { kind: "error", text: checkError, r }
+            : r
+              ? { kind: "checked", r }
+              : { kind: "idle" };
 
   const check = async () => {
-    setSt({ kind: "checking" });
+    setChecking(true);
+    setCheckError(null);
     try {
-      setSt({ kind: "checked", r: await window.workbench.app.checkUpdate() });
+      await window.workbench.app.checkUpdate();
     } catch (e) {
-      setSt({ kind: "error", text: t("settings.update.checkFailed", { error: e instanceof Error ? e.message : String(e) }) });
+      setCheckError(t("settings.update.checkFailed", { error: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setChecking(false);
     }
+  };
+  // 결과는 상태 알림으로 온다. 실행 자체가 거절되면(예외) 그 내용만 여기서 보인다.
+  const run = () => {
+    setCheckError(null);
+    window.workbench.app.runUpdate().catch((e: unknown) => setCheckError(e instanceof Error ? e.message : String(e)));
   };
   const openRelease = (url: string) => void window.workbench.browser.openExternal(url);
 
   const btn = "shrink-0 rounded-md border border-line px-2.5 py-1 text-[11.5px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40";
-  const r = st.kind === "checked" || st.kind === "upgrading" || st.kind === "error" ? st.r : undefined;
 
   return (
     <div className="mb-4 rounded-lg border border-line bg-panel p-4" data-setting="update">
@@ -441,7 +436,7 @@ function UpdateCard() {
             {t("settings.update.relaunch")}
           </button>
         ) : st.kind === "upgrading" || (r?.available && r.brew) ? (
-          <button onClick={() => r && void follow(r.latest, r)} disabled={st.kind === "upgrading"} className={btn} data-update-run>
+          <button onClick={run} disabled={st.kind === "upgrading"} className={btn} data-update-run>
             {t("settings.update.run")}
           </button>
         ) : (

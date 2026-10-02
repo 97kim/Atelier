@@ -44,6 +44,7 @@ type Menu =
 export function Sidebar({
   view,
   onView,
+  onOpenUpdate,
   ws,
   info,
   onNewTab,
@@ -73,6 +74,8 @@ export function Sidebar({
   onToggleRail: () => void;
   view: View;
   onView: (v: View) => void;
+  /** 설정의 업데이트 카드가 있는 곳(일반)으로. 설정이 다른 섹션에 머물러 있어도 카드가 보이게. */
+  onOpenUpdate: () => void;
   ws: WorkspaceStateDto;
   info: AppInfoDto | null;
   onNewTab: () => void;
@@ -892,13 +895,12 @@ export function Sidebar({
 
       <div className="px-4 py-3">
         <div className="text-[12px] font-medium">{info?.userName ?? ""}</div>
-        <div className="mono flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted">
-          <span>
-            {t("nav.sidebar.workspaceCount", { count: model.workspaces.length })}{" "}
-            {info ? `· v${info.version}` : ""}
-          </span>
-          <SidebarUpdate onOpenSettings={() => onView("settings")} />
+        <div className="mono text-[10px] text-muted">
+          {t("nav.sidebar.workspaceCount", { count: model.workspaces.length })}{" "}
+          {info ? `· v${info.version}` : ""}
         </div>
+        {/* 업데이트 자리는 언제나 버전 아랫줄 — 문구 길이에 따라 줄이 오르내리지 않게 */}
+        <SidebarUpdate onOpenSettings={onOpenUpdate} />
       </div>
     </aside>
   );

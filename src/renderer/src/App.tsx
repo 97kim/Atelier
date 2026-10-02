@@ -355,6 +355,10 @@ export function App() {
         onToggleRail={toggleRail}
         view={view}
         onView={setView}
+        onOpenUpdate={() => {
+          setSettingsSection("general");
+          setView("settings");
+        }}
         ws={ws}
         info={info}
         onNewTab={() => void newTab()}

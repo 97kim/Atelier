@@ -6,8 +6,6 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { UpdatePhase } from "@shared/ipc";
 import { mt } from "./i18n";
 
@@ -178,38 +176,31 @@ function progressReporter(onProgress?: (p: UpdateProgress) => void): (p: UpdateP
   };
 }
 
-/** Homebrew 의 캐시 폴더. HOMEBREW_CACHE 가 먼저고, 없으면 brew 에 묻고, 그것도 안 되면 기본 위치. */
-async function brewCacheDir(env: NodeJS.ProcessEnv): Promise<string> {
-  if (env.HOMEBREW_CACHE?.trim()) return env.HOMEBREW_CACHE.trim();
-  const r = await runBrew(["--cache"], env, 15_000);
-  const dir = r.code === 0 ? r.out.trim().split("\n").pop()?.trim() : "";
-  return dir || join(env.HOME || homedir(), "Library", "Caches", "Homebrew");
+/** cask 가 받을 DMG 의 캐시 경로("…/downloads/<URL 해시>--atelier-<버전>-arm64.dmg"). brew 에 묻는다. 못 구하면 null. */
+async function caskDownloadPath(env: NodeJS.ProcessEnv): Promise<string | null> {
+  const r = await runBrew(["--cache", "--cask", CASK], env, 30_000);
+  const line = r.code === 0 ? r.out.trim().split("\n").pop()?.trim() : "";
+  return line && line.startsWith("/") ? line : null;
+}
+
+/** 캐시 경로의 파일 이름에서 버전을 읽는다. 모양이 다르면 null. */
+export function versionOfDownload(file: string): string | null {
+  return new RegExp(`--${CASK_NAME}-(.+)-arm64\\.dmg$`).exec(file)?.[1] ?? null;
 }
 
 /**
- * 캐시 폴더에서 target 버전의 DMG 를 찾아 단계를 정한다. brew 는 "<해시>--atelier-<버전>-arm64.dmg" 로 받고,
- * 받는 동안에는 뒤에 ".incomplete" 가 붙는다. 다 받은 파일이 있으면 설치 중이다. 아직 없으면(받기 전) null.
+ * 받을 파일의 상태로 단계를 정한다. brew 는 받는 동안 뒤에 ".incomplete" 를 붙여 두었다가 다 받으면 이름을 바꾼다.
+ * 다 받은 파일이 있으면 검증·설치 단계다(이미 받아 둔 파일이면 처음부터 여기다). 아직 없으면(받기 전) null.
+ * 체크섬이 맞지 않으면 brew 가 지우고 다시 받으므로 설치 단계에서 내려받기로 돌아갈 수 있다.
  */
-export function downloadProgress(downloadsDir: string, target: string, dmgSize?: number): UpdateProgress | null {
-  const done = `--${CASK_NAME}-${target}-arm64.dmg`;
-  let names: string[];
+export function downloadProgress(file: string, dmgSize?: number): UpdateProgress | null {
   try {
-    names = fs.readdirSync(downloadsDir);
+    const size = fs.statSync(`${file}.incomplete`).size;
+    // 다 받고 이름을 바꾸기 직전에도 100 을 넘기지 않는다
+    return dmgSize ? { phase: "downloading", percent: Math.max(0, Math.min(99, Math.floor((size / dmgSize) * 100))) } : { phase: "downloading" };
   } catch {
-    return null;
+    return fs.existsSync(file) ? { phase: "installing" } : null;
   }
-  const partial = names.find((n) => n.endsWith(`${done}.incomplete`));
-  if (partial) {
-    if (!dmgSize) return { phase: "downloading" };
-    try {
-      const size = fs.statSync(join(downloadsDir, partial)).size;
-      // 다 받고 이름을 바꾸기 직전에도 100 을 넘기지 않는다
-      return { phase: "downloading", percent: Math.max(0, Math.min(99, Math.floor((size / dmgSize) * 100))) };
-    } catch {
-      return { phase: "downloading" };
-    }
-  }
-  return names.some((n) => n.endsWith(done)) ? { phase: "installing" } : null;
 }
 
 /** cask 로 설치된 버전. brew 가 없거나 cask 로 설치하지 않았으면 null. */
@@ -236,8 +227,12 @@ export async function brewUpgrade(
   const update = await runBrew(["update", "--quiet"], env);
   if (update.code !== 0) return { ok: false, error: `${mt("main.update.brewUpdateFailed")}\n${update.out.trim()}` };
   // brew 는 파이프로 돌리면 진행률을 내지 않는다 — 내려받는 중인 캐시 파일의 크기를 재서 대신한다.
-  const downloads = join(await brewCacheDir(env), "downloads");
-  const watch = setInterval(() => report(downloadProgress(downloads, target, opts.dmgSize)), opts.pollMs ?? 500);
+  // 탭을 갱신한 뒤라 brew 가 받을 버전이 확인한 버전(target)보다 새것일 수 있다. brew 가 알려 주는 실제 경로의 파일만 보고,
+  // 버전이 다르면 크기(분모)가 맞지 않으니 퍼센트는 내지 않는다.
+  const file = await caskDownloadPath(env);
+  const size = file && versionOfDownload(file) === target ? opts.dmgSize : undefined;
+  if (!file) report({ phase: "downloading" });
+  const watch = setInterval(() => report(file ? downloadProgress(file, size) : null), opts.pollMs ?? 500);
   let upgrade: { code: number | null; out: string };
   try {
     upgrade = await runBrew(["upgrade", "--cask", CASK], { ...env, HOMEBREW_NO_AUTO_UPDATE: "1" });

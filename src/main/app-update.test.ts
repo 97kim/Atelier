@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { brewUpgrade, caskVersion, downloadProgress, runBrew, compareVersions, fetchLatestRelease, type UpdateProgress } from "./app-update";
+import { brewUpgrade, caskVersion, downloadProgress, runBrew, compareVersions, fetchLatestRelease, versionOfDownload, type UpdateProgress } from "./app-update";
 
 test("버전은 자리마다 숫자로 비교한다", () => {
   assert.ok(compareVersions("0.9.30", "0.9.29") > 0);
@@ -102,34 +102,56 @@ test("릴리즈에 붙은 DMG 의 크기를 함께 준다(진행률의 분모)",
 
 test("내려받는 중인 캐시 파일로 단계와 진행률을 정한다", () => {
   const dir = mkdtempSync(join(tmpdir(), "brew-dl-"));
-  assert.equal(downloadProgress(join(dir, "없는폴더"), "0.9.30", 1000), null);
-  assert.equal(downloadProgress(dir, "0.9.30", 1000), null, "아직 받기 전");
-  // 다른 버전의 파일은 보지 않는다
-  writeFileSync(join(dir, "aaa--atelier-0.9.29-arm64.dmg"), "x");
-  assert.equal(downloadProgress(dir, "0.9.30", 1000), null);
-  const partial = join(dir, "bbb--atelier-0.9.30-arm64.dmg.incomplete");
-  writeFileSync(partial, Buffer.alloc(430));
-  assert.deepEqual(downloadProgress(dir, "0.9.30", 1000), { phase: "downloading", percent: 43 });
-  assert.deepEqual(downloadProgress(dir, "0.9.30"), { phase: "downloading" }, "크기를 모르면 퍼센트 없이");
-  writeFileSync(partial, Buffer.alloc(1000));
-  assert.deepEqual(downloadProgress(dir, "0.9.30", 1000), { phase: "downloading", percent: 99 }, "받는 동안에는 100 을 넘기지 않는다");
-  renameSync(partial, join(dir, "bbb--atelier-0.9.30-arm64.dmg"));
-  assert.deepEqual(downloadProgress(dir, "0.9.30", 1000), { phase: "installing" });
+  const file = join(dir, "bbb--atelier-0.9.30-arm64.dmg");
+  assert.equal(versionOfDownload(file), "0.9.30");
+  assert.equal(versionOfDownload(join(dir, "something-else.dmg")), null);
+  assert.equal(downloadProgress(file, 1000), null, "아직 받기 전");
+  // 이름이 같아도 다른 해시의 남은 파일은 보지 않는다 — brew 가 알려 준 경로만 본다
+  writeFileSync(join(dir, "zzz--atelier-0.9.30-arm64.dmg.incomplete"), Buffer.alloc(900));
+  assert.equal(downloadProgress(file, 1000), null);
+  writeFileSync(`${file}.incomplete`, Buffer.alloc(430));
+  assert.deepEqual(downloadProgress(file, 1000), { phase: "downloading", percent: 43 });
+  assert.deepEqual(downloadProgress(file), { phase: "downloading" }, "크기를 모르면 퍼센트 없이");
+  writeFileSync(`${file}.incomplete`, Buffer.alloc(1000));
+  assert.deepEqual(downloadProgress(file, 1000), { phase: "downloading", percent: 99 }, "받는 동안에는 100 을 넘기지 않는다");
+  renameSync(`${file}.incomplete`, file);
+  assert.deepEqual(downloadProgress(file, 1000), { phase: "installing" });
+  // 체크섬이 틀려 다시 받으면 내려받기로 돌아간다
+  writeFileSync(`${file}.incomplete`, Buffer.alloc(100));
+  assert.deepEqual(downloadProgress(file, 1000), { phase: "downloading", percent: 10 });
 });
 
-test("업그레이드하는 동안 확인 → 내려받기(%) → 설치 순서로 알린다", async () => {
+/** upgrade 때 version 의 DMG 를 반쯤 받다가 다 받은 이름으로 바꾸는 가짜 brew. `--cache --cask` 는 그 파일 경로를 답한다. */
+function fakeDownloadingBrew(version: string): { env: NodeJS.ProcessEnv } {
   const dir = mkdtempSync(join(tmpdir(), "fake-brew-"));
   const downloads = join(dir, "cache", "downloads");
   mkdirSync(downloads, { recursive: true });
-  const f = join(downloads, "ccc--atelier-0.9.30-arm64.dmg");
-  // upgrade: 반쯤 받은 파일을 잠깐 두었다가 다 받은 이름으로 바꾸고 조금 더 머문다(설치)
+  const f = join(downloads, `ccc--atelier-${version}-arm64.dmg`);
   writeFileSync(
     join(dir, "brew"),
-    `#!/bin/sh\nif [ "$1" = list ]; then echo "atelier 0.9.30"; fi\nif [ "$1" = upgrade ]; then head -c 500 /dev/zero > "${f}.incomplete"; sleep 0.4; mv "${f}.incomplete" "${f}"; sleep 0.4; fi\nexit 0\n`,
+    `#!/bin/sh\nif [ "$1" = list ]; then echo "atelier ${version}"; fi\nif [ "$1" = --cache ]; then echo "${f}"; fi\nif [ "$1" = upgrade ]; then head -c 500 /dev/zero > "${f}.incomplete"; sleep 0.4; mv "${f}.incomplete" "${f}"; sleep 0.4; fi\nexit 0\n`,
   );
   chmodSync(join(dir, "brew"), 0o755);
+  return { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } };
+}
+
+test("업그레이드하는 동안 확인 → 내려받기(%) → 설치 순서로 알린다", async () => {
   const seen: UpdateProgress[] = [];
-  const r = await brewUpgrade({ ...process.env, PATH: `${dir}:${process.env.PATH}`, HOMEBREW_CACHE: join(dir, "cache") }, "0.9.30", { dmgSize: 1000, pollMs: 50, onProgress: (p) => seen.push(p) });
+  const r = await brewUpgrade(fakeDownloadingBrew("0.9.30").env, "0.9.30", { dmgSize: 1000, pollMs: 50, onProgress: (p) => seen.push(p) });
   assert.deepEqual(r, { ok: true, version: "0.9.30" });
   assert.deepEqual(seen, [{ phase: "checking" }, { phase: "downloading", percent: 50 }, { phase: "installing" }]);
+});
+
+test("확인한 뒤 더 새 버전이 올라와 brew 가 그것을 받으면, 크기가 맞지 않으니 퍼센트 없이 단계만 알린다", async () => {
+  const seen: UpdateProgress[] = [];
+  const r = await brewUpgrade(fakeDownloadingBrew("0.9.31").env, "0.9.30", { dmgSize: 1000, pollMs: 50, onProgress: (p) => seen.push(p) });
+  assert.deepEqual(r, { ok: true, version: "0.9.31" });
+  assert.deepEqual(seen, [{ phase: "checking" }, { phase: "downloading" }, { phase: "installing" }]);
+});
+
+test("brew 가 캐시 경로를 주지 않으면 퍼센트 없이 내려받는 중으로만 알린다", async () => {
+  const seen: UpdateProgress[] = [];
+  const r = await brewUpgrade(fakeBrewEnv("0.9.30"), "0.9.30", { dmgSize: 1000, pollMs: 50, onProgress: (p) => seen.push(p) });
+  assert.equal(r.ok, true);
+  assert.deepEqual(seen, [{ phase: "checking" }, { phase: "downloading" }]);
 });

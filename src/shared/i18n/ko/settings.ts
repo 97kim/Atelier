@@ -13,7 +13,7 @@ export const settings = {
     },
     sidebarRun: "v{{version}} 업데이트",
     sidebarRunTitle: "새 버전({{version}})으로 업데이트합니다. 끝나면 다시 시작을 눌러 주세요.",
-    sidebarAvailable: "새 버전 v{{version}}",
+    sidebarAvailable: "v{{version}} 받기 ↗",
     sidebarAvailableTitle: "새 버전이 있습니다. 릴리즈 페이지에서 DMG를 받아 주세요.",
     sidebarFailed: "업데이트 실패",
     sidebarFailedTitle: "업데이트하지 못했습니다. 눌러서 설정에서 내용을 확인하세요.",

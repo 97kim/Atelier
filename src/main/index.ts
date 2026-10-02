@@ -11,6 +11,7 @@ import {
   ipcMain,
   Menu,
   Notification,
+  powerMonitor,
   session,
   shell,
   webContents,
@@ -1700,23 +1701,34 @@ function registerIpc() {
     ...(updateError ? { error: updateError } : {}),
   });
   const announceUpdate = () => sendAll(IPC.appUpdateChanged, updateStatus());
-  const checkUpdate = async (): Promise<UpdateCheckDto> => {
-    const current = app.getVersion();
-    const [latest, cask] = await Promise.all([fetchLatestRelease(), fromCask() ? caskVersion(await cliDiscovery().buildEnv()) : null]);
-    dmgSize = latest.dmgSize;
-    lastCheck = { current, latest: latest.version, available: compareVersions(latest.version, current) > 0, releaseUrl: latest.url, brew: cask !== null };
-    updateError = undefined;
-    announceUpdate();
-    return lastCheck;
+  // 확인은 한 번에 하나만 — 자동 확인과 수동 확인이 겹치면 같은 요청의 결과를 나눠 받는다(응답이 뒤바뀌어 옛 결과가 덮지 않게).
+  let checking: Promise<UpdateCheckDto> | null = null;
+  let lastCheckAt = 0;
+  const checkUpdate = (): Promise<UpdateCheckDto> => {
+    checking ??= (async () => {
+      const current = app.getVersion();
+      const [latest, cask] = await Promise.all([fetchLatestRelease(), fromCask() ? caskVersion(await cliDiscovery().buildEnv()) : null]);
+      dmgSize = latest.dmgSize;
+      lastCheck = { current, latest: latest.version, available: compareVersions(latest.version, current) > 0, releaseUrl: latest.url, brew: cask !== null };
+      lastCheckAt = Date.now();
+      announceUpdate();
+      return lastCheck;
+    })().finally(() => (checking = null));
+    return checking;
   };
   ipcMain.handle(IPC.appUpdateCheck, checkUpdate);
   // 새 버전은 앱이 스스로 알아본다 — 설정에 들어가 확인을 누르지 않아도 사이드바에 보이게. 네트워크가 없으면 조용히 넘어간다.
+  // 6시간에 한 번이면 충분하다(GitHub 는 로그인 없는 요청을 IP 마다 시간당 60회로 묶는다). 맥이 잠든 동안에는 타이머가
+  // 가지 않으므로 고정 간격 대신 지난 시간을 보고, 잠에서 깰 때도 본다.
+  const AUTO_CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
   const autoCheck = () => {
-    if (update || installed) return;
+    if (update || installed || Date.now() - lastCheckAt < AUTO_CHECK_EVERY_MS) return;
     checkUpdate().catch((e) => console.log(`[update] 자동 확인 실패: ${e instanceof Error ? e.message : String(e)}`));
   };
   setTimeout(autoCheck, 10_000);
-  setInterval(autoCheck, 6 * 60 * 60 * 1000);
+  setInterval(autoCheck, 30 * 60 * 1000);
+  // 깨어난 직후에는 네트워크가 아직 없을 수 있어 조금 기다린다
+  powerMonitor.on("resume", () => setTimeout(autoCheck, 30_000));
   ipcMain.handle(IPC.appUpdateStatus, updateStatus);
   ipcMain.handle(IPC.appUpdateRun, (): Promise<UpdateRunResult> => {
     if (update) return update.job;
