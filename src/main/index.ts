@@ -18,7 +18,7 @@ import {
 } from "electron";
 import type { PermissionAnswer } from "@shared/chat-events";
 import { isThemeMode } from "@shared/theme";
-import { intlLocale, isLanguageSetting, resolveLocale, LANGUAGE_SETTING_DEFAULT, type Locale } from "@shared/i18n/locale";
+import { intlLocale, isLanguageSetting, resolveLocale, LANGUAGE_SETTING_DEFAULT, LOCALES, type Locale } from "@shared/i18n/locale";
 import { appMsg, mainI18n, mt, setMainLocale } from "./i18n";
 import { msgText, type Msg, type MsgKey } from "@shared/i18n/msg";
 import { NOTIFY_ON_DONE_DEFAULT, isNotifyOnDone, shouldNotifyDone, PROVIDERS, IPC, MAX_CONCURRENT_DEFAULT, MAX_CONCURRENT_MAX, MAX_CONCURRENT_MIN, SESSION_IDLE_MINUTES_DEFAULT, SESSION_IDLE_MINUTES_MAX, SESSION_IDLE_MINUTES_MIN, type AppSettingsDto, type AppInfoDto, type UpdateCheckDto, type UpdateRunResult, type UpdateStatusDto, type ChatEventEnvelope, type ChatSendDto, type ChatSendResult, type CompactResult, type ControlOpenDto, type InstallStatusDto, type CliCandidateDto, type CliDiagnosticsDto, type CliStatusDto, type OverrideSetResultDto, type Provider, type RendererErrorDto, type SessionConfigDto, type ShortcutName, type SwitchProviderDto, type UsageSettingsDto, type VerifyStartResult, type FanoutStartDto, type FanoutStartResult, type FanoutCompareDto, type FanoutAdoptResult, type RateLimitWindowDto, type UsageStatusDto, type WorkspaceStateDto, type ManagedWorktreeDto, SearchResultDto } from "@shared/ipc";
@@ -279,11 +279,25 @@ let scheduleEngine: ScheduleEngine | null = null;
  * 예약 결과가 모이는 워크스페이스. 없으면 만든다 — 앱을 처음 깐 사람도 이 칸을 갖고 시작한다.
  * 예약마다 어디에 둘지 묻지 않는다. 결과는 언제나 한곳에 모이는 편이 찾기 쉽다.
  */
+/**
+ * 예약 워크스페이스의 이름을 지금 언어에 맞춘다. 앱이 만든 자리라 사람이 지은 이름이 아니다 —
+ * 다만 사용자가 직접 바꾼 이름(어느 언어의 기본 이름도 아닌 것)은 건드리지 않는다.
+ */
+function syncScheduleWorkspaceName(): void {
+  const ws = workspaces.state().model.workspaces.find((w) => w.builtin === "schedules");
+  if (!ws) return;
+  const name = mt("schedules.workspaceName");
+  if (ws.name === name) return;
+  const defaults = LOCALES.map((l) => mainI18n().getFixedT(l)("schedules.workspaceName"));
+  if (defaults.includes(ws.name)) workspaces.updateWorkspace(ws.id, { name });
+}
+
 function scheduleWorkspaceId(): string | null {
   const found = workspaces.state().model.workspaces.find(isScheduleWorkspace);
   if (found) {
     // 표식이 생기기 전에 만든 것(이름으로 찾은 것)에는 표식을 붙여 둔다 — 그 뒤로는 이름을 바꿔도 찾는다
     if (!found.builtin) workspaces.updateWorkspace(found.id, { builtin: "schedules" });
+    syncScheduleWorkspaceName();
     return found.id;
   }
   const made = workspaces.createWorkspace(mt("schedules.workspaceName"), "schedules");
@@ -725,7 +739,7 @@ async function startCrossReview(tabId: string): Promise<{ ok: true; reviewTabId:
   const scopeMsg: Msg = { key: "main.msg.reviewScope", params: scopeParams };
   sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "requested", text: "", scope, scopeMsg });
   const since = sessions.events(reviewTabId).length;
-  const sent = await handleChatSend(reviewTabId, { text: buildReviewPrompt({ originTitle, author: snap.provider, changes: changes.map((c) => ({ path: c.path, kind: c.kind })), diff }) });
+  const sent = await handleChatSend(reviewTabId, { text: buildReviewPrompt(mt, { originTitle, author: snap.provider, changes: changes.map((c) => ({ path: c.path, kind: c.kind })), diff }) });
   if (!sent.ok) {
     sessions.note(tabId, { type: "review", ts: Date.now(), reviewer, reviewTabId, status: "failed", text: sent.error, scope, scopeMsg });
     return { ok: false, error: sent.error };
@@ -1201,7 +1215,10 @@ function applyAppSettings(s: AppSettingsDto) {
   setMainLocale(s.resolvedLocale);
   // 메뉴는 만들 때의 언어로 굳는다 — 언어가 바뀌면 다시 만든다(앱 시작 전 첫 호출에서는 아직 메뉴가 없다)
   if (mainI18n().language !== prevLanguage) {
-    if (menuBuilt) buildMenu();
+    if (menuBuilt) {
+      buildMenu();
+      syncScheduleWorkspaceName();
+    }
     // CLI 탐색 결과에는 번역된 오류 문구가 들어 있다 — 다음 조회에서 지금 언어로 다시 만든다
     discovery?.invalidate();
   }
@@ -1334,7 +1351,7 @@ function bootstrap() {
           const reply = lastReplyText(sessions.events(tabId)).replace(/\s+/g, " ").trim();
           notify(
             `${event.isError ? mt("main.notify.replyFailed") : mt("main.notify.replyDone")} · ${title}`,
-            event.isError ? (event.errorText ?? mt("main.notify.errorFallback")) : mt("main.notify.replyBody", { seconds: (event.durationMs / 1000).toFixed(0), reply: reply.slice(0, 140) || mt("main.notify.replyArrived") }),
+            event.isError ? (event.errorText ? msgText(mainI18n(), event.errorMsg, event.errorText) : mt("main.notify.errorFallback")) : mt("main.notify.replyBody", { seconds: (event.durationMs / 1000).toFixed(0), reply: reply.slice(0, 140) || mt("main.notify.replyArrived") }),
             tabId,
           );
         }
@@ -1562,7 +1579,7 @@ async function askHandoffBrief(tabId: string): Promise<string> {
   if (!cwd) return "";
   const note = NOTE_FILE[snap.provider] ?? "AGENTS.md";
   const since = sessions.events(tabId).length;
-  const sent = await handleChatSend(tabId, { text: handoffBriefPrompt(snap.provider) });
+  const sent = await handleChatSend(tabId, { text: handoffBriefPrompt(mt, snap.provider) });
   if (!sent.ok) return "";
   const started = Date.now();
   for (;;) {

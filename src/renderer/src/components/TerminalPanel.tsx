@@ -8,6 +8,7 @@
 
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Terminal, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -108,7 +109,7 @@ export function TerminalPanel({
     const term = terms.current.get(target);
     if (!term) return;
     const title = tabs.find((t) => t.id === target)?.title || tr("panel.terminal.shell");
-    onAttach(terminalAttachment(term, title));
+    onAttach(terminalAttachment(tr, term, title));
   };
 
   // main 에 이미 떠 있는 터미널(채팅 탭 전환 전에 만든 것)을 복원한다. 없으면 셸 하나를 만든다.
@@ -579,7 +580,7 @@ export function TerminalPanel({
               onFocus={() => setFocused(t.id)}
               onReady={(ok) => markReady(t.id, ok)}
               onFindResults={(index, count) => setFindResult({ id: t.id, index, count })}
-              onAttach={onAttach ? () => { const term = terms.current.get(t.id); if (term) onAttach(terminalAttachment(term, t.title)); } : undefined}
+              onAttach={onAttach ? () => { const term = terms.current.get(t.id); if (term) onAttach(terminalAttachment(tr, term, t.title)); } : undefined}
               onSplit={splitTerm}
               onFocusPane={focusPane}
             />
@@ -1064,9 +1065,9 @@ function readTheme() {
 }
 
 /** 활성 터미널에서 첨부할 텍스트: 선택 영역이 있으면 그것, 없으면 버퍼 끝의 최근 40줄(빈 줄 제외). */
-function terminalAttachment(term: Terminal, title: string): string {
+function terminalAttachment(tr: TFunction, term: Terminal, title: string): string {
   const sel = term.getSelection();
-  if (sel.trim()) return formatTerminalAttachment({ title, text: sel, selection: true });
+  if (sel.trim()) return formatTerminalAttachment(tr, { title, text: sel, selection: true });
   const buf = term.buffer.active;
   const lines: string[] = [];
   for (let i = buf.length - 1; i >= 0 && lines.length < 40; i--) {
@@ -1074,5 +1075,5 @@ function terminalAttachment(term: Terminal, title: string): string {
     if (lines.length === 0 && !l.trim()) continue; // 끝의 빈 줄은 건너뛴다
     lines.unshift(l);
   }
-  return formatTerminalAttachment({ title, text: lines.join("\n"), selection: false });
+  return formatTerminalAttachment(tr, { title, text: lines.join("\n"), selection: false });
 }

@@ -9,6 +9,8 @@ import { main } from "./ko/main";
 import { nav } from "./ko/nav";
 import { orchestration } from "./ko/orchestration";
 import { panel } from "./ko/panel";
+import { prompt } from "./ko/prompt";
+import { promptDoc } from "./ko/promptDoc";
 import { repo } from "./ko/repo";
 import { schedules } from "./ko/schedules";
 import { session } from "./ko/session";
@@ -17,7 +19,7 @@ import { shared } from "./ko/shared";
 import { toolCard } from "./ko/toolCard";
 import { usage } from "./ko/usage";
 
-export const ko = { chat, cli, common, fanout, main, nav, orchestration, panel, repo, schedules, session, settings, shared, toolCard, usage };
+export const ko = { chat, cli, common, fanout, main, nav, orchestration, panel, prompt, promptDoc, repo, schedules, session, settings, shared, toolCard, usage };
 
 /** 사전의 모양. 값은 모두 문자열이다. */
 export type Dictionary = typeof ko;

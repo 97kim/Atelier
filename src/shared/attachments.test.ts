@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createI18n } from "./i18n";
 import { appendToDraft, fenceLang, formatCodeAttachment, formatOutputAttachment, formatTerminalAttachment } from "./attachments";
 
 test("formatCodeAttachment: 경로:줄 머리말 + 언어 펜스, 범위·단일 줄, 본문에 ``` 가 있으면 긴 펜스", () => {
@@ -11,7 +12,7 @@ test("formatCodeAttachment: 경로:줄 머리말 + 언어 펜스, 범위·단일
 });
 
 test("formatTerminalAttachment / appendToDraft", () => {
-  assert.equal(formatTerminalAttachment({ title: "셸", text: "$ yarn test\nError: boom\n\n", selection: false }), "터미널 셸 (최근 출력)\n```text\n$ yarn test\nError: boom\n```");
+  assert.equal(formatTerminalAttachment(createI18n("ko").t, { title: "셸", text: "$ yarn test\nError: boom\n\n", selection: false }), "터미널 셸 (최근 출력)\n```text\n$ yarn test\nError: boom\n```");
   assert.equal(appendToDraft("", "B"), "B\n");
   assert.equal(appendToDraft("고쳐줘  \n", "B"), "고쳐줘\n\nB\n");
 });

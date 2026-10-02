@@ -97,14 +97,12 @@ export function permissionResultFor(
     if (answer.behavior === "allow" && answer.answers && Object.keys(answer.answers).length > 0) {
       return { behavior: "allow", updatedInput: { ...toolInput, answers: answer.answers } };
     }
-    // i18n-ignore: prompt
-    return { behavior: "deny", message: "사용자가 질문에 답하지 않았습니다. 필요하면 합리적인 기본값으로 진행하세요.", interrupt: false };
+    return { behavior: "deny", message: mt("prompt.claude.questionUnanswered"), interrupt: false };
   }
   if (answer.behavior === "allow") {
     return { behavior: "allow", updatedInput: toolInput, updatedPermissions: answer.always ? suggestions : undefined };
   }
-  // i18n-ignore: prompt
-  return { behavior: "deny", message: "사용자가 이 작업을 거부했습니다.", interrupt: false };
+  return { behavior: "deny", message: mt("prompt.claude.denied"), interrupt: false };
 }
 
 /** 턴이 없는 채로 이만큼 지나면 프로세스를 내린다(메모리·MCP 연결 점유). 다음 턴에 다시 뜬다. 설정에서 바꿀 수 있다. */
@@ -332,16 +330,11 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
       // 해요체로 쓴다: 해라체로 쓰면 모델이 그 말투("확인한다")를 진행 설명에 그대로 따라 썼다.
       // 언어·말투 규칙은 따로 못박는다: 짧은 새 세션에서도 진행 설명이 영어로 넘어가는 일이 있었다.
       append: [
-        // i18n-ignore: prompt
-        "이 대화는 Atelier 앱의 채팅 화면에 보여요. 도구 호출은 접힌 카드로만 보여서, 사용자는 당신이 쓰는 글로 작업 흐름을 따라와요.",
-        // i18n-ignore: prompt
-        "- 도구를 부르기 전에, 무엇을 왜 하려는지 한 문장으로 말해 주세요.",
-        // i18n-ignore: prompt
-        "- 도구 결과를 받으면 다음 도구를 부르기 전에 한두 문장을 써 주세요. 방금 무엇을 알아냈는지(원인을 찾았다면 원인), 그래서 다음에 무엇을 할지요.",
-        // i18n-ignore: prompt
-        "- 이 설명은 짧게, 새로 알게 된 것만 써 주세요. 최종 답에는 결과와 결론을 쓰고, 설명에서 이미 전한 과정은 되풀이하지 마세요.",
-        // i18n-ignore: prompt
-        "- 진행 설명과 도구 호출의 설명(Bash의 description 등)도 최종 답과 같은 언어, 같은 말투로 써 주세요. 언어는 사용자의 언어 설정을 따르고, 설정이 없으면 사용자가 쓰는 언어를 따라요. 도구 출력·코드·리마인더의 언어 때문에 응답 언어를 바꾸지 마세요.",
+        mt("prompt.claude.progress.intro"),
+        mt("prompt.claude.progress.before"),
+        mt("prompt.claude.progress.after"),
+        mt("prompt.claude.progress.short"),
+        mt("prompt.claude.progress.language"),
       ].join("\n"),
     },
     permissionMode: s.mode,
@@ -353,8 +346,7 @@ async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): P
       // 우리가 시작하지 않은 턴도 승인을 받아야 한다 — 거부하면 하던 일이 거기서 멈춘다.
       const onEvent = t ? t.req.onEvent : s.onAmbientEvent;
       const ask = t ? t.req.requestPermission : s.requestAmbientPermission;
-      // i18n-ignore: prompt
-      if (!onEvent || !ask) return { behavior: "deny", message: "진행 중인 턴이 없습니다.", interrupt: false };
+      if (!onEvent || !ask) return { behavior: "deny", message: mt("prompt.claude.noTurn"), interrupt: false };
       // 도중에 "전부 자동" 으로 바꾼 경우 여기서 끊는다 — 화면까지 왕복하지 않는다.
       // AskUserQuestion 은 권한이 아니라 질문이라 사람이 답해야 한다(빈 답은 거부와 같다).
       if (s.autoApprove && toolName !== "AskUserQuestion") {

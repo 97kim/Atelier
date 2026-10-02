@@ -27,6 +27,24 @@ export function codexTopLevelModel(toml: string): string | null {
   return null;
 }
 
+/**
+ * 사용자가 Codex 에 개발자 지시(developer_instructions)를 직접 정해 두었나. app-server 의 developerInstructions 는
+ * 설정의 값에 덧붙지 않고 **대신한다** — 정해 둔 것이 있으면 앱의 지시를 싣지 않아야 사용자의 규칙이 남는다.
+ * TOML 을 다 파싱하지 않고 키가 있는지만 본다(프로필 안에 있어도 있는 것으로 친다 — 잃는 쪽보다 안 싣는 쪽이 안전하다).
+ */
+export function codexHasDeveloperInstructions(env: Record<string, string | undefined>, home: string, cwd: string | null): boolean {
+  const files = [join(env.CODEX_HOME?.trim() || join(home, ".codex"), "config.toml")];
+  if (cwd) files.push(join(cwd, ".codex", "config.toml"));
+  for (const f of files) {
+    try {
+      if (/^\s*developer_instructions\s*=/m.test(fs.readFileSync(f, "utf8"))) return true;
+    } catch {
+      /* 없거나 못 읽는 파일은 건너뛴다 */
+    }
+  }
+  return false;
+}
+
 /** macOS 관리형 설정. 사용자·프로젝트 설정보다 앞선다. */
 export const CLAUDE_MANAGED_SETTINGS = "/Library/Application Support/ClaudeCode/managed-settings.json";
 

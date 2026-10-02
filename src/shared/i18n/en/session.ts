@@ -60,13 +60,6 @@ export const session: DeepPartial<typeof ko> = {
       noExecutable: "The executable doesn't exist: {{path}}",
     },
   },
-  approval: {
-    runCommand: "Allow this command to run?",
-    fileChanges_one: "Allow {{count}} file change?",
-    fileChanges_other: "Allow {{count}} file changes?",
-    fileChange: "Allow this file change?",
-    permissions: "Allow additional permissions?",
-  },
   attention: {
     runCommand: "Run command",
     editFile: "Edit file",
@@ -98,6 +91,13 @@ export const session: DeepPartial<typeof ko> = {
     mcp: "Show MCP server status (handled by the app)",
   },
   msg: {
+    approval: {
+      runCommand: "Allow this command to run?",
+      fileChanges_one: "Allow {{count}} file change?",
+      fileChanges_other: "Allow {{count}} file changes?",
+      fileChange: "Allow this file change?",
+      permissions: "Allow additional permissions?",
+    },
     codexOutdated: "This codex CLI is too old to support the SDK integration. Update it: npm i -g @openai/codex@latest",
     codexThreadOpen: "Couldn't open the Codex thread.",
     interrupted: "Stopped",

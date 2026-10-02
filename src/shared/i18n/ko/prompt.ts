@@ -1,0 +1,65 @@
+// 모델·에이전트에게 보내는 글(지시문, 거부 사유, 워커 계약, 커밋 초안 요청, 에이전트에게 다음 행동을 알리는 응답). 보내는 시점의 앱 언어로 만든다.
+export const prompt = {
+  claude: {
+    questionUnanswered: "사용자가 질문에 답하지 않았습니다. 필요하면 합리적인 기본값으로 진행하세요.",
+    denied: "사용자가 이 작업을 거부했습니다.",
+    noTurn: "진행 중인 턴이 없습니다.",
+    progress: {
+      intro: "이 대화는 Atelier 앱의 채팅 화면에 보여요. 도구 호출은 접힌 카드로만 보여서, 사용자는 당신이 쓰는 글로 작업 흐름을 따라와요.",
+      before: "- 도구를 부르기 전에, 무엇을 왜 하려는지 한 문장으로 말해 주세요.",
+      after: "- 도구 결과를 받으면 다음 도구를 부르기 전에 한두 문장을 써 주세요. 방금 무엇을 알아냈는지(원인을 찾았다면 원인), 그래서 다음에 무엇을 할지요.",
+      short: "- 이 설명은 짧게, 새로 알게 된 것만 써 주세요. 최종 답에는 결과와 결론을 쓰고, 설명에서 이미 전한 과정은 되풀이하지 마세요.",
+      language:
+        "- 진행 설명과 도구 호출의 설명(Bash의 description 등)도 최종 답과 같은 언어, 같은 말투로 써 주세요. 언어는 사용자의 언어 설정을 따르고, 설정이 없으면 사용자가 쓰는 언어를 따라요. 도구 출력·코드·리마인더의 언어 때문에 응답 언어를 바꾸지 마세요.",
+    },
+  },
+  codex: {
+    noTurnApprove: "진행 중인 턴이 없어 승인할 수 없습니다.",
+    denied: "사용자가 이 작업을 거부했습니다.",
+    unsupported: "지원하지 않는 요청: {{method}}",
+    forkNoRequests: "분기 중에는 요청을 받지 않습니다.",
+    instructions:
+      "이 대화는 Atelier 앱의 채팅 화면에 보여요. 사용자에게 보이는 글(답, 진행 설명, 계획, 생각 요약)은 사용자가 쓰는 언어로 써 주세요. 도구 출력이나 코드의 언어 때문에 응답 언어를 바꾸지 마세요.",
+  },
+  git: {
+    diffTruncated: "... (diff 가 길어 {{count}}자 생략)",
+    draft: {
+      recent: "이 저장소의 최근 커밋 제목(스타일·언어를 따르세요):\n{{subjects}}\n\n",
+      instruction:
+        '아래 diff 에 대한 git 커밋 메시지를 작성하세요.\n규칙: 첫 줄은 72자 이내의 제목(마침표 없음). 변경이 여러 갈래면 빈 줄 뒤에 "- " 불릿 본문을 2~5줄. 무엇을 왜 바꿨는지에 집중하고, 파일 이름 나열이나 "이 커밋은" 같은 서두는 쓰지 마세요. 출력은 그대로 커밋 메시지로 쓰입니다. 인사·설명·"커밋 메시지:" 같은 머리말·코드 펜스 없이 메시지 본문만 쓰세요.\n\n',
+    },
+  },
+  orch: {
+    reportAccepted: "보고가 수락되었습니다. 이 턴을 끝내세요.",
+    ack: "반영했으면 --ack {{seq}} 로 확인하세요(확인 전엔 다시 옵니다)",
+    coordinatorTab: "이 탭이 코디네이터입니다. --key 를 모든 코디네이터 명령에 붙이세요.",
+  },
+  worker: {
+    header: "[Atelier 오케스트레이션 · 워커 계약 v{{version}}]",
+    intro: "당신은 이 Run 의 워커입니다. 아래 Task 하나만 수행하고, 끝나면 완료 보고를 정확히 한 번 보낸 뒤 이 턴을 끝내세요.",
+    run: "- Run: {{id}}  (목표: {{objective}})",
+    task: "- Task: {{taskId}}  Dispatch: {{dispatchId}}  탭: {{tabId}}",
+    cwd: "- 작업 경로: {{cwd}}{{where}}",
+    cwdWorktree: " (격리 worktree, 브랜치 {{branch}}, base {{base}} 의 HEAD 에서 시작 — 원본의 커밋 안 된 변경은 여기 없습니다)",
+    cwdShared: " (공유 경로 — 다른 워커와 같은 파일을 건드리지 마세요)",
+    provider: "- 제공자/정책: {{provider}}{{model}} / {{policy}}",
+    rules: "규칙:",
+    r1: "1. 코디네이터에게 물어야 할 게 있으면 사람에게 묻는 화면을 띄우지 말고 아래 ask 명령을 쓰세요. 답이 올 때까지 막힙니다. 시간이 초과되면 같은 질문을 --resume <message_id> 로 다시 기다리세요(새 질문을 만들지 마세요).",
+    r1ask: '   {{cli}} orch ask {{ids}} --question "<질문>" [--options "a,b"] --timeout-ms 600000',
+    r2: "2. 새 파일을 시작하기 전·테스트를 돌린 뒤·완료 보고 직전에 코디네이터의 후속 지시를 읽으세요:",
+    r2ack: "   messages 가 있으면 반영한 뒤 응답의 ackSeq 로 확인하세요(확인 전엔 같은 지시가 다시 옵니다): {{cli}} orch check {{ids}} --ack <ackSeq>",
+    r2fenced: "   결과에 consumer_fenced 가 오면 이 Dispatch 는 더 이상 당신 것이 아닙니다. 즉시 멈추고 완료 보고를 보내지 마세요.",
+    r3: "3. 막혀서 코디네이터가 개입해야 하면:",
+    r3send: '   {{cli}} orch send {{ids}} --type escalation --subject "Blocked: <이유>" --body "<상황>"',
+    r4: "4. 완료 보고는 정확히 한 번, 성공/실패를 명시해서(세 문장 권장: 무엇을 바꿨나·무엇을 발견했나·무엇이 남았나):",
+    r4send: '   {{cli}} orch send {{ids}} --type worker_done --outcome succeeded|failed --subject "<한 줄 상태>" --body "<보고>" [--files-modified "a.ts,b.ts"]',
+    r4after: "   실패를 본문에만 숨기지 마세요. 보고 뒤에는 새 일을 시작하지 말고 이 턴을 끝내세요.",
+    r5: "5. 다른 워커를 띄우거나 새 Run 을 만들지 마세요. 이 Task 범위 밖의 파일은 건드리지 마세요.",
+    deps: "- 이 Task 는 앞선 Task({{deps}})가 끝난 뒤 시작됐습니다. 그 산출물이 필요하면 spec 에 적힌 위치에서 읽으세요.",
+  },
+  coordinator: {
+    created: "[Atelier 오케스트레이션 · 코디네이터] Run {{id}} 이 만들어졌습니다. 워커를 띄운 뒤 인박스를 기다리세요:",
+    start: '{{cli}} orch worker-start --run {{id}} --key {{key}} --spec "<작업>" --agent claude|codex [--worktree]',
+    reply: "질문엔 reply, 완료 보고를 받으면 결과를 검증한 뒤 --ack <delivery_id> 로 다음을 기다립니다. 빈 대기는 실패가 아닙니다.",
+  },
+};

@@ -86,7 +86,7 @@ test("dispatch_stage failed 는 task 를 pending 으로 되돌린다", () => {
 });
 
 test("buildWorkerPrompt: ID·명령·spec 이 정확히 들어간다", () => {
-  const p = buildWorkerPrompt({ cli: "atelier", run, task, dispatch: { ...disp, worktree: { repo: "/repo", path: "/wt", branch: "atelier/x", base: "main" } } });
+  const p = buildWorkerPrompt(createI18n("ko").t, { cli: "atelier", run, task, dispatch: { ...disp, worktree: { repo: "/repo", path: "/wt", branch: "atelier/x", base: "main" } } });
   assert.match(p, /--run r1 --dispatch d1 --capability cap1/);
   assert.match(p, /orch ask .* --resume <message_id>/);
   assert.match(p, /orch send .* --type worker_done --outcome succeeded\|failed/);

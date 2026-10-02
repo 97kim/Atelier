@@ -2,13 +2,16 @@
 // 턴마다 `turn/start` 만 보낸다. 승인(명령 실행·파일 변경)은 서버 요청으로 받아 앱의 권한 카드로 잇는다.
 // app-server 를 못 띄우는 옛 CLI 는 SDK exec 경로(턴마다 `codex exec`)로 폴백한다 — 그 경로엔 승인 콜백이 없어 정책을 샌드박스로만 매핑한다.
 
+import { homedir } from "node:os";
 import { CODEX_PERMISSION_TOOL } from "@shared/tool-state";
 import type { ChatEvent, PermissionAnswer, PermissionPolicy, PermissionRequestEvent } from "@shared/chat-events";
 import { buildCodexInput, type StoredChatImage } from "./chat-attachments";
 import { mapCodexEvent } from "./codex-events";
 import { AppServerError, CodexAppServer, classifyResumeFailure, mapAppServerNotification, normalizeFileChanges, resumeConflictMessage, type AppServerTurnContext, type FileChangeDto } from "./codex-app-server";
 import { importCodexSdk } from "./esm";
+import { codexHasDeveloperInstructions } from "./cli-defaults";
 import { appMsg, MsgError, mt } from "./i18n";
+import type { Msg } from "@shared/i18n/msg";
 
 type ThreadOptions = import("@openai/codex-sdk").ThreadOptions;
 
@@ -35,7 +38,7 @@ export interface CodexTurnRequest {
   log?(line: string): void;
 }
 
-/** app-server 의 정책 매핑: ask 는 신뢰되지 않은 명령·쓰기마다 묻고, auto_edit 은 작업 디렉토리 밖·네트워크만 묻고, full 은 묻지 않는다. */
+/** app-server 의 정책 매핑: ask 는 신뢰되지 않은 명령·쓰기마다 묻고, auto_edit 은 작업 디렉토리 밖의 쓰기처럼 추가 권한이 필요할 때만 묻고(네트워크는 허용), full 은 묻지 않는다. */
 const POLICY_TO_APPSERVER: Record<PermissionPolicy, { approvalPolicy: string; sandbox: string; sandboxPolicy: Record<string, unknown> }> = {
   ask: { approvalPolicy: "untrusted", sandbox: "read-only", sandboxPolicy: { type: "readOnly" } },
   auto_edit: { approvalPolicy: "on-request", sandbox: "workspace-write", sandboxPolicy: { type: "workspaceWrite", networkAccess: true } },
@@ -191,10 +194,9 @@ function trackFileChanges(s: LiveCodex, method: string, params: Record<string, u
 /** 승인 요청 → 앱의 권한 카드. 답이 allow 면 accept(always 면 acceptForSession), 아니면 decline. 진행 중인 턴이 없으면 거부. */
 async function handleServerRequest(s: LiveCodex, method: string, params: Record<string, unknown>): Promise<unknown> {
   const t = s.turn;
-  // i18n-ignore: prompt
-  if (!t || !t.req.requestPermission) throw new Error("진행 중인 턴이 없어 승인할 수 없습니다.");
+  if (!t || !t.req.requestPermission) throw new Error(mt("prompt.codex.noTurnApprove"));
   const itemId = typeof params.itemId === "string" ? params.itemId : `req-${Date.now()}`;
-  const ask = async (tool: string, title: string, input: Record<string, unknown>, description?: string) => {
+  const ask = async (tool: string, title: { message: string; msg: Msg }, input: Record<string, unknown>, description?: string) => {
     // 턴 도중 권한을 풀었으면 사람에게 묻지 않고 허용한다(전부 자동은 모두, 편집 자동은 파일 변경만 — Claude 의 acceptEdits 와 같은 뜻).
     if (s.policy === "full" || (s.policy === "auto_edit" && tool === "ApplyPatch")) return { behavior: "allow" as const };
     const requestId = `${itemId}#${++t.permissionSeq}`;
@@ -205,7 +207,8 @@ async function handleServerRequest(s: LiveCodex, method: string, params: Record<
       toolUseId: itemId,
       tool,
       input,
-      title,
+      title: title.message,
+      titleMsg: title.msg,
       description,
       canAlwaysAllow: true,
     };
@@ -218,28 +221,26 @@ async function handleServerRequest(s: LiveCodex, method: string, params: Record<
   };
   switch (method) {
     case "item/commandExecution/requestApproval": {
-      const a = await ask("Bash", mt("session.approval.runCommand"), { command: params.command ?? "", cwd: params.cwd ?? "" }, typeof params.reason === "string" ? params.reason : undefined);
+      const a = await ask("Bash", appMsg("session.msg.approval.runCommand"), { command: params.command ?? "", cwd: params.cwd ?? "" }, typeof params.reason === "string" ? params.reason : undefined);
       if (t.req.abort.signal.aborted) return { decision: "cancel" };
       return { decision: a.behavior === "allow" ? (a.always ? "acceptForSession" : "accept") : "decline" };
     }
     case "item/fileChange/requestApproval": {
       // 요청 자체엔 변경 내용이 없다 — 같은 itemId 의 item/started 에서 받아 둔 changes(경로·종류·diff)를 붙인다.
       const changes = s.fileChanges.get(itemId) ?? [];
-      const title = changes.length > 0 ? mt("session.approval.fileChanges", { count: changes.length }) : mt("session.approval.fileChange");
+      const title = changes.length > 0 ? appMsg("session.msg.approval.fileChanges", { count: changes.length }) : appMsg("session.msg.approval.fileChange");
       const a = await ask("ApplyPatch", title, { changes, grantRoot: params.grantRoot ?? "" }, typeof params.reason === "string" ? params.reason : undefined);
       if (t.req.abort.signal.aborted) return { decision: "cancel" };
       return { decision: a.behavior === "allow" ? (a.always ? "acceptForSession" : "accept") : "decline" };
     }
     case "item/permissions/requestApproval": {
-      const a = await ask(CODEX_PERMISSION_TOOL, mt("session.approval.permissions"), { permissions: params.permissions ?? {} }, typeof params.reason === "string" ? params.reason : undefined);
-      // i18n-ignore: prompt
-      if (a.behavior !== "allow") throw new Error("사용자가 이 작업을 거부했습니다.");
+      const a = await ask(CODEX_PERMISSION_TOOL, appMsg("session.msg.approval.permissions"), { permissions: params.permissions ?? {} }, typeof params.reason === "string" ? params.reason : undefined);
+      if (a.behavior !== "allow") throw new Error(mt("prompt.codex.denied"));
       return { permissions: params.permissions ?? {}, scope: "turn" };
     }
     default:
       // 사용자 입력 요청·MCP elicitation 등은 아직 UI 가 없다 — 거부로 답해 턴이 멈추지 않게 한다.
-      // i18n-ignore: prompt
-      throw new Error(`지원하지 않는 요청: ${method}`);
+      throw new Error(mt("prompt.codex.unsupported", { method }));
   }
 }
 
@@ -268,7 +269,9 @@ async function sessionFor(runtime: CodexRuntime, req: Pick<CodexTurnRequest, "se
 
 async function openThread(s: LiveCodex, req: Pick<CodexTurnRequest, "sessionKey" | "cwd" | "sessionId" | "policy" | "model" | "log"> & { onEvent?: CodexTurnRequest["onEvent"] }): Promise<void> {
   const map = POLICY_TO_APPSERVER[req.policy];
-  const base = { cwd: req.cwd, model: req.model ?? null, approvalPolicy: map.approvalPolicy, sandbox: map.sandbox };
+  // developerInstructions 는 설정의 developer_instructions 를 대신한다(덧붙지 않는다) — 사용자가 정해 둔 것이 있으면 싣지 않는다.
+  const ownInstructions = codexHasDeveloperInstructions(process.env, homedir(), req.cwd);
+  const base = { cwd: req.cwd, model: req.model ?? null, approvalPolicy: map.approvalPolicy, sandbox: map.sandbox, ...(ownInstructions ? {} : { developerInstructions: mt("prompt.codex.instructions") }) };
   if (req.sessionId) {
     try {
       // 기록은 앱이 갖고 있으니 지난 턴 내용은 받지 않는다(전체 히스토리 하이드레이션은 deprecated).
@@ -400,8 +403,7 @@ export async function forkCodexThread(
     log: req.log,
     onNotification: () => {},
     onServerRequest: async () => {
-      // i18n-ignore: prompt
-      throw new Error("분기 중에는 요청을 받지 않습니다.");
+      throw new Error(mt("prompt.codex.forkNoRequests"));
     },
     onExit: () => {},
   });

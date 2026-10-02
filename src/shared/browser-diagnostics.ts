@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 // 브라우저 탭의 "이 화면을 진단해 줘" 첨부. 주소·시각·콘솔 오류·실패한 요청을 한 덩어리로 묶는다.
 // 모으는 곳은 둘로 나뉜다 — 콘솔은 렌더러의 <webview> console-message, 요청 실패는 main 의 session.webRequest.
 // 여기서는 형식과 다듬기(정렬·중복 제거·상한)만 맡아 양쪽에서 같은 규칙을 쓴다.
@@ -28,8 +30,7 @@ export const DIAG_MAX_NET = 30;
 /** 한 줄이 이보다 길면 자른다(로그 한 줄에 base64 나 거대한 JSON 이 통째로 오는 일이 흔하다). */
 export const DIAG_MAX_LINE = 500;
 
-// i18n-ignore: prompt
-const clip = (s: string, max = DIAG_MAX_LINE) => (s.length <= max ? s : `${s.slice(0, max)}… (${s.length}자)`);
+const clip = (t: TFunction, s: string, max = DIAG_MAX_LINE) => (s.length <= max ? s : t("promptDoc.attach.diag.clipped", { text: s.slice(0, max), n: s.length }));
 const levelName = (l: number) => (l >= 3 ? "error" : l === 2 ? "warn" : l === 1 ? "info" : "log");
 
 /** 링 버퍼에 넣는다. 바로 앞과 같은 내용이면 세기만 늘리지 않고 그냥 버린다(같은 오류가 초당 수십 번 나는 경우). */
@@ -40,14 +41,13 @@ export function pushCapped<T>(buf: T[], item: T, max: number): T[] {
 }
 
 /** 연달아 같은 텍스트면 하나로 접고 "(n번)" 을 붙인다. */
-function dedupe(lines: string[]): string[] {
+function dedupe(t: TFunction, lines: string[]): string[] {
   const out: string[] = [];
   let last = "";
   let n = 0;
   const flush = () => {
     if (!last) return;
-    // i18n-ignore: prompt
-    out.push(n > 1 ? `${last} (${n}번)` : last);
+    out.push(n > 1 ? t("promptDoc.attach.diag.repeat", { line: last, n }) : last);
   };
   for (const l of lines) {
     if (l === last) {
@@ -80,40 +80,39 @@ export interface DiagnosticsInput {
  * 채팅 입력창에 붙일 텍스트. 오류가 하나도 없으면 "없음" 이라고 분명히 적는다 —
  * 모델이 "로그를 못 봤다" 와 "봤는데 깨끗했다" 를 구분할 수 있어야 한다.
  */
-export function formatDiagnostics(d: DiagnosticsInput): string {
+export function formatDiagnostics(t: TFunction, d: DiagnosticsInput): string {
+  const count = (n: number) => (n === 0 ? t("promptDoc.attach.diag.none") : t("promptDoc.attach.diag.count", { n }));
   const errors = d.console.filter((c) => c.level >= 2);
   const conLines = dedupe(
+    t,
     errors.map((c) => {
       const where = c.source ? ` — ${c.source}${c.line ? `:${c.line}` : ""}` : "";
-      return `[${hhmmss(c.ts)}] ${levelName(c.level)}: ${clip(c.text)}${where}`;
+      return `[${hhmmss(c.ts)}] ${levelName(c.level)}: ${clip(t, c.text)}${where}`;
     }),
   ).slice(-DIAG_MAX_CONSOLE);
   const netLines = dedupe(
+    t,
     d.net.map((n) => {
       const what = n.error ? n.error : `HTTP ${n.status}`;
-      return `[${hhmmss(n.ts)}] ${what} — ${n.method} ${clip(n.url, 200)}${n.resourceType ? ` (${n.resourceType})` : ""}`;
+      return `[${hhmmss(n.ts)}] ${what} — ${n.method} ${clip(t, n.url, 200)}${n.resourceType ? ` (${n.resourceType})` : ""}`;
     }),
   ).slice(-DIAG_MAX_NET);
 
   const head = [
     "```text",
-    // i18n-ignore: prompt
-    `브라우저 진단 — ${d.url}`,
-    // i18n-ignore: prompt
-    d.title ? `제목: ${clip(d.title, 120)}` : null,
-    // i18n-ignore: prompt
-    `시각: ${new Date(d.at).toLocaleString("ko-KR")}${d.viewport ? ` · 보이는 영역 ${d.viewport.width}×${d.viewport.height}` : ""}`,
+    t("promptDoc.attach.diag.head", { url: d.url }),
+    d.title ? t("promptDoc.attach.diag.title", { title: clip(t, d.title, 120) }) : null,
+    d.viewport
+      ? t("promptDoc.attach.diag.atViewport", { at: d.at, w: d.viewport.width, h: d.viewport.height })
+      : t("promptDoc.attach.diag.at", { at: d.at }),
     "",
-    // i18n-ignore: prompt
-    `콘솔 경고·오류 (${conLines.length === 0 ? "없음" : `${conLines.length}건`})`,
+    t("promptDoc.attach.diag.console", { summary: count(conLines.length) }),
     ...(conLines.length === 0 ? [] : conLines.map((l) => `  ${l}`)),
     "",
-    // i18n-ignore: prompt
-    `실패한 요청 (${netLines.length === 0 ? "없음" : `${netLines.length}건`})`,
+    t("promptDoc.attach.diag.net", { summary: count(netLines.length) }),
     ...(netLines.length === 0 ? [] : netLines.map((l) => `  ${l}`)),
     "```",
   ].filter((l): l is string => l !== null);
-  // i18n-ignore: prompt
-  if (d.hasScreenshot) head.push("위는 지금 보이는 화면의 캡처입니다.");
+  if (d.hasScreenshot) head.push(t("promptDoc.attach.diag.screenshot"));
   return head.join("\n");
 }

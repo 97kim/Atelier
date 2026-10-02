@@ -1,5 +1,6 @@
 // 인앱 브라우저의 "요소 선택": 페이지에 주입하는 스크립트(마우스를 올리면 테두리, 클릭하면 요소 정보를 console 로 보고)와
 // 그 보고를 입력창에 붙일 텍스트로 만드는 순수 함수. 페이지는 preload 없는 샌드박스 webview 라 console-message 로만 돌아온다.
+import type { TFunction } from "i18next";
 import type { ChatImageDto } from "./ipc";
 
 export const PICK_MARK = "__ATELIER_PICK__";
@@ -148,18 +149,14 @@ export function parsePickMessage(message: string, nonce: string): { kind: "picke
 }
 
 /** 입력창에 붙일 텍스트: 어디의 무엇인지 + HTML 펜스 + 계산된 스타일 + 크기. 스크린샷은 이미지 첨부로 따로 간다. */
-export function formatElementAttachment(el: PickedElement, url: string): string {
+export function formatElementAttachment(t: TFunction, el: PickedElement, url: string): string {
   const fence = el.html.includes("```") ? "````" : "```";
-  // i18n-ignore: prompt
-  const lines = [`브라우저 요소 · ${url}`, `선택자: ${el.selector}`];
-  // i18n-ignore: prompt
-  if (el.text) lines.push(`텍스트: ${el.text}`);
+  const lines = [t("promptDoc.attach.element.head", { url }), t("promptDoc.attach.element.selector", { selector: el.selector })];
+  if (el.text) lines.push(t("promptDoc.attach.element.text", { text: el.text }));
   lines.push(`${fence}html`, el.html.trim(), fence);
   const styles = Object.entries(el.styles);
-  // i18n-ignore: prompt
-  if (styles.length) lines.push(`계산된 스타일: ${styles.map(([k, v]) => `${k}: ${v}`).join("; ")}`);
-  // i18n-ignore: prompt
-  lines.push(`크기: ${Math.round(el.rect.width)}×${Math.round(el.rect.height)} @ (${Math.round(el.rect.x)}, ${Math.round(el.rect.y)})`);
+  if (styles.length) lines.push(t("promptDoc.attach.element.styles", { styles: styles.map(([k, v]) => `${k}: ${v}`).join("; ") }));
+  lines.push(t("promptDoc.attach.element.size", { w: Math.round(el.rect.width), h: Math.round(el.rect.height), x: Math.round(el.rect.x), y: Math.round(el.rect.y) }));
   return lines.join("\n");
 }
 

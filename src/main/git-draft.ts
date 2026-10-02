@@ -10,19 +10,8 @@ import { mt } from "./i18n";
 export const DRAFT_MODEL = "haiku";
 
 export function buildDraftPrompt(diff: string, recentSubjects: string[]): string {
-  // i18n-ignore: prompt
-  const style =
-    recentSubjects.length > 0
-      ? `이 저장소의 최근 커밋 제목(스타일·언어를 따르세요):\n${recentSubjects.map((s) => `- ${s}`).join("\n")}\n\n`
-      : "";
-  return (
-    // i18n-ignore: prompt
-    `${style}아래 diff 에 대한 git 커밋 메시지를 작성하세요.\n` +
-    `규칙: 첫 줄은 72자 이내의 제목(마침표 없음). 변경이 여러 갈래면 빈 줄 뒤에 "- " 불릿 본문을 2~5줄. ` +
-    `무엇을 왜 바꿨는지에 집중하고, 파일 이름 나열이나 "이 커밋은" 같은 서두는 쓰지 마세요. ` +
-    `출력은 그대로 커밋 메시지로 쓰입니다. 인사·설명·"커밋 메시지:" 같은 머리말·코드 펜스 없이 메시지 본문만 쓰세요.\n\n` +
-    `\`\`\`diff\n${diff}\n\`\`\``
-  );
+  const style = recentSubjects.length > 0 ? mt("prompt.git.draft.recent", { subjects: recentSubjects.map((s) => `- ${s}`).join("\n") }) : "";
+  return `${style}${mt("prompt.git.draft.instruction")}\`\`\`diff\n${diff}\n\`\`\``;
 }
 
 /**

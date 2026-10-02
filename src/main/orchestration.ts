@@ -8,7 +8,7 @@ import type { ChatEvent, PermissionPolicy, SessionStatus } from "@shared/chat-ev
 import type { ChatSendResult, Provider } from "@shared/ipc";
 import type { WorktreeMeta } from "@shared/workspace-model";
 import type { MsgKey } from "@shared/i18n/msg";
-import { appMsg, mt } from "./i18n";
+import { appMsg, mainI18n, mt } from "./i18n";
 import {
   ORCH_MAX_AI_COORDINATORS,
   ORCH_MAX_DELIVERY,
@@ -36,9 +36,6 @@ import {
   type OrchRunState,
   type OrchTask,
 } from "@shared/orchestration";
-
-// i18n-ignore: prompt
-const REPORT_ACCEPTED_NOTE = "보고가 수락되었습니다. 이 턴을 끝내세요.";
 
 export class OrchError extends Error {
   constructor(
@@ -483,7 +480,7 @@ export class Orchestrator {
     // 탭 id·실제 경로를 기록(리듀서는 dispatch 를 통째로 들고 있으므로 다시 만든다)
     const withTab: OrchDispatch = { ...dispatch, tabId: made.tabId, cwd: made.cwd, worktree: made.worktree };
     const run = s.run;
-    const prompt = buildWorkerPrompt({ cli: this.deps.cliCommand(), run, task, dispatch: withTab });
+    const prompt = buildWorkerPrompt(mainI18n().t, { cli: this.deps.cliCommand(), run, task, dispatch: withTab });
     this.commit(s.run.id, { type: "dispatch_placed", ts: this.now(), dispatchId: withTab.id, tabId: made.tabId, cwd: made.cwd, worktree: made.worktree, startEventCount: this.deps.snapshot(made.tabId)?.eventCount ?? 0 });
     const sent = await this.deps.send(made.tabId, prompt);
     if (!stillStarting()) throw new OrchError(mt("cli.orch.error.startCancelledPrompted"), "cancelled", { dispatchId: withTab.id, residualResources: { tabId: made.tabId, worktree: made.worktree?.path } });
@@ -570,7 +567,7 @@ export class Orchestrator {
       throw new OrchError(mt("cli.orch.error.followupPending", { count: unread.length }), "followup_pending", { messages: unread.map((m) => ({ id: m.id, body: m.body })) });
     const m: OrchMessage = { ...this.mk(s, { kind: "dispatch", dispatchId: d.id }, "run", "worker_done", o.subject ?? o.outcome, body, d.taskId, d.id), outcome: o.outcome, filesModified: o.filesModified };
     this.commit(s.run.id, { type: "message", ts: m.ts, message: m }, { type: "report_accepted", ts: m.ts, dispatchId: d.id, outcome: o.outcome, summary: body, filesModified: o.filesModified });
-    return { message: m, receipt: { accepted: true, taskId: d.taskId, outcome: o.outcome, note: REPORT_ACCEPTED_NOTE } };
+    return { message: m, receipt: { accepted: true, taskId: d.taskId, outcome: o.outcome, note: mt("prompt.orch.reportAccepted") } };
   }
 
   /** 워커의 블로킹 질문. 타임아웃이면 pending 으로 돌려주고 질문은 남는다. */
@@ -940,8 +937,7 @@ export function repairBatches(events: OrchEvent[]): { events: OrchEvent[]; added
   return { events: out, added };
 }
 
-// i18n-ignore: prompt
-const ackNote = (seq: number) => `반영했으면 --ack ${seq} 로 확인하세요(확인 전엔 다시 옵니다)`;
+const ackNote = (seq: number) => mt("prompt.orch.ack", { seq });
 
 function execState(snap: WorkerTabSnapshot): OrchExecutionState {
   if (snap.limitWait) return "limit_wait";

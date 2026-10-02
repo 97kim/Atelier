@@ -1153,7 +1153,7 @@ export class SessionManager {
   /** 전환 모달 미리보기: 지금까지의 이벤트로 요약과 통계를 만든다. */
   handoffPreview(tabId: string): Handoff {
     const s = this.ensure(tabId);
-    return buildHandoff(this.events(tabId), {
+    return buildHandoff(mt, this.events(tabId), {
       cwd: s.cwd,
       fromProvider: PROVIDER_LABEL[s.provider],
     });

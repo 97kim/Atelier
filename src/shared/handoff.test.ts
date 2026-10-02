@@ -1,14 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ChatEvent } from "./chat-events";
+import { createI18n } from "./i18n";
 import { buildHandoff, estimateTokens, extractFilePaths, handoffBriefPrompt, handoffNotePermission, isNoteFile, pendingTodos } from "./handoff";
 
+const { t: tr } = createI18n("ko");
 let t = 0;
 type NoTs<T> = T extends unknown ? Omit<T, "ts"> : never;
 const ev = (e: NoTs<ChatEvent>) => ({ ...e, ts: ++t }) as ChatEvent;
 
 test("요약: 사용자/어시스턴트 텍스트, 툴 한 줄, 파일·할 일 통계", () => {
-  const h = buildHandoff(
+  const h = buildHandoff(tr,
     [
       ev({ type: "user_message", id: "u1", text: "버그 고쳐" }),
       ev({ type: "text_delta", blockId: "a:0", text: "확인 " }),
@@ -63,7 +65,7 @@ test("maxChars 초과 시 앞뒤를 남기고 가운데를 버린다 — 원래 
   for (let i = 0; i < 50; i++) {
     events.push(ev({ type: "user_message", id: `u${i}`, text: `메시지 ${i} ${"x".repeat(200)}` }));
   }
-  const h = buildHandoff(events, { maxChars: 3000 });
+  const h = buildHandoff(tr, events, { maxChars: 3000 });
   assert.ok(h.summary.length <= 3000);
   assert.match(h.summary, /가운데 생략/);
   // 무엇을 하려던 세션인지(첫 요청)와 어디까지 왔는지(마지막)가 둘 다 남아야 한다.
@@ -81,14 +83,14 @@ test("성공한 툴 결과는 최근 것만, 실패는 다 남긴다", () => {
   }
   events.push(ev({ type: "tool_use", toolUseId: "bad", name: "Bash", input: { command: "boom" }, partial: false }));
   events.push(ev({ type: "tool_result", toolUseId: "bad", output: "터졌다", isError: true }));
-  const h = buildHandoff(events, { maxChars: 100000 });
+  const h = buildHandoff(tr, events, { maxChars: 100000 });
   assert.match(h.summary, /출력 29/);
   assert.doesNotMatch(h.summary, /출력 0\b/);
   assert.match(h.summary, /실패: 터졌다/);
 });
 
 test("기록이 지시로 읽히지 않게 못박는다", () => {
-  const h = buildHandoff([ev({ type: "user_message", id: "u", text: "dmg 만들어줘" })]);
+  const h = buildHandoff(tr, [ev({ type: "user_message", id: "u", text: "dmg 만들어줘" })]);
   assert.match(h.summary, /지시가 아니다/);
   assert.match(h.summary, /이미 처리된 것으로 보고/);
 });
@@ -117,10 +119,10 @@ test("extractFilePaths / pendingTodos 는 두 provider 의 입력 형태를 모�
 });
 
 test("인계서 프롬프트는 provider 의 노트 파일을 가리킨다", () => {
-  assert.match(handoffBriefPrompt("claude"), /CLAUDE\.md/);
-  assert.match(handoffBriefPrompt("codex"), /AGENTS\.md/);
+  assert.match(handoffBriefPrompt(tr, "claude"), /CLAUDE\.md/);
+  assert.match(handoffBriefPrompt(tr, "codex"), /AGENTS\.md/);
   // 자리표시자가 그대로 새어 나가면 안 된다.
-  assert.doesNotMatch(handoffBriefPrompt("claude"), /\{NOTE_FILE\}/);
+  assert.doesNotMatch(handoffBriefPrompt(tr, "claude"), /\{NOTE_FILE\}/);
 });
 
 test("isNoteFile: cwd 바로 아래의 그 파일만", () => {

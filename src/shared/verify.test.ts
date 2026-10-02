@@ -56,6 +56,6 @@ test("formatDuration / failedCommandTitle", () => {
   assert.equal(formatDuration(500, t), "500ms");
   assert.equal(formatDuration(4200, t), "4초");
   assert.equal(formatDuration(125_000, t), "2분 5초");
-  assert.equal(failedCommandTitle({ cmd: "yarn test", status: "failed", exitCode: 1 }), "검증 실패: yarn test (exit 1)");
-  assert.equal(failedCommandTitle({ cmd: "yarn test", status: "failed", exitCode: null }), "검증 실패: yarn test");
+  assert.equal(failedCommandTitle({ cmd: "yarn test", status: "failed", exitCode: 1 }, t), "검증 실패: yarn test (exit 1)");
+  assert.equal(failedCommandTitle({ cmd: "yarn test", status: "failed", exitCode: null }, t), "검증 실패: yarn test");
 });

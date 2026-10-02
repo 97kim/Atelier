@@ -62,7 +62,7 @@ const { chromium } = require("playwright-core");
   console.log("인계서 앞부분:", JSON.stringify(text.slice(0, 200)));
 
   // 우리가 만든 기계 요약은 이 머리말로 시작한다 — 그게 아니어야 모델이 쓴 것이다.
-  const mechanical = text.startsWith("## 이전 세션 요약");
+  const mechanical = /^## (이전 세션 요약|Previous session summary)/.test(text);
   console.log("RESULT (Codex 로 전환됨):", cfg.provider === "codex" ? "PASS" : "FAIL");
   console.log("RESULT (넘길 인계서가 대기 중):", cfg.handoffPending === true ? "PASS" : "FAIL");
   console.log("RESULT (디스크에 남았다 — 껐다 켜도 산다):", text.length > 50 ? "PASS" : "FAIL");

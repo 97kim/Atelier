@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createI18n } from "./i18n";
 import { PICKER_STOP_SCRIPT, PICK_CANCEL_MARK, PICK_MARK, elementImage, formatElementAttachment, parsePickMessage, pickerScript } from "./element-pick";
 const PICKER_SCRIPT = pickerScript("n1");
 
@@ -32,7 +33,7 @@ test("parsePickMessage: 마커·취소·무관", () => {
 test("formatElementAttachment / elementImage", () => {
   const el = { selector: "main > h1", tag: "h1", html: "<h1>v2</h1>", text: "v2", styles: { "font-size": "32px", color: "rgb(0, 0, 0)" }, rect: { x: 8, y: 21.4, width: 100.2, height: 37 }, dpr: 2 };
   assert.equal(
-    formatElementAttachment(el, "http://127.0.0.1:5000/p/x/index.html"),
+    formatElementAttachment(createI18n("ko").t, el, "http://127.0.0.1:5000/p/x/index.html"),
     "브라우저 요소 · http://127.0.0.1:5000/p/x/index.html\n선택자: main > h1\n텍스트: v2\n```html\n<h1>v2</h1>\n```\n계산된 스타일: font-size: 32px; color: rgb(0, 0, 0)\n크기: 100×37 @ (8, 21)",
   );
   assert.deepEqual(elementImage("data:image/png;base64,AAAA", el), { name: "element-h1.png", mime: "image/png", base64: "AAAA" });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claudeProgressNotes, claudeShowsThinkingSummaries, codexTopLevelModel, readCliDefaultModel } from "./cli-defaults";
+import { claudeProgressNotes, claudeShowsThinkingSummaries, codexHasDeveloperInstructions, codexTopLevelModel, readCliDefaultModel } from "./cli-defaults";
 
 test("codexTopLevelModel: 최상위 model 만, 섹션 안의 model 은 무시", () => {
   assert.equal(codexTopLevelModel('model = "gpt-6-astra"\nmodel_reasoning_effort = "medium"\n[features]\nmodel = "x"'), "gpt-6-astra");
@@ -47,4 +47,27 @@ test("claudeShowsThinkingSummaries·claudeProgressNotes: 사용자 < 프로젝�
   assert.equal(claudeProgressNotes({ CLAUDE_CODE_USE_BEDROCK: "1" }, alt, null, join(alt, "none.json")), false, "Bedrock 경로는 진행 설명 모드를 켜지 않는다");
   assert.equal(claudeProgressNotes({ CLAUDE_CODE_USE_VERTEX: "0" }, alt, null, join(alt, "none.json")), true, "0 은 꺼진 것");
   for (const d of [home, cwd, alt]) rmSync(d, { recursive: true, force: true });
+});
+
+test("codexHasDeveloperInstructions: 사용자·프로젝트 설정에 developer_instructions 가 있으면 true", () => {
+  const home = mkdtempSync(join(tmpdir(), "atelier-codex-di-"));
+  const cwd = mkdtempSync(join(tmpdir(), "atelier-codex-di-cwd-"));
+  try {
+    assert.equal(codexHasDeveloperInstructions({}, home, cwd), false);
+    mkdirSync(join(home, ".codex"));
+    writeFileSync(join(home, ".codex", "config.toml"), 'model = "x"\n# developer_instructions = "주석"\n');
+    assert.equal(codexHasDeveloperInstructions({}, home, cwd), false, "주석은 세지 않는다");
+    writeFileSync(join(home, ".codex", "config.toml"), 'model = "x"\ndeveloper_instructions = """\n규칙\n"""\n');
+    assert.equal(codexHasDeveloperInstructions({}, home, null), true);
+    // CODEX_HOME 이 있으면 그쪽을 본다
+    const other = mkdtempSync(join(tmpdir(), "atelier-codex-home-"));
+    assert.equal(codexHasDeveloperInstructions({ CODEX_HOME: other }, home, null), false);
+    mkdirSync(join(cwd, ".codex"));
+    writeFileSync(join(cwd, ".codex", "config.toml"), '[profiles.a]\n  developer_instructions = "x"\n');
+    assert.equal(codexHasDeveloperInstructions({ CODEX_HOME: other }, home, cwd), true, "프로젝트 설정도 본다");
+    rmSync(other, { recursive: true, force: true });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true });
+  }
 });

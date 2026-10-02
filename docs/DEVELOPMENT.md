@@ -70,7 +70,7 @@ DMG로 직접 설치한 앱도 새 버전을 확인할 수 있지만 앱 안에�
 - 번역 결과를 상수나 state 에 담아 두지 않는다. 키와 값을 들고 있다가 그릴 때 번역해야 언어를 바꿨을 때 따라온다.
 - 화면 문구로 동작을 정하지 않는다. 상태는 값으로 두고 문구는 그 값에서 만든다(`src/shared/tool-state.ts`, `shouldCoalesceSkip` 의 사유 비교가 예다).
 - 자동으로 붙이는 이름(탭 제목, 새 워크스페이스·예약의 기본 이름)은 만드는 시점의 언어로 저장하고 다시 번역하지 않는다.
-  앱이 만든 자리는 이름이 아니라 값으로 찾는다(예약 워크스페이스는 `builtin: "schedules"`). 이름 없는 탭("새 세션")은 저장하지 않고 그릴 때 번역한다.
+  앱이 만든 자리는 이름이 아니라 값으로 찾는다(예약 워크스페이스는 `builtin: "schedules"`). 예약 워크스페이스의 이름만은 예외로, 기본 이름 그대로면 언어를 바꿀 때 따라 바뀐다. 이름 없는 탭("새 세션")은 저장하지 않고 그릴 때 번역한다.
 - `src/shared` 의 함수가 표시 문구를 만들면 `t: TFunction` 을 첫 인자로 받는다(`verifySummary`, `runSummary`, `fanoutSummary` 가 예다). main 은 `mt`, 테스트는 `createI18n("ko").t` 를 넘긴다.
 - `cli/atelier.cjs` 는 의존성 없이 돌아야 해서 파일 안의 작은 표로 번역한다. 언어는 `ATELIER_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` 순으로 본다.
 - 번역 대상이 아닌 것: 모델에게 보내는 글, 로그, 외부 오류 문구를 읽는 파서(`usage-limit.ts`), 계산용 로케일(`cron.ts` 의 `en-US`).
@@ -95,6 +95,9 @@ node check-header2.cjs      # 원하는 스크립트
 `--user-data-dir` 이 핵심이다. `ATELIER_USERDATA` 는 앱이 자식 프로세스에 내보내는 값일 뿐 자기 userData 를 바꾸지 않는다.
 CLI 를 붙일 때는 그 값을 준다(`ATELIER_USERDATA=$PWD/userdata`). 스크립트는 `playwright-core` 로 `connectOverCDP` 만 하므로
 브라우저를 내려받지 않는다. `userdata/`·`repo/`·스크린샷·로그는 만들어지는 것이라 추적하지 않는다.
+
+스크립트는 한국어 화면의 글자로 요소를 찾는다. 새 userData 는 macOS 언어를 따라가므로, 한국어가 아닌 환경에서는 먼저
+`node set-language.cjs ko` 로 맞춘다(`en` 을 주면 영어 화면을 눈으로 볼 때 쓴다). 언어 전환 자체는 `check-i18n-switch.cjs` 가 본다.
 
 ## 고치기 전에 알아 둘 것
 

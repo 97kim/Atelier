@@ -128,6 +128,8 @@ export interface PermissionRequestEvent extends Base {
   tool: string;
   input: Record<string, unknown>;
   title?: string;
+  /** title 이 앱이 만든 문구면 그 키(그릴 때 번역한다). */
+  titleMsg?: Msg;
   description?: string;
   /** "이 세션에서 항상 허용" 을 제안할 수 있는지 (SDK suggestions 유무). */
   canAlwaysAllow: boolean;

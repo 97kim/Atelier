@@ -590,9 +590,7 @@ export class ControlServer {
         const c = str(p.coordinator);
         if (c) coordinatorTabId = c === "active" ? this.deps.state().model.activeTabId : this.resolveTab(c).id;
         const r = orch.runCreate({ objective, coordinatorTabId });
-        // i18n-ignore: prompt
-        const tabNote = "이 탭이 코디네이터입니다. --key 를 모든 코디네이터 명령에 붙이세요.";
-        return { run: r.run, coordinatorKey: r.coordinatorKey, note: coordinatorTabId ? tabNote : mt("cli.orch.runNoteHuman") };
+        return { run: r.run, coordinatorKey: r.coordinatorKey, note: coordinatorTabId ? mt("prompt.orch.coordinatorTab") : mt("cli.orch.runNoteHuman") };
       }
       case "run-list":
         return { runs: orch.list().map((s) => ({ id: s.run.id, objective: s.run.objective, status: s.run.status, coordinator: s.run.coordinator.kind, createdAt: s.run.createdAt, summary: orch.cardView(s.run.id) })) };

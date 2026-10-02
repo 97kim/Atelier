@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePaneFocusRef } from "../pane-focus";
 import type { PermissionAnswer, PermissionRequestEvent } from "@shared/chat-events";
+import { msgText } from "@shared/i18n/msg";
 import { DiffView, UnifiedDiff } from "./DiffView";
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -32,7 +33,7 @@ export function PermissionPrompt({
   request: PermissionRequestEvent;
   onAnswer: (answer: PermissionAnswer) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isQuestion = request.tool === "AskUserQuestion";
   const root = useRef<HTMLDivElement>(null);
   const paneFocus = usePaneFocusRef();
@@ -74,7 +75,7 @@ export function PermissionPrompt({
     <div ref={root} className="mx-6 mb-2 rounded-xl border border-warn/50 bg-panel p-4 shadow-2xl">
       <div className="mb-1 flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-warn" />
-        <span className="font-medium">{request.title ?? t("chat.permission.title", { tool })}</span>
+        <span className="font-medium">{request.title ? msgText(i18n, request.titleMsg, request.title) : t("chat.permission.title", { tool })}</span>
       </div>
       {request.description && <p className="mb-2 text-muted">{request.description}</p>}
       <div className="mb-3 max-h-64 overflow-auto">

@@ -117,7 +117,6 @@ export function formatDuration(ms: number, t: TFunction): string {
 }
 
 /** 실패한 명령의 출력을 채팅에 붙일 때의 제목. */
-export function failedCommandTitle(c: VerifyCommandResult): string {
-  // i18n-ignore: prompt
-  return `검증 실패: ${c.cmd}${typeof c.exitCode === "number" ? ` (exit ${c.exitCode})` : ""}`;
+export function failedCommandTitle(c: VerifyCommandResult, t: TFunction): string {
+  return typeof c.exitCode === "number" ? t("promptDoc.attach.verifyFailedExit", { cmd: c.cmd, code: c.exitCode }) : t("promptDoc.attach.verifyFailed", { cmd: c.cmd });
 }

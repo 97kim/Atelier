@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 // 에디터 선택 영역·터미널 출력을 채팅 입력창에 넣을 때의 형식. 모델이 파일과 줄을 바로 알아보게 "경로:줄" 머리말 + 코드 펜스.
 const LANG: Record<string, string> = {
   ts: "ts", tsx: "tsx", js: "js", jsx: "jsx", mjs: "js", cjs: "js", json: "json", yml: "yaml", yaml: "yaml", md: "md", py: "python",
@@ -28,11 +30,10 @@ export function formatCodeAttachment(o: { relPath: string; line: number; endLine
 }
 
 /** 터미널 출력: 어디서 왔는지 한 줄 + 텍스트 펜스. 끝의 빈 줄은 뗀다. */
-export function formatTerminalAttachment(o: { title: string; text: string; selection: boolean }): string {
+export function formatTerminalAttachment(t: TFunction, o: { title: string; text: string; selection: boolean }): string {
   const fence = fenceFor(o.text);
   const body = o.text.replace(/\s+$/, "");
-  // i18n-ignore: prompt
-  return `터미널 ${o.title}${o.selection ? " (선택 영역)" : " (최근 출력)"}\n${fence}text\n${body}\n${fence}`;
+  return `${t(o.selection ? "promptDoc.attach.terminalSelection" : "promptDoc.attach.terminalRecent", { title: o.title })}\n${fence}text\n${body}\n${fence}`;
 }
 
 /** 검증 실패 출력 등 제목 한 줄 + 텍스트 펜스. */

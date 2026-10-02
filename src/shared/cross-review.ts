@@ -18,22 +18,16 @@ export function reviewScopeParams(changes: { path: string; added: number; delete
   return { count: changes.length, added, deleted };
 }
 
-export function buildReviewPrompt(o: { originTitle: string; changes: { path: string; kind: string }[]; diff: string; author: "claude" | "codex" }): string {
-  // i18n-ignore: prompt
-  const diff = o.diff.length > CROSS_REVIEW_DIFF_MAX ? `${o.diff.slice(0, CROSS_REVIEW_DIFF_MAX)}\n... (diff 가 길어 ${o.diff.length - CROSS_REVIEW_DIFF_MAX}자 생략 — 필요하면 파일을 직접 읽어)` : o.diff;
+export function buildReviewPrompt(t: TFunction, o: { originTitle: string; changes: { path: string; kind: string }[]; diff: string; author: "claude" | "codex" }): string {
+  const diff = o.diff.length > CROSS_REVIEW_DIFF_MAX ? `${o.diff.slice(0, CROSS_REVIEW_DIFF_MAX)}\n${t("promptDoc.review.diffClipped", { n: o.diff.length - CROSS_REVIEW_DIFF_MAX })}` : o.diff;
   const files = o.changes.map((c) => `- ${c.path} (${c.kind})`).join("\n");
   const authorLabel = o.author === "claude" ? "Claude Code" : "Codex";
-  // i18n-ignore: prompt
   return [
-    `아래는 ${authorLabel} 와 함께 작업한 "${o.originTitle}" 의 저장소 변경(작업 트리 diff)입니다. 독립적인 코드 리뷰어로서 검토해 주세요.`,
+    t("promptDoc.review.intro", { author: authorLabel, title: o.originTitle }),
     "",
-    "규칙:",
-    "- 파일을 읽거나 검색해도 됩니다. 이 탭은 사람이 보지 않는 리뷰 전용 탭이라 읽기 전용 명령만 허용됩니다. 파일 수정과 쓰기 명령은 물론, 테스트·빌드·스크립트 실행(npm test, node, python 등)도 자동으로 거부됩니다 — 시도하지 말고, 코드와 테스트 파일을 읽어서 판단하세요.",
-    "- 결론은 심각도 순(높음 → 낮음)으로, 각 항목에 `파일:줄` 근거와 구체적 수정안을 붙이세요.",
-    "- 문제 없음이 맞으면 그렇게 말하고, 놓치기 쉬운 위험(경계 조건, 보안, 테스트 공백)이 있으면 따로 적으세요.",
-    "- 답은 마크다운으로, 앞뒤 인사 없이 리뷰만.",
+    t("promptDoc.review.rules"),
     "",
-    "변경 파일:",
+    t("promptDoc.review.files"),
     files,
     "",
     "```diff",

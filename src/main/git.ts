@@ -181,8 +181,7 @@ export async function gitDiffFor(cwd: string, env: NodeJS.ProcessEnv, paths: str
     if (d.stdout) parts.push(d.stdout);
   }
   const all = parts.join("\n");
-  // i18n-ignore: prompt
-  return all.length > DIFF_MAX ? `${all.slice(0, DIFF_MAX)}\n... (diff 가 길어 ${all.length - DIFF_MAX}자 생략)` : all;
+  return all.length > DIFF_MAX ? `${all.slice(0, DIFF_MAX)}\n${mt("prompt.git.diffTruncated", { count: all.length - DIFF_MAX })}` : all;
 }
 
 /** 최근 커밋 제목 — 초안이 레포의 메시지 스타일을 따르게 힌트로 준다. */

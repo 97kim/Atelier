@@ -109,7 +109,7 @@ atelier orch worker-release --run <run> --key <k> --dispatch <id>           # �
 - 정산된 워커의 탭은 `worker-start --task <next> --terminal <tabId>` 로 다음 Task 에 재사용할 수 있다(같은 provider·경로). 더 안 쓰면 `worker-cleanup` 이 탭을 닫고 worktree 를 지운다 — release(감독 해제)와 다르며, 커밋 안 된 변경도 사라진다.
 - 앱 통지 `worker_tab_missing` 은 워커 탭이 사라졌다는 뜻(실행 상태 알 수 없음) — 확인 뒤 abandon.
 
-### 워커(프롬프트 맨 위에 "[Atelier 오케스트레이션 · 워커 계약]" 이 있을 때)
+### 워커(프롬프트 맨 위에 "[Atelier 오케스트레이션 · 워커 계약]" 또는 "[Atelier orchestration · worker contract]" 가 있을 때)
 
 preamble 의 명령을 그대로 복사해 쓴다(--run/--dispatch/--capability). 규칙: 그 Task 만 한다 · 코디네이터에게 물을 땐 `orch ask`(막힘, 시간 초과면 같은 message_id 로 `--resume`) · 새 파일 시작 전·테스트 뒤·보고 직전에 `orch check` 로 후속 지시를 읽는다 · `consumer_fenced` 가 오면 즉시 멈춘다 · 완료 보고는 `orch send --type worker_done --outcome succeeded|failed` 로 정확히 한 번, 실패를 본문에 숨기지 않는다 · 보고 뒤엔 새 일을 시작하지 않고 턴을 끝낸다 · 다른 워커·Run 을 만들지 않는다. 읽지 않은 후속 지시가 있으면 보고가 `followup_pending` 으로 거절된다 — 먼저 check.
 

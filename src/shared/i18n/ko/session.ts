@@ -58,13 +58,6 @@ export const session = {
       noExecutable: "실행 파일이 없습니다: {{path}}",
     },
   },
-  approval: {
-    runCommand: "명령 실행을 허용할까요?",
-    fileChanges_one: "파일 {{count}}개 변경을 허용할까요?",
-    fileChanges_other: "파일 {{count}}개 변경을 허용할까요?",
-    fileChange: "파일 변경을 허용할까요?",
-    permissions: "추가 권한을 허용할까요?",
-  },
   attention: {
     runCommand: "명령 실행",
     editFile: "파일 수정",
@@ -96,6 +89,13 @@ export const session = {
     mcp: "MCP 서버 상태를 본다 (앱에서 처리)",
   },
   msg: {
+    approval: {
+      runCommand: "명령 실행을 허용할까요?",
+      fileChanges_one: "파일 {{count}}개 변경을 허용할까요?",
+      fileChanges_other: "파일 {{count}}개 변경을 허용할까요?",
+      fileChange: "파일 변경을 허용할까요?",
+      permissions: "추가 권한을 허용할까요?",
+    },
     codexOutdated: "codex CLI 버전이 오래되어 SDK 연동을 지원하지 않습니다. 업데이트가 필요합니다: npm i -g @openai/codex@latest",
     codexThreadOpen: "Codex 스레드를 열지 못했습니다.",
     interrupted: "중단됨",

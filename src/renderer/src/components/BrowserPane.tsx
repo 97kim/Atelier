@@ -166,7 +166,7 @@ export function BrowserPane({
         } catch {
           /* 무시 */
         }
-        onAttachRef.current?.(formatElementAttachment(picked, pageUrl), images);
+        onAttachRef.current?.(formatElementAttachment(tRef.current, picked, pageUrl), images);
         setPickMsg(tRef.current(images ? "panel.browser.pickedWithShot" : "panel.browser.picked", { selector: picked.selector }));
         setTimeout(() => setPickMsg(null), 4000);
       })();
@@ -343,7 +343,7 @@ export function BrowserPane({
       }
       const rect = el.getBoundingClientRect();
       onAttachRef.current?.(
-        formatDiagnostics({
+        formatDiagnostics(tRef.current, {
           url: (() => {
             try {
               return el.getURL() || url;

@@ -33,7 +33,7 @@ function CommandRow({ c, tabId, live }: { c: VerifyCommandResult; tabId: string;
   const expanded = open ?? (c.status === "failed" || c.status === "running");
   const outputText = verifyOutputText(i18n, c);
   const hasOutput = !!outputText.trim();
-  const attach = () => appendComposerDraft(tabId, formatOutputAttachment({ title: failedCommandTitle(c), text: outputText }));
+  const attach = () => appendComposerDraft(tabId, formatOutputAttachment({ title: failedCommandTitle(c, t), text: outputText }));
   return (
     <div className="border-t border-line first:border-t-0" data-verify-cmd={c.status}>
       <div className="flex items-center gap-2 px-3 py-1.5">

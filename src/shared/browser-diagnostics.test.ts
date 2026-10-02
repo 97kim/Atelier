@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { createI18n } from "./i18n";
 import { DIAG_MAX_LINE, formatDiagnostics, pushCapped, type ConsoleLine, type NetFailure } from "./browser-diagnostics";
 
+const { t } = createI18n("ko");
 const at = Date.UTC(2026, 8, 13, 1, 2, 3);
 const line = (over: Partial<ConsoleLine> = {}): ConsoleLine => ({ ts: at, level: 3, text: "boom", ...over });
 const fail = (over: Partial<NetFailure> = {}): NetFailure => ({ ts: at, url: "https://x/y", method: "GET", error: null, status: 500, ...over });
@@ -18,7 +20,7 @@ describe("pushCapped", () => {
 
 describe("formatDiagnostics", () => {
   it("오류가 없으면 '없음' 이라고 분명히 적는다 (못 본 것과 구분되게)", () => {
-    const s = formatDiagnostics({ url: "https://a.b/c", at, console: [], net: [], hasScreenshot: false });
+    const s = formatDiagnostics(t, { url: "https://a.b/c", at, console: [], net: [], hasScreenshot: false });
     assert.match(s, /콘솔 경고·오류 \(없음\)/);
     assert.match(s, /실패한 요청 \(없음\)/);
     assert.match(s, /https:\/\/a\.b\/c/);
@@ -26,7 +28,7 @@ describe("formatDiagnostics", () => {
   });
 
   it("info·log 는 빼고 warn 이상만 싣는다", () => {
-    const s = formatDiagnostics({
+    const s = formatDiagnostics(t, {
       url: "u",
       at,
       console: [line({ level: 0, text: "verbose" }), line({ level: 1, text: "info" }), line({ level: 2, text: "careful" }), line({ level: 3, text: "boom" })],
@@ -40,14 +42,14 @@ describe("formatDiagnostics", () => {
   });
 
   it("연달아 같은 줄은 한 줄로 접고 횟수를 붙인다", () => {
-    const s = formatDiagnostics({ url: "u", at, console: [line(), line(), line(), line({ text: "other" })], net: [], hasScreenshot: false });
+    const s = formatDiagnostics(t, { url: "u", at, console: [line(), line(), line(), line({ text: "other" })], net: [], hasScreenshot: false });
     assert.match(s, /error: boom \(3번\)/);
     assert.match(s, /error: other/);
     assert.match(s, /콘솔 경고·오류 \(2건\)/);
   });
 
   it("통신 오류와 HTTP 오류를 나눠 적는다", () => {
-    const s = formatDiagnostics({
+    const s = formatDiagnostics(t, {
       url: "u",
       at,
       console: [],
@@ -61,7 +63,7 @@ describe("formatDiagnostics", () => {
 
   it("긴 줄은 잘라서 길이를 적는다", () => {
     const long = "x".repeat(DIAG_MAX_LINE + 50);
-    const s = formatDiagnostics({ url: "u", at, console: [line({ text: long })], net: [], hasScreenshot: false });
+    const s = formatDiagnostics(t, { url: "u", at, console: [line({ text: long })], net: [], hasScreenshot: false });
     assert.ok(!s.includes(long), "원문 전체가 들어가면 안 된다");
     assert.match(s, new RegExp(`\\(${DIAG_MAX_LINE + 50}자\\)`));
   });
