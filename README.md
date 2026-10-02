@@ -3,6 +3,8 @@
   Atelier
 </h1>
 
+<p align="center"><strong>한국어</strong> · <a href="README.en.md">English</a></p>
+
 <p align="center">
   <a href="https://github.com/97kim/Atelier/releases"><img src="https://img.shields.io/github/v/release/97kim/Atelier?label=release&color=4f5bd5" alt="최신 릴리즈" /></a>
   <img src="https://img.shields.io/badge/license-MIT-4f5bd5" alt="라이선스: MIT" />
@@ -207,6 +209,7 @@ Homebrew 없이 설치하려면 [릴리즈](https://github.com/97kim/Atelier/rel
 - **사용량**: 모델·워크스페이스별 사용량과 API 요금 기준 추정 비용, Claude·Codex 구독 한도를 보여 줘요.
 - **컨텍스트와 한도**: 컨텍스트 윈도가 차기 전에 알려 주고, Claude 사용 한도에 걸리면 풀리는 시각에 다시 시도해요.
 - 다크 모드, 이미지 붙여넣기, 턴이 끝난 뒤에도 도는 백그라운드 작업 표시.
+- **언어**: 화면·메뉴·알림을 한국어와 영어로 쓸 수 있어요. 설정 → 일반 → 언어에서 고르고, 기본은 macOS 언어를 따라가요.
 
 단축키는 [기능 안내](docs/GUIDE.md#단축키)에 모아 두었어요.
 

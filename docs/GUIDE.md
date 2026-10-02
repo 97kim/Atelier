@@ -1,3 +1,5 @@
+[English](GUIDE.en.md)
+
 # Atelier 기능 안내서
 
 기능마다 무엇을 하고 어떻게 동작하는지 정리한 문서예요. 처음이라면 [README](../README.md)부터 보세요.
@@ -38,7 +40,7 @@
 **Codex** 도 같다. `codex app-server`(JSON-RPC over stdio, `src/main/codex-app-server.ts`)를 탭마다 하나 살려 두고 스레드를 이어 가며 턴마다 `turn/start` 만 보낸다
 (실측 첫 토큰 콜드 15초대 → 웜 3~5초). 중단은 `turn/interrupt`, 정책·모델은 턴마다 파라미터로 준다. 승인 요청(`item/commandExecution/requestApproval`,
 `item/fileChange/requestApproval`)은 서버 요청으로 와서 앱의 권한 카드로 이어지므로 이제 Codex 도 실제로 묻는다 — ask 는 `approvalPolicy: untrusted` + 읽기 전용
-샌드박스(신뢰되지 않은 명령·쓰기마다 요청), auto_edit 은 `on-request` + workspace-write(밖·네트워크만), full 은 `never` + 전체 접근. app-server 가 없는 옛 CLI 는
+샌드박스(신뢰되지 않은 명령·쓰기마다 요청), auto_edit 은 `on-request` + workspace-write(작업 디렉토리 안의 변경과 네트워크는 허용, 그 밖의 권한이 필요하면 요청), full 은 `never` + 전체 접근. app-server 가 없는 옛 CLI 는
 SDK exec 경로(턴마다 `codex exec`, 승인 없이 샌드박스만)로 폴백한다.
 
 ## 슬래시 커맨드
