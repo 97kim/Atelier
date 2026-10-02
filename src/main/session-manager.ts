@@ -183,8 +183,9 @@ export interface SessionManagerDeps {
   /** 돌고 있는 Codex 턴에 지시를 끼워 넣는다. 테스트에서 바꿔 끼운다(기본: codex-adapter 의 steerCodexTurn). */
   steerCodex?: typeof steerCodexTurn;
   emit(tabId: string, event: ChatEvent): void;
-  claudeRuntime(): Promise<ClaudeRuntime>;
-  codexRuntime(): Promise<CodexRuntime>;
+  /** tabId: 그 탭의 에이전트 프로세스에 자기 탭 id(ATELIER_TAB_ID)를 알려 준다. */
+  claudeRuntime(tabId?: string): Promise<ClaudeRuntime>;
+  codexRuntime(tabId?: string): Promise<CodexRuntime>;
   store?: SessionStore;
   /** 모르는 tabId 를 만났을 때 영속 모델에서 설정을 가져온다. */
   resolveConfig?(tabId: string): SessionConfig | null;
@@ -503,10 +504,10 @@ export class SessionManager {
     };
     try {
       if (s.provider === "claude") {
-        const r = await warmClaudeSession(await this.deps.claudeRuntime(), req);
+        const r = await warmClaudeSession(await this.deps.claudeRuntime(tabId), req);
         if (r === "opened") this.deps.log?.(tabId, "[claude] 예열 시작");
       } else {
-        const r = await warmCodexSession(await this.deps.codexRuntime(), req);
+        const r = await warmCodexSession(await this.deps.codexRuntime(tabId), req);
         if (r === "opened") this.deps.log?.(tabId, "[codex] 예열 시작");
       }
     } catch (e) {
@@ -1328,7 +1329,7 @@ export class SessionManager {
     void (async () => {
       try {
         if (s.provider === "codex") {
-          const runtime = await this.deps.codexRuntime();
+          const runtime = await this.deps.codexRuntime(s.tabId);
           await runCodexTurn(runtime, {
             sessionKey: s.tabId,
             cwd: s.cwd!,
@@ -1344,7 +1345,7 @@ export class SessionManager {
             log: (line) => this.deps.log?.(s.tabId, line),
           });
         } else {
-          const runtime = await this.deps.claudeRuntime();
+          const runtime = await this.deps.claudeRuntime(s.tabId);
           await runClaudeTurn(runtime, {
             sessionKey: s.tabId,
             cwd: s.cwd!,

@@ -1,130 +1,143 @@
-# Atelier CLI 가이드 (에이전트용)
+# Atelier CLI guide (for agents)
 
-`atelier` 는 실행 중인 Atelier 앱을 제어한다. Atelier 의 워크스페이스·탭·세션이 진실인 작업에만 쓴다. 출력은 항상 JSON 한 덩어리이고, 실패는 exit 1 과 `{"error":{"code","message"}}` 다.
+`atelier` controls the running Atelier app. Use it only for work where Atelier's workspaces, tabs, and sessions are the source of truth. Every command prints a single JSON object, except `--help` (plain text) and `skills get` (this Markdown). A failure exits with 1 and prints `{"error":{"code","message"}}`.
 
-## 모델
+Write everything the user reads in the user's language: follow their language setting, and otherwise the language of their request. This guide being in English does not change that.
 
-- **워크스페이스**: 이름 + 기본 경로(선택). 탭을 묶는 단위.
-- **탭**: 채팅 세션 하나. provider(claude|codex), policy(ask|auto_edit|full), cwd, 상태(idle|running|queued|waiting_permission|error)를 가진다.
-- **선택자 `<sel>`**: `active`(앱에서 보고 있는 탭) · 탭 id · 정확한 제목 · 유일한 제목 접두. 애매하면 `ambiguous` 오류에 후보가 실린다. `--tab` 을 생략하면 `active`.
+## Model
 
-## 자주 쓰는 흐름
+- **Workspace**: a name plus an optional default path. It groups tabs.
+- **Tab**: one chat session. It has a provider (claude|codex), a policy (ask|auto_edit|full), a cwd, and a status (idle|running|queued|waiting_permission|error).
+- **Selector `<sel>`**: `self` (the tab you are running in) · `active` (the tab the person is looking at in the app) · a tab id · an exact title · a unique title prefix. An ambiguous selector fails with `ambiguous` and lists the candidates. Omitting `--tab` means `active`.
+- **`self` is not `active`.** You often run in a tab that is not on screen (a worker, the other side of a split, a scheduled run). `self` comes from `ATELIER_TAB_ID`, which the app sets for the agents it runs. Outside an Atelier tab, `self` fails with `no_self_tab`.
 
-새 탭을 열고 지시를 보내고 답을 받기:
+## Common flows
 
-```text
-atelier tab new --ws <name> --cwd /abs/repo --provider claude --policy auto_edit --title "auth 버그" --prompt "로그인 500 원인 찾아줘" --activate
-atelier tab wait --tab "auth 버그" --timeout-ms 600000
-atelier tab read --tab "auth 버그" --last 6
-```
-
-이미 있는 탭에 이어서 보내고 그 답만 받기(보내기 + 기다리기 한 번에):
+Open a new tab, send a prompt, and get the reply:
 
 ```text
-atelier tab send --tab "auth 버그" --text "테스트도 추가해줘" --wait --timeout-ms 900000
+atelier tab new --ws <name> --cwd /abs/repo --provider claude --policy auto_edit --title "auth bug" --prompt "Find why login returns 500" --activate
+atelier tab wait --tab "auth bug" --timeout-ms 600000
+atelier tab read --tab "auth bug" --last 6
 ```
 
-- `send` 결과의 `send.queued` 가 true 면 동시 실행 상한에 걸려 차례를 기다리는 것이고, `send.pending` 이 true 면 그 탭이 다른 턴을 돌고 있어 프롬프트 큐에 들어간 것이다(그 턴이 끝나면 자동 전송). 둘 다 오류가 아니다. 탭 정보의 `pending` 은 큐에 남은 프롬프트 수, `limitWait` 는 사용량 한도로 재시도를 기다리는 중이라는 뜻이다.
-- `wait` 결과는 `wait.satisfied` 로 판단한다. 시간 초과도 정상 출력이며 `satisfied:false` 다. 다시 보내지 말고 다시 기다린다. `send --wait` 는 방금 보낸 메시지의 턴이 실제로 끝났을 때만(큐·한도 대기를 지나) satisfied 가 되고, 단독 `wait` 는 탭에 남은 일이 없으면 즉시 satisfied 다.
-- `satisfied:true` 면 `reply` 에 마지막 사용자 메시지 뒤의 어시스턴트 텍스트가 이어 붙어 온다. 도구 호출 내역까지 필요하면 `tab read`.
-- 긴 텍스트는 `--text -` / `--prompt -` 로 stdin 에서 넣는다.
+Send a follow-up to an existing tab and get just that reply (send and wait in one step):
 
-상태 보기:
+```text
+atelier tab send --tab "auth bug" --text "Add a test too" --wait --timeout-ms 900000
+```
+
+- If `send.queued` is true in the `send` result, the tab is waiting its turn under the concurrency limit. If `send.pending` is true, the tab is running another turn and your prompt went into its prompt queue (it is sent automatically when that turn ends). Neither is an error. In the tab info, `pending` is the number of prompts left in the queue, and `limitWait` means the tab is waiting to retry after a usage limit.
+- Judge a `wait` result by `wait.satisfied`. A timeout is normal output with `satisfied:false`. Do not send again; wait again. `send --wait` is satisfied only when the turn for the message you just sent has actually finished (past any queue or limit wait). A standalone `wait` is satisfied immediately if the tab has nothing left to do.
+- With `satisfied:true`, `reply` holds the assistant text after the last user message, joined together. If you also need the tool calls, use `tab read`.
+- Pass long text through stdin with `--text -` / `--prompt -`.
+
+See state:
 
 ```text
 atelier status
 atelier ws list
-atelier tab list                # 열린 탭. --all 이면 닫힌 탭까지
+atelier tab list                # open tabs; --all includes closed tabs
 atelier tab list --ws <name>
 atelier tab status --tab <sel>
 ```
 
-탭 다루기:
+Manage tabs:
 
 ```text
-atelier tab activate --tab <sel>   # 앱 화면에서 그 탭으로
-atelier tab abort --tab <sel>      # 진행 중인 턴 중단
-atelier tab close --tab <sel>      # 탭 닫기(기록은 남는다)
-atelier ws add --path /abs/dir     # 워크스페이스 추가(탭 하나가 같이 생긴다)
+atelier tab activate --tab <sel>   # switch the app to that tab
+atelier tab abort --tab <sel>      # stop the turn in progress
+atelier tab close --tab <sel>      # close the tab (the history is kept)
+atelier ws add --path /abs/dir     # add a workspace (one tab is created with it)
 ```
 
-검증(테스트·빌드를 돌려 결과 카드로 남기기):
+Verify (run tests or builds and leave a result card):
 
 ```text
-atelier tab verify --tab <sel> --wait                          # 워크스페이스에 저장한 검증 명령을 그 탭의 cwd 에서 순서대로
+atelier tab verify --tab <sel> --wait                          # run the workspace's saved verify commands in order, in that tab's cwd
 atelier tab verify --tab <sel> --cmd "yarn typecheck" --cmd "yarn test" --wait --timeout-ms 1800000
 atelier tab verify-abort --tab <sel>
 ```
 
-- 결과는 그 탭의 대화에 검증 카드로 남고, `--wait` 면 `result` 에 `status`(passed|failed|aborted)·실행 시점 `head`(sha·branch·dirty)·명령별 `status`/`exitCode`/`output`(꼬리)이 온다. 하나라도 실패하면 뒤 명령은 `skipped`.
-- `--cmd` 를 주면 그 명령만 돌리고 저장하지는 않는다. 저장은 앱의 검증 버튼 옆 편집창에서 한다.
-- 사용자 대신 커밋하기 전에는 이 명령으로 검증을 돌리고 `status:passed` 를 확인한다.
+- The result stays in that tab's conversation as a verify card. With `--wait`, `result` carries `status` (passed|failed|aborted), the `head` at run time (sha, branch, dirty), and per-command `status`/`exitCode`/`output` (the tail). If one command fails, the later ones are `skipped`.
+- `--cmd` runs only those commands and does not save them. Saving is done in the app, in the editor next to the Verify button.
+- Before you commit on the user's behalf, run verification with this command and confirm `status:passed`.
 
-앱 화면 열기:
+Open things in the app:
 
 ```text
-atelier file open --path /abs/file.ts --line 42 [--tab <sel>]   # 그 탭의 에디터 패널에서 파일을 그 줄에서 연다
-atelier browser open --url http://localhost:3000 [--tab <sel>]  # 그 탭의 인앱 브라우저 탭으로
-atelier browser read [--tab <sel>]                             # 보이는 글 + 누를 만한 것(선택자 포함)
-atelier browser click --selector "#save" [--tab <sel>]         # 또는 --text "저장"
-atelier browser fill --selector "#email" --value "a@b.c"       # React 도 상태가 갱신된다
+atelier file open --path /abs/file.ts --line 42 [--tab <sel>]   # open the file at that line in that tab's editor panel
+atelier browser open --url http://localhost:3000 [--tab <sel>]  # open it in that tab's in-app browser
+atelier browser read [--tab <sel>]                             # visible text plus clickable items (with selectors)
+atelier browser click --selector "#save" [--tab <sel>]         # or --text "Save"
+atelier browser fill --selector "#email" --value "a@b.c"       # React state is updated too
 ```
 
-팬아웃(같은 지시를 격리 세션 여러 개에 동시에 보내 비교):
+Fan-out (send the same prompt to several isolated sessions at once and compare):
 
 ```text
-atelier tab fanout --tab <sel> --prompt "<지시>" --provider claude --provider codex --policy auto_edit --wait --timeout-ms 1800000
+atelier tab fanout --tab <sel> --prompt "<prompt>" --provider claude --provider codex --policy auto_edit --wait --timeout-ms 1800000
 ```
 
-- 세션마다 저장소의 git worktree 와 새 탭이 생겨 서로 파일을 건드리지 않는다. `--wait` 결과의 `result.variants[]` 에 세션별 `status`(done|failed|waiting)·변경 통계(`files`/`added`/`deleted`)·답변 요약이 온다. `waiting` 은 그 탭이 권한 응답을 기다린다는 뜻(사람이 봐야 함).
-- 어느 세션을 채택할지는 사용자가 앱의 비교 화면에서 고른다(패치를 원본에 적용). CLI 는 채택하지 않는다.
+- Each session gets its own git worktree of the repository and a new tab, so they do not touch each other's files. In the `--wait` result, `result.variants[]` carries each session's `status` (done|failed|waiting), change stats (`files`/`added`/`deleted`), and a summary of its answer. `waiting` means that tab is waiting for a permission answer (a person must look at it).
+- The user picks which session to adopt in the app's comparison view (the patch is applied to the original). The CLI does not adopt.
 
-## 오케스트레이션(감독이 필요한 다중 워커)
+## Orchestration (several workers that need supervision)
 
-여러 작업을 워커 탭들에 나눠 주고, 질문에 답하고, 완료 보고를 모아야 할 때 쓴다. 단순히 다른 탭에 넘기기만 할 거면 아래 "핸드오프" 로 충분하다.
-모델: **Run**(코디네이터의 인박스) > **Task**(자족적인 작업 명세) > **Dispatch**(그 작업의 권위 있는 시도 1개 = 워커 탭 하나). 권한은 dispatchId + capability 에 묶인다.
+Use this when you must split several jobs across worker tabs, answer their questions, and collect their completion reports. If you only need to pass work to another tab, "Handoff" below is enough.
+Model: **Run** (the coordinator's inbox) > **Task** (a self-contained job spec) > **Dispatch** (the one authoritative attempt at that job = one worker tab). Authority is bound to dispatchId + capability.
 
-### 코디네이터(당신이 탭 안에서 감독할 때)
+### Coordinator (when you supervise from inside a tab)
 
 ```text
-atelier orch run-create --objective "<목표>" --coordinator active        # 응답의 coordinatorKey 를 모든 명령에 --key 로
-atelier orch worker-start --run <run> --key <k> --spec "<Task 명세>" --agent codex --worktree
-atelier orch worker-start --run <run> --key <k> --spec "<다른 Task>" --agent claude --worktree
+atelier orch run-create --objective "<objective>" --coordinator self       # pass the coordinatorKey from the response as --key on every command
+atelier orch worker-start --run <run> --key <k> --spec "<Task spec>" --agent codex --worktree
+atelier orch worker-start --run <run> --key <k> --spec "<another Task>" --agent claude --worktree
 atelier orch check --run <run> --key <k> --wait --types worker_done,question,escalation,note --timeout-ms 900000
-atelier orch reply --run <run> --key <k> --id <question_id> --body "<답>"
-atelier orch send  --run <run> --key <k> --type followup --to dispatch:<id> --body "<지시>"
+atelier orch reply --run <run> --key <k> --id <question_id> --body "<answer>"
+atelier orch send  --run <run> --key <k> --type followup --to dispatch:<id> --body "<instruction>"
 atelier orch check --run <run> --key <k> --ack <delivery_id> --wait --types worker_done,question,escalation,note --timeout-ms 900000
-atelier orch worker-release --run <run> --key <k> --dispatch <id>           # 정산된 워커 정리(탭은 남는다)
+atelier orch worker-release --run <run> --key <k> --dispatch <id>           # clean up a settled worker (the tab stays)
 ```
 
-- Task 명세는 자족적으로: 대상(파일·컴포넌트), 변경, 제약(건드리면 안 되는 것), 소유 범위(이 워커가 편집해도 되는 것), 확인 가능한 완료 기준(테스트·출력).
-- 독립 작업은 한꺼번에 띄운 뒤 기다린다. `check --wait` 는 인박스의 오래된 배치부터 준다(Delivery). **모든 메시지를 처리한 뒤** `--ack <delivery_id>` 로 다음을 기다린다. ack 전에는 같은 배치가 다시 온다.
-- 빈 대기·시간 초과는 실패가 아니라 체크포인트다. 워커가 살아 있는 한 다시 기다린다. 앱 통지(note) 중 `turn_ended_without_report` 는 워커 턴이 보고 없이 끝났다는 뜻 — 탭을 보고 후속 지시를 보내거나 `worker-abandon`.
-- 편집이 있는 워커는 `--worktree` 로 격리한다. 같은 경로에 편집 워커 둘을 두지 않는다. worktree 는 원본 HEAD 에서 시작하므로 원본의 커밋 안 된 변경은 넘어가지 않는다.
-- 코디네이터 탭은 Run 이 살아 있는 동안 동시 작업 수에서 빠진다 — `check --wait` 로 기다리는 동안 워커 자리를 막지 않는다.
-- 후속 지시는 `--to dispatch:<id>` 또는 그룹 `@all` · `@claude` · `@codex` · `@idle`(살아 있는 워커에게 각각 전달). 워커 탭은 새 Run 을 만들 수 없다(`nested_run`).
-- 사람이 앱의 오케스트레이션 패널에서 "코디네이터 인수" 를 누르면 당신의 키는 `consumer_fenced` 가 된다. 그러면 멈추고 사용자에게 알린다.
-- 순서가 진짜 필요한 작업만 `task-create --deps` 로 잇는다. 의존 Task 가 succeeded 가 아니면 worker-start 가 `deps_unmet` 이다. `task-list --ready` 가 지금 시작할 수 있는 Task 를 준다 — 독립 작업을 먼저 한꺼번에(웨이브) 띄우고, 끝난 뒤 다음 웨이브를 띄운다. deps 는 순서만 뜻한다: 앞 Task 의 산출물이 어디 있는지는 뒤 Task 의 spec 에 적어야 한다.
-- 시작 전에 사람·코디네이터가 결정해야 할 게 있으면 `gate-create` 로 게이트를 건다(미해결이면 `gate_pending`). 워커의 질문(ask)을 대신하는 용도가 아니다.
-- 정산된 워커의 탭은 `worker-start --task <next> --terminal <tabId>` 로 다음 Task 에 재사용할 수 있다(같은 provider·경로). 더 안 쓰면 `worker-cleanup` 이 탭을 닫고 worktree 를 지운다 — release(감독 해제)와 다르며, 커밋 안 된 변경도 사라진다.
-- 앱 통지 `worker_tab_missing` 은 워커 탭이 사라졌다는 뜻(실행 상태 알 수 없음) — 확인 뒤 abandon.
+- Use `--coordinator self`, not `active`: the coordinator is the tab you are running in, which may not be the tab on screen.
+- Write each Task spec to be self-contained: the target (files, components), the change, the constraints (what must not be touched), the ownership scope (what this worker may edit), and a checkable completion criterion (tests, output).
+- Start independent jobs all at once, then wait. `check --wait` returns the oldest batch in the inbox first (a Delivery). **After handling every message in it**, wait for the next one with `--ack <delivery_id>`. Until you ack, the same batch comes again.
+- An empty wait or a timeout is a checkpoint, not a failure. As long as workers are alive, wait again. Among app notes, `turn_ended_without_report` means a worker's turn ended without a report: look at the tab and send a follow-up, or `worker-abandon`.
+- A worker that edits files must be isolated with `--worktree`. Never put two editing workers on the same path. A worktree starts from the original's HEAD, so uncommitted changes in the original do not carry over.
+- While a coordinator tab has open Dispatches in an active Run, it does not count toward the concurrency limit, so waiting with `check --wait` does not take a worker's slot.
+- Send follow-ups with `--to dispatch:<id>` or a group: `@all` · `@claude` · `@codex` · `@idle` (delivered to each live worker). A worker tab cannot create a new Run (`nested_run`).
+- If a person presses "Take over" in the app's orchestration panel, your key becomes `consumer_fenced`. Stop and tell the user.
+- Chain jobs with `task-create --deps` only when the order is truly required. If a dependency Task is not succeeded, worker-start fails with `deps_unmet`. `task-list --ready` returns the Tasks you can start now: start the independent ones together (a wave), then start the next wave when they finish. deps mean order only: where the earlier Task's output lives must be written in the later Task's spec.
+- If a person or the coordinator must decide something before a Task starts, put a gate on it with `gate-create` (unresolved gates fail with `gate_pending`). A gate is not a substitute for a worker's question (ask).
+- A settled worker's tab can be reused for the next Task with `worker-start --task <next> --terminal <tabId>` (same provider and path). When you no longer need it, `worker-cleanup` closes the tab and deletes the worktree. This differs from release (ending supervision), and uncommitted changes are lost.
+- The app note `worker_tab_missing` means a worker's tab disappeared (its execution state is unknown): check, then abandon.
 
-### 워커(프롬프트 맨 위에 "[Atelier 오케스트레이션 · 워커 계약]" 또는 "[Atelier orchestration · worker contract]" 가 있을 때)
+### Worker (when your prompt starts with "[Atelier orchestration · worker contract v…]" or "[Atelier 오케스트레이션 · 워커 계약 v…]")
 
-preamble 의 명령을 그대로 복사해 쓴다(--run/--dispatch/--capability). 규칙: 그 Task 만 한다 · 코디네이터에게 물을 땐 `orch ask`(막힘, 시간 초과면 같은 message_id 로 `--resume`) · 새 파일 시작 전·테스트 뒤·보고 직전에 `orch check` 로 후속 지시를 읽는다 · `consumer_fenced` 가 오면 즉시 멈춘다 · 완료 보고는 `orch send --type worker_done --outcome succeeded|failed` 로 정확히 한 번, 실패를 본문에 숨기지 않는다 · 보고 뒤엔 새 일을 시작하지 않고 턴을 끝낸다 · 다른 워커·Run 을 만들지 않는다. 읽지 않은 후속 지시가 있으면 보고가 `followup_pending` 으로 거절된다 — 먼저 check.
+Copy the commands from the preamble exactly as given (--run/--dispatch/--capability). Rules:
 
-## 핸드오프(다른 탭에 넘기기)
+- Do only that Task.
+- To ask the coordinator something, use `orch ask`. It blocks; on a timeout, wait for the same question again with `--resume <message_id>` (do not create a new question).
+- Read the coordinator's follow-ups with `orch check` before starting a new file, after running tests, and right before reporting. If there are messages, act on them and then confirm with `orch check … --ack <ackSeq>` using the `ackSeq` from the response. Until you confirm, the same follow-ups come again. This `ackSeq` is the worker's; it is not the coordinator's `delivery_id`.
+- If `consumer_fenced` comes back, stop immediately.
+- Send the completion report exactly once with `orch send --type worker_done --outcome succeeded|failed`. Do not hide a failure inside the body.
+- After reporting, do not start new work; end the turn.
+- Do not start other workers or create a Run.
+- If there are unread follow-ups, the report is rejected with `followup_pending`. Check first.
 
-새 탭을 만들어 브리핑을 보내고, 받았음(`send.ok:true`)만 확인하면 끝이다. 그 탭이 끝날 때까지 기다리라는 요청이 아니면 `wait` 하지 않는다.
+## Handoff (passing work to another tab)
+
+Create a new tab, send it a briefing, and stop once you have confirmed it was received (`send.ok:true`). Do not `wait` unless the request was to wait until that tab finishes.
 
 ```text
-atelier tab new --ws <name> --cwd /abs/repo --provider codex --title "<작업 이름>" --prompt "<브리핑>" --json
+atelier tab new --ws <name> --cwd /abs/repo --provider codex --title "<job name>" --prompt "<briefing>" --json
 ```
 
-## 규칙
+## Rules
 
-- 사람이 보고 있는 탭(`active`)에 지시를 보내면 사람의 대화에 끼어드는 것이다. 사용자가 명시하지 않았으면 새 탭을 만들어 쓴다.
-- `--policy full` 은 승인 없이 실행한다. 사용자가 허락했을 때만.
-- 자기 자신이 든 탭에 `send` 하고 `wait` 하면 영원히 기다린다. 자기 탭 id 는 `atelier tab list` 의 `active` 나 사용자가 알려 준 제목으로 알아낸다.
-- `read` 의 `blocks` 는 오래된 것부터 순서대로다. `kind` 는 user · assistant · tool · turn · error · review(교차 리뷰) · verify(검증 결과) · fanout(팬아웃) · orchestration(오케스트레이션 카드).
-- 앱이 꺼져 있으면 `not_running` 오류다. 앱을 열어 달라고 하고 멈춘다.
+- Sending a prompt to the tab the person is looking at (`active`) cuts into their conversation. Unless the user said so, create a new tab and use that.
+- `--policy full` runs without approval. Use it only when the user allowed it.
+- Do not wait on your own tab: `tab wait --tab self` and `tab send --tab self --wait` can never finish, because the tab is done only when your current turn ends. The CLI rejects them with `self_wait`. Use `--tab self` when you need your own tab id, for example `atelier tab status --tab self`.
+- The `blocks` in `read` are in order, oldest first. `kind` is one of user · assistant · tool · turn · error · notice · compacted · review (cross-review) · verify (verify result) · fanout (fan-out) · orchestration (orchestration card).
+- If the app is not running, commands fail with `not_running` (`skills get` and `--help` still work). Ask the user to open the app, and stop.

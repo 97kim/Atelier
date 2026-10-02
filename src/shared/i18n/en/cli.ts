@@ -154,6 +154,7 @@ export const cli: DeepPartial<typeof ko> = {
     unknownOrch: "Unknown orch command: {{cmd}}",
     tabValueRequired: "--tab needs a value (active · tab id · title).",
     noActiveTab: "There is no active tab.",
+    selfWait: "You can't wait on your own tab: it finishes only when the turn that ran this command ends. Target another tab, or send without --wait.",
     tabAmbiguous: "The tab selector matches more than one tab: {{candidates}}",
     tabNotFound: "Tab not found: {{key}}",
     timezoneUnknown: "Unknown time zone: {{tz}}",

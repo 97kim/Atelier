@@ -39,6 +39,7 @@ const MESSAGES = {
     badResponse: "응답을 읽지 못했습니다: {{line}}",
     disconnected: "응답 전에 연결이 끊겼습니다(앱이 종료 중일 수 있습니다).",
     notRunning: "Atelier 가 실행 중이 아닙니다(제어 소켓 없음). 앱을 먼저 여세요.",
+    noSelfTab: "self 는 Atelier 탭 안의 에이전트만 쓸 수 있습니다(ATELIER_TAB_ID 없음). 탭 id 나 제목을 주세요.",
     unknownGuide: "모르는 가이드: {{name}}",
     noAgents: "Claude Code(~/.claude)도 Codex(~/.codex)도 이 PC 에 없습니다.",
     installedNote: "새 세션부터 스킬이 보입니다(Claude Code: /atelier-cli, Codex: $atelier-cli).",
@@ -71,7 +72,7 @@ const MESSAGES = {
   atelier browser read [--tab <sel>]                     보이는 글과 누를 만한 것(선택자 포함)
   atelier browser click (--selector <css> | --text <글>) [--tab <sel>]
   atelier browser fill --selector <css> --value <값> [--tab <sel>]
-  atelier orch run-create --objective <text> [--coordinator active|<tab>]   # 오케스트레이션 Run (코디네이터 = 사람 또는 탭)
+  atelier orch run-create --objective <text> [--coordinator self|active|<tab>]   # 오케스트레이션 Run (코디네이터 = 사람 또는 탭)
   atelier orch worker-start --run <id> [--key <k>] (--spec <text> | --task <id>) [--agent claude|codex] [--model <id>]
                             [--policy ask|auto_edit|full] [--cwd /abs] [--worktree] [--request-id <id>]
   atelier orch check --run <id> [--key <k>] [--wait] [--types worker_done,question,escalation,note] [--ack <delivery>] [--peek] [--timeout-ms N]
@@ -90,7 +91,7 @@ const MESSAGES = {
   atelier skills get [atelier-cli]      # 이 앱 버전의 에이전트용 가이드(마크다운)
   atelier skills install                # Claude Code(~/.claude/skills)·Codex(~/.codex/skills) 에 스킬 스텁 설치
 
-  <sel> = active | 탭 id | 정확한 제목 | 유일한 제목 접두
+  <sel> = self(이 명령을 부른 에이전트의 탭) | active(화면에서 보고 있는 탭) | 탭 id | 정확한 제목 | 유일한 제목 접두
   --text / --prompt 에 "-" 를 주면 stdin 에서 읽는다.
 `,
   },
@@ -100,6 +101,7 @@ const MESSAGES = {
     badResponse: "Could not read the response: {{line}}",
     disconnected: "The connection closed before a response arrived (the app may be quitting).",
     notRunning: "Atelier is not running (no control socket). Open the app first.",
+    noSelfTab: "self only works for an agent running inside an Atelier tab (ATELIER_TAB_ID is not set). Pass a tab id or title.",
     unknownGuide: "Unknown guide: {{name}}",
     noAgents: "Neither Claude Code (~/.claude) nor Codex (~/.codex) exists on this computer.",
     installedNote: "The skill shows up from the next new session (Claude Code: /atelier-cli, Codex: $atelier-cli).",
@@ -132,7 +134,7 @@ const MESSAGES = {
   atelier browser read [--tab <sel>]                     visible text and clickable things (with selectors)
   atelier browser click (--selector <css> | --text <text>) [--tab <sel>]
   atelier browser fill --selector <css> --value <value> [--tab <sel>]
-  atelier orch run-create --objective <text> [--coordinator active|<tab>]   # orchestration Run (the coordinator is a person or a tab)
+  atelier orch run-create --objective <text> [--coordinator self|active|<tab>]   # orchestration Run (the coordinator is a person or a tab)
   atelier orch worker-start --run <id> [--key <k>] (--spec <text> | --task <id>) [--agent claude|codex] [--model <id>]
                             [--policy ask|auto_edit|full] [--cwd /abs] [--worktree] [--request-id <id>]
   atelier orch check --run <id> [--key <k>] [--wait] [--types worker_done,question,escalation,note] [--ack <delivery>] [--peek] [--timeout-ms N]
@@ -151,7 +153,7 @@ const MESSAGES = {
   atelier skills get [atelier-cli]      # the agent guide for this app version (markdown)
   atelier skills install                # install skill stubs into Claude Code (~/.claude/skills) and Codex (~/.codex/skills)
 
-  <sel> = active | tab id | exact title | unique title prefix
+  <sel> = self (the tab of the agent running this command) | active (the tab shown in the app) | tab id | exact title | unique title prefix
   Pass "-" to --text / --prompt to read it from stdin.
 `,
   },
@@ -264,6 +266,14 @@ async function main() {
   }
   const [group, cmd] = pos;
   checkValueFlags(flags);
+  // `self` = 이 CLI 를 부른 에이전트의 탭. 앱이 탭의 에이전트를 띄울 때 ATELIER_TAB_ID 로 알려 준다.
+  // `active`(사람이 화면에서 고른 탭)와 다르다 — 에이전트가 화면에 떠 있지 않은 탭에서 도는 일이 흔하다.
+  const selfTab = process.env.ATELIER_TAB_ID || undefined;
+  for (const k of ["tab", "coordinator", "terminal"]) {
+    if (flags[k] !== "self") continue;
+    if (!selfTab) return fail(t("noSelfTab"), "no_self_tab");
+    flags[k] = selfTab;
+  }
   const timeoutMs = flags.timeoutMs !== undefined ? Number(flags.timeoutMs) : undefined;
 
   // 앱이 없어도 되는 명령
@@ -381,6 +391,8 @@ async function main() {
   else if (group === "browser" && cmd === "fill") { method = "browser.fill"; params = { tab: flags.tab, selector: flags.selector, value: flags.value }; }
   else return fail(t("unknownCommand", { cmd: [group, cmd].filter(Boolean).join(" ") }), "unknown_command");
 
+  // 자기 탭을 기다리면 영영 끝나지 않는다 — 서버가 막을 수 있게 부른 탭을 알려 준다
+  if (selfTab && (method === "tab.wait" || method === "tab.send")) params.caller = selfTab;
   for (const k of Object.keys(params)) if (params[k] === undefined) delete params[k];
   // --tab 을 안 주면 서버가 active 로 본다(선택자 규칙은 서버에)
   // 데드라인: 기다리는 명령은 서버 대기 시간(기본 10분) + 15초, 나머지는 30초

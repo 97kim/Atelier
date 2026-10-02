@@ -300,7 +300,7 @@ and clean up finished workers. "Take over", where a person takes the coordinator
 
 Install the atelier CLI under Settings > General > "CLI and agent skills" and `~/.local/bin/atelier` is created. It connects to the running app over a Unix socket (`userData/control.sock`, 0600)
 to control workspaces, tabs, and sessions: `atelier tab new --prompt …`, `tab send --wait`, `tab read`, `tab verify`, `tab fanout`,
-`orch …`, `file open`, `browser open`. A tab selector takes `active`, an id, an exact title, or a unique prefix.
+`orch …`, `file open`, `browser open`. A tab selector takes `self` (the tab of the agent running the command), `active` (the tab on screen), an id, an exact title, or a unique prefix.
 "Install skill" on the same screen installs a usage guide into Claude Code (`~/.claude/skills`) and Codex (`$CODEX_HOME/skills`).
 That's how **an agent inside the app can control the app it lives in**: open a new tab and hand off work, launch workers, or read back results.
 

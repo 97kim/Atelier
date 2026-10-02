@@ -152,6 +152,7 @@ export const cli = {
     unknownOrch: "모르는 orch 명령: {{cmd}}",
     tabValueRequired: "--tab 값이 필요합니다(active · 탭 id · 제목).",
     noActiveTab: "활성 탭이 없습니다.",
+    selfWait: "자기 탭은 기다릴 수 없습니다. 이 명령을 부른 턴이 끝나야 그 탭이 끝납니다. 다른 탭을 지정하거나 --wait 없이 보내세요.",
     tabAmbiguous: "탭 선택자가 여러 개에 맞습니다: {{candidates}}",
     tabNotFound: "탭을 찾지 못했습니다: {{key}}",
     timezoneUnknown: "시간대를 알 수 없습니다: {{tz}}",

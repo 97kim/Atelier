@@ -264,3 +264,15 @@ test("tab.fanout: providers 로 시작하고 --wait 면 변형별 결과를 돌�
   assert.ok(calls.includes("fanout t1 claude,codex full"));
   await assert.rejects(server.dispatch("tab.fanout", { tab: "t1", prompt: "x" }), /providers/);
 });
+
+test("자기 탭은 기다릴 수 없다: 부른 탭(caller)과 대상이 같으면 self_wait, 보내기만 하는 것은 된다", async () => {
+  const { deps, calls } = fakeDeps();
+  const srv = new ControlServer(deps, join(mkdtempSync(join(tmpdir(), "wb-ctl-")), "c.sock"));
+  const d = (m: string, p: Record<string, unknown> = {}) => srv.dispatch(m, p) as Promise<Record<string, unknown>>;
+  await assert.rejects(d("tab.wait", { tab: "t1", caller: "t1" }), (e: { code?: string }) => e.code === "self_wait");
+  await assert.rejects(d("tab.send", { tab: "t1", text: "x", wait: true, caller: "t1" }), (e: { code?: string }) => e.code === "self_wait");
+  assert.equal(calls.some((c) => c.startsWith("send t1")), false, "막힌 요청은 보내지 않는다");
+  // 다른 탭을 기다리는 것, 자기 탭에 기다리지 않고 보내는 것은 그대로 된다
+  assert.equal(((await d("tab.wait", { tab: "t1", caller: "t2" })).wait as { satisfied: boolean }).satisfied, true);
+  assert.equal(((await d("tab.send", { tab: "t1", text: "y", caller: "t1" })).send as { ok: boolean }).ok, true);
+});

@@ -442,6 +442,7 @@ export class ControlServer {
       }
       case "tab.send": {
         const tab = this.resolveTab(params.tab);
+        if (params.wait === true) this.rejectSelfWait(tab, params);
         const text = this.requireString(params, "text");
         const since = this.deps.events(tab.id).length;
         const r = await this.deps.send(tab.id, text);
@@ -454,6 +455,7 @@ export class ControlServer {
       }
       case "tab.wait": {
         const tab = this.resolveTab(params.tab);
+        this.rejectSelfWait(tab, params);
         const w = await this.waitIdle(tab.id, num(params.timeoutMs) ?? 600_000);
         return { wait: w, ...(w.satisfied ? { reply: this.lastReply(tab.id) } : {}), tab: this.tabInfo(tab) };
       }
@@ -699,6 +701,11 @@ export class ControlServer {
       open: t.open,
       active: st.model.activeTabId === t.id,
     };
+  }
+
+  /** 부른 에이전트가 자기 탭을 기다리면 그 턴이 끝나지 않아 영영 기다린다. CLI 가 부른 탭(caller)을 알려 주면 막는다. */
+  private rejectSelfWait(tab: TabMeta, params: Record<string, unknown>): void {
+    if (str(params.caller) === tab.id) throw new ControlError(mt("cli.control.selfWait"), "self_wait");
   }
 
   /** 선택자: 생략하면 활성 탭. "active" · 탭 id · 정확한 제목 · 유일한 제목 접두(대소문자 무시). 열린 탭만 본다. 값 없는 플래그는 거절. */

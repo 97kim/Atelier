@@ -182,7 +182,7 @@ async function cliStatus(provider: Provider): Promise<CliStatusDto> {
 
 // SDK 가 띄우는 CLI 에 줄 env — 사용자 셸 PATH 를 반영하고 HOME/SHELL 을 보정한다.
 // 두 SDK 모두 env 를 지정하면 process.env 를 상속하지 않으므로 완전한 env 를 만들어 넘긴다.
-async function sdkEnv(): Promise<Record<string, string>> {
+async function sdkEnv(tabId?: string): Promise<Record<string, string>> {
   const baseEnv = await cliDiscovery().buildEnv();
   const home = app.getPath("home");
   const env: Record<string, string> = {};
@@ -196,23 +196,27 @@ async function sdkEnv(): Promise<Record<string, string>> {
   env.SHELL = env.SHELL || process.env.SHELL || "/bin/zsh";
   // 탭 안에서 부르는 `atelier` CLI 가 이 인스턴스(이 userData)에 붙게 — 개발·테스트 인스턴스가 사용자 앱을 건드리지 않게
   env.ATELIER_USERDATA = app.getPath("userData");
+  // 탭의 에이전트가 자기 탭을 알 수 있게 — `active` 는 화면에서 고른 탭이지 호출한 에이전트의 탭이 아니다.
+  // 탭 없이 띄우는 프로세스에는 남기지 않는다(앱이 다른 Atelier 탭의 셸에서 실행됐을 때 그 값이 새지 않게).
+  if (tabId) env.ATELIER_TAB_ID = tabId;
+  else delete env.ATELIER_TAB_ID;
   return env;
 }
 
-async function claudeRuntime(): Promise<ClaudeRuntime> {
+async function claudeRuntime(tabId?: string): Promise<ClaudeRuntime> {
   const cli = await cliDiscovery().find("claude");
   if (!cli.installed || !cli.path)
     throw new Error(cli.error || mt("main.error.claudeCliMissing"));
-  const env = await sdkEnv();
+  const env = await sdkEnv(tabId);
   env.CLAUDE_AGENT_SDK_CLIENT_APP = `atelier/${app.getVersion()}`;
   return { pathToClaudeCodeExecutable: cli.path, env };
 }
 
-async function codexRuntime(): Promise<CodexRuntime> {
+async function codexRuntime(tabId?: string): Promise<CodexRuntime> {
   const cli = await cliDiscovery().find("codex");
   if (!cli.installed || !cli.path)
     throw new Error(cli.error || mt("main.error.codexCliMissing"));
-  return { codexPath: cli.path, env: await sdkEnv() };
+  return { codexPath: cli.path, env: await sdkEnv(tabId) };
 }
 
 async function cliDiagnostics(): Promise<CliDiagnosticsDto> {
@@ -1410,7 +1414,7 @@ function bootstrap() {
     // 하이브리드 터미널 모드: 같은 세션 id 로 CLI 를 이 탭의 pty 에 띄운다.
     terminalCli: {
       async spawn(tabId, provider, cwd, sessionId, isNew, hookLog) {
-        const env = await sdkEnv();
+        const env = await sdkEnv(tabId);
         if (provider === "claude") {
           const cli = await cliDiscovery().find("claude");
           if (!cli.installed || !cli.path)
@@ -1802,7 +1806,7 @@ function registerIpc() {
   ipcMain.handle(IPC.appModels, (_e, provider: Provider, opts?: { force?: boolean }) => {
     if (!PROVIDERS.includes(provider)) return { models: [], source: "static" as const };
     if (opts?.force) invalidateModels(provider);
-    return listModels(provider, { claude: claudeRuntime, codex: codexRuntime, log: (l) => console.log(l) });
+    return listModels(provider, { claude: () => claudeRuntime(), codex: () => codexRuntime(), log: (l) => console.log(l) });
   });
   ipcMain.handle(
     IPC.cliCandidates,
@@ -2073,7 +2077,7 @@ function registerIpc() {
   ipcMain.handle(IPC.chatCommands, async (_e, tabId: string) => {
     const snap = sessions.snapshot(tabId);
     if (snap.provider !== "claude" || !snap.cwd) return [];
-    return slashCommands.get(snap.cwd, claudeRuntime);
+    return slashCommands.get(snap.cwd, () => claudeRuntime());
   });
 
   ipcMain.handle(IPC.mcpStatus, async (_e, cwd: string) => {

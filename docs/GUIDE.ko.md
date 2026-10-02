@@ -301,7 +301,7 @@ Codex 로 짠 것은 Claude 가 본다. 리뷰 탭은 같은 워크스페이스�
 
 설정 > 일반의 "CLI와 에이전트 스킬" 에서 atelier CLI 를 설치하면 `~/.local/bin/atelier` 가 생긴다. 실행 중인 앱에 유닉스 소켓(`userData/control.sock`, 0600)으로
 붙어 워크스페이스·탭·세션을 조종한다 — `atelier tab new --prompt …`, `tab send --wait`, `tab read`, `tab verify`, `tab fanout`,
-`orch …`, `file open`, `browser open`. 탭 선택자는 `active`·id·정확한 제목·유일한 접두사를 받는다.
+`orch …`, `file open`, `browser open`. 탭 선택자는 `self`(명령을 부른 에이전트의 탭)·`active`(화면에 보이는 탭)·id·정확한 제목·유일한 접두사를 받는다.
 같은 화면의 "스킬 설치" 는 Claude Code(`~/.claude/skills`)와 Codex(`$CODEX_HOME/skills`)에 사용법 가이드를 깔아 준다.
 그래서 **앱 안의 에이전트가 자기가 사는 앱을 조종할 수 있다** — 탭을 새로 열어 일을 넘기거나, 워커를 띄우거나, 결과를 읽어 온다.
 
