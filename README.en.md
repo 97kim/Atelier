@@ -21,11 +21,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/demo-delegate.gif" alt="Claude fixes a bug, then uses the atelier CLI to open a Codex tab and hand off the remaining fix and a new test; when Codex finishes, Claude collects the result, tests it, and wraps up" width="960" />
+  <img src="docs/images/en/demo-delegate.gif" alt="Claude fixes a bug, then uses the atelier CLI to open a Codex tab and hand off the remaining fix and a new test; when Codex finishes, Claude collects the result, tests it, and wraps up" width="960" />
 </p>
 
 <p align="center">
-  <sub>All I told Claude was: "Fix it, then hand the out-of-stock handling and its test to Codex." Claude opened the Codex tab itself, handed off the work, and when Codex finished, collected the result, tested it, and wrapped up. (The waiting parts are sped up.)</sub>
+  <sub>All I told Claude was: "Fix it, then hand the missing-quantity case and its test to Codex." Claude opened the Codex tab itself, handed off the work, and when Codex finished, collected the result, tested it, and wrapped up. (The waiting parts are sped up.)</sub>
 </p>
 
 You don't need an Atelier account. The app finds the `claude` and `codex` CLIs you've already logged in to and uses them, so `CLAUDE.md`, skills, MCP servers, and the rest of your setup apply exactly as they do in the terminal.
@@ -52,7 +52,7 @@ atelier tab read --tab Review --last 3
 Click `···` → "Cross-review" in the header to send the current tab's changes to a new tab on the other agent. The review comes back to the original tab as a card.
 
 </td>
-<td width="58%"><img src="docs/images/demo-cross-review.gif" alt="After Claude makes a fix, clicking Cross-review has a Codex review tab review the changes, and the result returns to the original tab as a card" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/demo-cross-review.gif" alt="After Claude makes a fix, clicking Cross-review has a Codex review tab review the changes, and the result returns to the original tab as a card" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -62,7 +62,7 @@ Click `···` → "Cross-review" in the header to send the current tab's change
 A coordinator tab breaks the job down and hands pieces to worker tabs. Workers ask when they're stuck and report when they're done. You can also set the order of tasks and the points where a human decides.
 
 </td>
-<td width="58%"><img src="docs/images/orchestration.png" alt="The orchestration card in a coordinator tab, showing the Claude worker as succeeded and the Codex worker as in progress" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/orchestration.png" alt="The orchestration card in a coordinator tab, showing the Claude worker as succeeded and the Codex worker as in progress" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -72,7 +72,7 @@ A coordinator tab breaks the job down and hands pieces to worker tabs. Workers a
 Fan-out sends the same request to several sessions at once, each in its own isolated git worktree. Compare the resulting diffs side by side and bring only the one you like into your original.
 
 </td>
-<td width="58%"><img src="docs/images/fanout.png" alt="Claude Code and Codex diffs for the same bug-fix request, side by side" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/fanout.png" alt="Claude Code and Codex diffs for the same bug-fix request, side by side" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -82,7 +82,7 @@ Fan-out sends the same request to several sessions at once, each in its own isol
 Before it changes a file or runs a command, it asks with a permission card. Files read, commands run, and code changed pile up as tool cards, so you don't have to chase terminal output.
 
 </td>
-<td width="58%"><img src="docs/images/hero.png" alt="Claude asking for permission to run a command before running tests" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/hero.png" alt="Claude asking for permission to run a command before running tests" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -92,7 +92,7 @@ Before it changes a file or runs a command, it asks with a permission card. File
 Run your test and build commands with one button and the results stay in the conversation as cards. Review changed files as diffs, get a draft commit message, and commit right inside the app.
 
 </td>
-<td width="58%"><img src="docs/images/review.png" alt="A passed-verification card in the chat, with changed files and a commit button in the right panel" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/review.png" alt="A passed-verification card in the chat, with changed files and a commit button in the right panel" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -102,7 +102,7 @@ Run your test and build commands with one button and the results stay in the con
 Click a file name in an answer and the code editor opens at that line. Lines the agent changed are shown in diff colors. Install a language server (LSP) and you get autocomplete and go-to-definition too.
 
 </td>
-<td width="58%"><img src="docs/images/editor.png" alt="src/cart.js, fixed by Claude, open in the editor with the changed lines marked" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/editor.png" alt="src/cart.js, fixed by Claude, open in the editor with the changed lines marked" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -112,7 +112,7 @@ Click a file name in an answer and the code editor opens at that line. Lines the
 Markdown files open as a clean preview, with tables, quotes, code, and checklists rendered. Click "Edit" to change them right away.
 
 </td>
-<td width="58%"><img src="docs/images/markdown.png" alt="A shipping-fee policy Markdown document open as a clean preview, with tables and code blocks rendered" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/markdown.png" alt="A shipping-fee policy Markdown document open as a clean preview, with tables and code blocks rendered" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -122,7 +122,7 @@ Markdown files open as a clean preview, with tables, quotes, code, and checklist
 Open a terminal below or beside the chat, and split it horizontally or vertically. Send a tool card's command straight to the terminal, and click a URL or file path in the output to open it in the browser or editor.
 
 </td>
-<td width="58%"><img src="docs/images/terminal.png" alt="The chat showing a diff fixed by Claude, and the terminal on the right showing passing tests" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/terminal.png" alt="The chat showing a diff fixed by Claude, and the terminal on the right showing passing tests" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -132,7 +132,7 @@ Open a terminal below or beside the chat, and split it horizontally or verticall
 Click `···` → "Continue in terminal" to carry on the same conversation in the Claude or Codex CLI in a terminal. What you exchange in the CLI is drawn into the chat as well, and when you quit the CLI you're back in the chat.
 
 </td>
-<td width="58%"><img src="docs/images/attach.png" alt="A conversation held in the Claude CLI in the terminal below, also shown as-is in the chat above" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/attach.png" alt="A conversation held in the Claude CLI in the terminal below, also shown as-is in the chat above" width="100%" /></td>
 </tr>
 <tr>
 <td width="42%" valign="middle">
@@ -142,7 +142,7 @@ Click `···` → "Continue in terminal" to carry on the same conversation in t
 Put the screen you're building next to the chat and switch it to phone or tablet width. Agents can read and click that page with `atelier browser`, so they verify their own fixes.
 
 </td>
-<td width="58%"><img src="docs/images/browser.png" alt="A shopping cart page under development, open in the in-app browser next to the chat" width="100%" /></td>
+<td width="58%"><img src="docs/images/en/browser.png" alt="A shopping cart page under development, open in the in-app browser next to the chat" width="100%" /></td>
 </tr>
 </table>
 
