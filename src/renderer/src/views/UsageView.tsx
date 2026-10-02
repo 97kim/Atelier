@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { intlLocale, type Locale } from "@shared/i18n/locale";
 import type {
   Provider,
   ProviderRateLimitDto,
@@ -17,21 +20,18 @@ import {
 import { Icon } from "../components/Icon";
 import { StackedBars, type StackedPoint } from "../components/StackedBars";
 
-const PERIODS: { id: Period; label: string }[] = [
-  { id: "today", label: "오늘" },
-  { id: "7d", label: "지난 7일" },
-  { id: "30d", label: "지난 30일" },
-  { id: "month", label: "이번 달" },
-];
+const PERIODS: Period[] = ["today", "7d", "30d", "month"];
 
 // dataviz 검증 통과 팔레트 (light, 인접 쌍 CVD ΔE ≥ 13). 입력=인디고, 캐시=틸, 출력=앰버.
 const SERIES = [
-  { key: "input", label: "입력", color: "#696FEA" },
-  { key: "cacheRead", label: "캐시 읽기", color: "#2A9D8F" },
-  { key: "output", label: "출력", color: "#C98A1E" },
-];
+  { key: "input", color: "#696FEA" },
+  { key: "cacheRead", color: "#2A9D8F" },
+  { key: "output", color: "#C98A1E" },
+] as const;
 
 export function UsageView() {
+  const { t, i18n } = useTranslation();
+  const loc = intlLocale(i18n.language as Locale);
   const [period, setPeriod] = useState<Period>("30d");
   const [provider, setProvider] = useState<Provider | "all">("all");
   const [cwd, setCwd] = useState<string | null>(null);
@@ -101,17 +101,18 @@ export function UsageView() {
           cacheRead: hideCache ? 0 : d.cacheRead,
           output: d.output,
         },
-        extra: `$${d.costUsd.toFixed(2)} · ${d.requests}회`,
+        extra: `$${d.costUsd.toFixed(2)} · ${t("usage.requestCount", { count: d.requests })}`,
       })),
-    [summary, hideCache],
+    [summary, hideCache, t],
   );
-  const chartSeries = hideCache
+  const chartSeries = (hideCache
     ? SERIES.filter((s) => s.key !== "cacheRead")
-    : SERIES;
+    : [...SERIES]
+  ).map((s) => ({ ...s, label: t(`usage.series.${s.key}`) }));
 
-  const t = summary?.totals;
+  const tot = summary?.totals;
   const prev = summary?.previous;
-  const totalTokens = t ? tokensTotal(t) : 0;
+  const totalTokens = tot ? tokensTotal(tot) : 0;
   const limits = status?.rateLimits;
   const [refreshingLimits, setRefreshingLimits] = useState(false);
   const refreshLimits = async () => {
@@ -128,21 +129,21 @@ export function UsageView() {
     <div className="flex h-full flex-col">
       <header className="drag flex h-[84px] shrink-0 items-center justify-between px-6 pt-7">
         <div>
-          <div className="text-[15px] font-semibold">사용량</div>
+          <div className="text-[15px] font-semibold">{t("usage.title")}</div>
           <div className="text-[11px] text-muted">
-            이 Mac에 저장된 Claude Code·Codex 대화 기록을 바탕으로 사용량을 계산합니다.
+            {t("usage.description")}
           </div>
         </div>
         <div className="no-drag mono flex items-center gap-2 text-[10px] text-muted">
           {status?.scanning
-            ? "사용량 집계 중…"
+            ? t("usage.scanning")
             : status?.lastScanAt
-              ? `${status.files}개 파일 · ${fmtTime(status.lastScanAt)} 갱신`
+              ? t("usage.scanInfo", { count: status.files, time: fmtTime(status.lastScanAt, loc) })
               : ""}
           <button
             onClick={() => void window.workbench.usage.rescan().then(setStatus)}
             className="rounded-md border border-line p-1.5 hover:bg-panel-2"
-            title="사용량 다시 집계"
+            title={t("usage.rescanTitle")}
           >
             <Icon name="refresh" size={12} />
           </button>
@@ -156,11 +157,11 @@ export function UsageView() {
             <div className="flex rounded-md border border-line bg-panel p-0.5">
               {PERIODS.map((p) => (
                 <button
-                  key={p.id}
-                  onClick={() => setPeriod(p.id)}
-                  className={`rounded px-3 py-1 ${period === p.id ? "bg-accent-tint text-accent" : "text-muted hover:text-fg"}`}
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`rounded px-3 py-1 ${period === p ? "bg-accent-tint text-accent" : "text-muted hover:text-fg"}`}
                 >
-                  {p.label}
+                  {t(`usage.period.${p}`)}
                 </button>
               ))}
             </div>
@@ -171,7 +172,7 @@ export function UsageView() {
                   onClick={() => setProvider(p)}
                   className={`rounded px-3 py-1 ${provider === p ? "bg-accent-tint text-accent" : "text-muted hover:text-fg"}`}
                 >
-                  {p === "all" ? "전체" : p === "claude" ? "Claude" : "Codex"}
+                  {p === "all" ? t("usage.providerAll") : p === "claude" ? "Claude" : "Codex"}
                 </button>
               ))}
             </div>
@@ -180,7 +181,7 @@ export function UsageView() {
               onChange={(v) => setCwd(v || null)}
               icon="folder"
             >
-              <option value="">모든 워크스페이스</option>
+              <option value="">{t("usage.allWorkspaces")}</option>
               {wsOptions.map((w) => (
                 <option key={w.cwd} value={w.cwd}>
                   {w.name} — {shorten(w.cwd)}
@@ -192,49 +193,49 @@ export function UsageView() {
               className="ml-auto flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-1.5 hover:bg-panel-2"
             >
               <Icon name="file" size={13} />
-              CSV 내보내기
+              {t("usage.exportCsv")}
             </button>
           </div>
           {exported && (
-            <p className="mono text-[11px] text-ok">저장됨: {exported}</p>
+            <p className="mono text-[11px] text-ok">{t("usage.saved", { path: exported })}</p>
           )}
 
           {/* KPI */}
           <div className="grid grid-cols-4 gap-4">
             <Kpi
-              label="총 토큰"
+              label={t("usage.kpi.totalTokens")}
               value={fmtTokens(totalTokens)}
               delta={
-                t && prev ? pctChange(totalTokens, tokensTotal(prev)) : null
+                tot && prev ? pctChange(totalTokens, tokensTotal(prev)) : null
               }
               icon="usage"
             />
             <Kpi
-              label="추정 비용 (API 환산)"
-              value={t ? fmtUsd(t.costUsd) : "-"}
-              delta={t && prev ? pctChange(t.costUsd, prev.costUsd) : null}
+              label={t("usage.kpi.estCost")}
+              value={tot ? fmtUsd(tot.costUsd) : "-"}
+              delta={tot && prev ? pctChange(tot.costUsd, prev.costUsd) : null}
               sub={
-                t && t.unpricedModels.length > 0
-                  ? `실제 청구액이 아닙니다. 단가가 없어 제외한 모델: ${t.unpricedModels.join(", ")}`
-                  : "실제 청구액이 아닙니다."
+                tot && tot.unpricedModels.length > 0
+                  ? t("usage.kpi.notBilledUnpriced", { models: tot.unpricedModels.join(", ") })
+                  : t("usage.kpi.notBilled")
               }
               icon="sparkles"
             />
             <Kpi
-              label="API 요청"
-              value={t ? t.requests.toLocaleString() : "-"}
-              delta={t && prev ? pctChange(t.requests, prev.requests) : null}
+              label={t("usage.kpi.requests")}
+              value={tot ? tot.requests.toLocaleString() : "-"}
+              delta={tot && prev ? pctChange(tot.requests, prev.requests) : null}
               icon="play"
             />
             <Kpi
-              label="요청당 평균 추정 비용"
+              label={t("usage.kpi.avgCost")}
               value={
-                t && t.requests > 0 ? fmtUsd(t.costUsd / t.requests, 4) : "-"
+                tot && tot.requests > 0 ? fmtUsd(tot.costUsd / tot.requests, 4) : "-"
               }
               delta={
-                t && prev && t.requests > 0 && prev.requests > 0
+                tot && prev && tot.requests > 0 && prev.requests > 0
                   ? pctChange(
-                      t.costUsd / t.requests,
+                      tot.costUsd / tot.requests,
                       prev.costUsd / prev.requests,
                     )
                   : null
@@ -246,8 +247,8 @@ export function UsageView() {
           <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4">
             {/* 시간별 사용량 */}
             <Card
-              title="기간별 사용량"
-              sub="일별 토큰 · 캐시 쓰기는 입력에 포함"
+              title={t("usage.chart.title")}
+              sub={t("usage.chart.sub")}
               action={
                 <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted">
                   <input
@@ -256,7 +257,7 @@ export function UsageView() {
                     onChange={(e) => setHideCache(e.target.checked)}
                     className="accent-[#696FEA]"
                   />
-                  캐시 읽기 제외
+                  {t("usage.chart.hideCache")}
                 </label>
               }
             >
@@ -267,20 +268,20 @@ export function UsageView() {
                   format={fmtTokens}
                 />
               ) : (
-                <p className="text-muted">데이터 없음</p>
+                <p className="text-muted">{t("usage.noData")}</p>
               )}
             </Card>
 
             {/* 모델별 */}
             <Card
-              title="모델별"
-              sub={t ? `${fmtUsd(t.costUsd)} 합계` : undefined}
+              title={t("usage.byModel.title")}
+              sub={tot ? t("usage.byModel.total", { cost: fmtUsd(tot.costUsd) }) : undefined}
             >
               {summary && summary.byModel.length > 0 ? (
                 <ul className="flex flex-col gap-3">
                   {summary.byModel.slice(0, 8).map((m) => {
                     const share =
-                      t && t.costUsd > 0 ? m.costUsd / t.costUsd : 0;
+                      tot && tot.costUsd > 0 ? m.costUsd / tot.costUsd : 0;
                     return (
                       <li key={m.model}>
                         <div className="flex items-center gap-2">
@@ -297,12 +298,12 @@ export function UsageView() {
                             </span>
                             {m.estimated && (
                               <span className="label ml-1.5 text-warn">
-                                추정가
+                                {t("usage.byModel.estimated")}
                               </span>
                             )}
                             {!m.priced && (
                               <span className="label ml-1.5 text-err">
-                                가격 없음
+                                {t("usage.byModel.unpriced")}
                               </span>
                             )}
                           </span>
@@ -322,14 +323,14 @@ export function UsageView() {
                   })}
                 </ul>
               ) : (
-                <p className="text-muted">데이터 없음</p>
+                <p className="text-muted">{t("usage.noData")}</p>
               )}
             </Card>
           </div>
 
           <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4">
             {/* 워크스페이스별 */}
-            <Card title="워크스페이스별" sub="추정 비용 상위">
+            <Card title={t("usage.byWorkspace.title")} sub={t("usage.byWorkspace.sub")}>
               {summary && summary.byWorkspace.length > 0 ? (
                 <table className="w-full table-fixed text-left">
                   <colgroup>
@@ -341,11 +342,11 @@ export function UsageView() {
                   </colgroup>
                   <thead>
                     <tr className="label border-b border-line">
-                      <th className="pb-2 font-normal">프로젝트 / 경로</th>
-                      <th className="pb-2 text-right font-normal">세션</th>
-                      <th className="pb-2 text-right font-normal">토큰</th>
-                      <th className="pb-2 text-right font-normal">비용</th>
-                      <th className="pb-2 text-right font-normal">비중</th>
+                      <th className="pb-2 font-normal">{t("usage.byWorkspace.path")}</th>
+                      <th className="pb-2 text-right font-normal">{t("usage.byWorkspace.sessions")}</th>
+                      <th className="pb-2 text-right font-normal">{t("usage.byWorkspace.tokens")}</th>
+                      <th className="pb-2 text-right font-normal">{t("usage.byWorkspace.cost")}</th>
+                      <th className="pb-2 text-right font-normal">{t("usage.byWorkspace.share")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -387,17 +388,17 @@ export function UsageView() {
                   </tbody>
                 </table>
               ) : (
-                <p className="text-muted">데이터 없음</p>
+                <p className="text-muted">{t("usage.noData")}</p>
               )}
             </Card>
 
             {/* 한도 · 알림 */}
-            <Card title="한도 · 알림">
+            <Card title={t("usage.limits.title")}>
               <div className="flex flex-col gap-4">
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <span className="font-medium">
-                      이번 달 예산 (추정 비용 기준)
+                      {t("usage.limits.budget")}
                     </span>
                     <span className="mono text-[10.5px] text-muted">
                       {monthCost !== null ? fmtUsd(monthCost) : "-"}
@@ -420,7 +421,7 @@ export function UsageView() {
                     <input
                       value={budgetInput}
                       onChange={(e) => setBudgetInput(e.target.value)}
-                      placeholder="예: 300"
+                      placeholder={t("usage.limits.budgetPlaceholder")}
                       inputMode="decimal"
                       className="mono min-w-0 flex-1 rounded-md border border-line bg-inset px-2.5 py-1.5 outline-none focus:border-accent/50"
                       style={{ userSelect: "text" }}
@@ -429,17 +430,17 @@ export function UsageView() {
                       onClick={() => void saveBudget()}
                       className="rounded-md border border-line px-3 py-1.5 hover:bg-panel-2"
                     >
-                      저장
+                      {t("common.save")}
                     </button>
                   </div>
                   <p className="mt-1.5 text-[10.5px] text-muted">
-                    80% 도달 시 한 달에 한 번 알림. 비워 두면 알림 없음.
+                    {t("usage.limits.budgetHint")}
                   </p>
                 </div>
 
                 <div className="border-t border-line pt-3">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="font-medium">최근 5시간</span>
+                    <span className="font-medium">{t("usage.limits.last5h")}</span>
                     <span className="mono text-[10.5px] text-muted">
                       {summary
                         ? `${fmtTokens(tokensTotal(summary.last5h))} · ${fmtUsd(summary.last5h.costUsd)}`
@@ -447,30 +448,30 @@ export function UsageView() {
                     </span>
                   </div>
                   <p className="text-[10.5px] text-muted">
-                    앱과 터미널의 대화 기록에 남은 토큰 합계입니다. 구독 한도는 아래에서 확인하세요.
+                    {t("usage.limits.last5hHint")}
                   </p>
                 </div>
 
                 <RateLimitBlock
-                  label="Claude Code 구독 한도"
+                  label={t("usage.limits.claude")}
                   color="bg-accent"
                   limit={limits?.claude ?? null}
-                  hint="작업 중 갱신됩니다. 새로고침하면 추가 비용 없이 사용 한도를 조회합니다."
+                  hint={t("usage.limits.claudeHint")}
                   onRefresh={refreshLimits}
                   refreshing={refreshingLimits}
                 />
                 <RateLimitBlock
-                  label="Codex 구독 한도"
+                  label={t("usage.limits.codex")}
                   color="bg-[#2A9D8F]"
                   limit={limits?.codex ?? null}
-                  hint="Codex 대화 기록에 남은 사용 한도 정보입니다. 터미널에서 사용한 내역도 반영합니다."
+                  hint={t("usage.limits.codexHint")}
                   onRefresh={refreshLimits}
                   refreshing={refreshingLimits}
                 />
 
                 {summary && (
                   <div className="border-t border-line pt-3">
-                    <div className="mb-1.5 font-medium">출처</div>
+                    <div className="mb-1.5 font-medium">{t("usage.limits.source")}</div>
                     <SourceBar
                       inApp={summary.sources.inApp.costUsd}
                       terminal={summary.sources.terminal.costUsd}
@@ -482,7 +483,7 @@ export function UsageView() {
           </div>
 
           {summary && summary.topSessions.length > 0 && (
-            <Card title="상위 세션" sub="추정 비용 기준 10개">
+            <Card title={t("usage.topSessions.title")} sub={t("usage.topSessions.sub")}>
               <ul className="grid grid-cols-2 gap-x-6 gap-y-2">
                 {summary.topSessions.map((s) => (
                   <li
@@ -492,14 +493,14 @@ export function UsageView() {
                     <span
                       className={`label rounded px-1.5 py-0.5 ${s.inApp ? "bg-accent-tint text-accent" : "bg-panel-2 text-muted"}`}
                     >
-                      {s.inApp ? "인앱" : "터미널"}
+                      {s.inApp ? t("usage.topSessions.inApp") : t("usage.topSessions.terminal")}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">
-                        {baseName(s.cwd) || "(경로 없음)"}
+                        {baseName(s.cwd) || t("usage.topSessions.noPath")}
                       </span>
                       <span className="mono block truncate text-[10px] text-muted">
-                        {s.model} · {s.requests}회 · {fmtTime(s.lastTs)}
+                        {s.model} · {t("usage.requestCount", { count: s.requests })} · {fmtTime(s.lastTs, loc)}
                       </span>
                     </span>
                     <span className="mono text-right text-[10.5px]">
@@ -515,11 +516,7 @@ export function UsageView() {
           )}
 
           <p className="mono pb-2 text-[10px] text-muted">
-            비용은 모델별 API 단가로 환산한 추정치이며, 구독 요금이나 실제 청구액이 아닙니다. 단가표는
-            {status?.customPricing
-              ? " 사용자 설정(pricing.json)을 사용합니다"
-              : " 앱 기본값을 사용합니다"}{" "}
-            · Codex 단가는 공식 가격표와 대조하지 않았습니다.
+            {status?.customPricing ? t("usage.footnoteCustom") : t("usage.footnoteDefault")}
           </p>
         </div>
       </div>
@@ -565,6 +562,7 @@ function Kpi({
   sub?: string;
   icon: "usage" | "sparkles" | "play" | "clock";
 }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border border-line bg-panel p-4">
       <div className="mb-2 flex items-center justify-between">
@@ -574,11 +572,10 @@ function Kpi({
       <div className="mono text-[24px] font-medium leading-none">{value}</div>
       <div className="mt-2 text-[10.5px] text-muted">
         {delta === null ? (
-          <span>이전 기간 데이터 없음</span>
+          <span>{t("usage.kpi.noPrev")}</span>
         ) : (
           <span className={delta > 0 ? "text-warn" : "text-ok"}>
-            {delta > 0 ? "+" : ""}
-            {delta.toFixed(1)}% · 이전 기간 대비
+            {t("usage.kpi.vsPrev", { value: `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` })}
           </span>
         )}
         {sub && (
@@ -592,6 +589,7 @@ function Kpi({
 }
 
 function SourceBar({ inApp, terminal }: { inApp: number; terminal: number }) {
+  const { t } = useTranslation();
   const total = inApp + terminal;
   const p = total > 0 ? (inApp / total) * 100 : 0;
   return (
@@ -603,11 +601,11 @@ function SourceBar({ inApp, terminal }: { inApp: number; terminal: number }) {
       <div className="mono mt-1.5 flex justify-between text-[10px] text-muted">
         <span>
           <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-accent align-middle" />
-          인앱 {fmtUsd(inApp)}
+          {t("usage.limits.sourceInApp", { cost: fmtUsd(inApp) })}
         </span>
         <span>
           <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-[#2A9D8F] align-middle" />
-          터미널 {fmtUsd(terminal)}
+          {t("usage.limits.sourceTerminal", { cost: fmtUsd(terminal) })}
         </span>
       </div>
     </div>
@@ -675,18 +673,20 @@ function RateLimitBlock({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
+  const { t, i18n } = useTranslation();
+  const loc = intlLocale(i18n.language as Locale);
   return (
     <div className="border-t border-line pt-3">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="font-medium">{label}</span>
         <span className="flex items-center gap-1.5">
           <span className="mono text-[10.5px] text-muted">
-            {limit ? `${fmtTime(limit.observedAt)} 기준` : "정보 없음"}
+            {limit ? t("usage.limits.observedAt", { time: fmtTime(limit.observedAt, loc) }) : t("usage.limits.noInfo")}
           </span>
           <button
             onClick={onRefresh}
             className={`rounded p-1 text-muted hover:bg-panel-2 hover:text-fg ${refreshing ? "animate-spin" : ""}`}
-            title="구독 한도 새로고침"
+            title={t("usage.limits.refreshTitle")}
             data-limits-refresh
           >
             <Icon name="refresh" size={11} />
@@ -700,21 +700,21 @@ function RateLimitBlock({
             <RateLimitBar
               color={color}
               w={limit.weekly}
-              suffix={limit.modelWeekly ? " · 전체 모델" : ""}
+              suffix={limit.modelWeekly ? ` · ${t("usage.limits.allModels")}` : ""}
             />
           )}
           {limit.modelWeekly && (
             <RateLimitBar
               color={color}
               w={limit.modelWeekly}
-              suffix={` · ${limit.modelWeekly.label} 전용`}
+              suffix={` · ${t("usage.limits.modelOnly", { model: limit.modelWeekly.label })}`}
             />
           )}
           <p className="text-[10.5px] text-muted">{hint}</p>
         </div>
       ) : (
         <p className="text-[10.5px] text-muted">
-          {hint} 아직 정보가 없다면 해당 AI에 메시지를 보내 응답을 받은 뒤 다시 확인하세요.
+          {t("usage.limits.noInfoHint", { hint })}
         </p>
       )}
     </div>
@@ -730,17 +730,19 @@ function RateLimitBar({
   w: RateLimitWindowDto;
   suffix?: string;
 }) {
+  const { t, i18n } = useTranslation();
+  const loc = intlLocale(i18n.language as Locale);
   const pct = Math.min(100, Math.max(0, w.usedPercent));
   const left = 100 - pct;
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-[11px]">
         <span className="text-muted">
-          {fmtWindow(w.windowMinutes)} 기준{suffix}
+          {t("usage.limits.windowBasis", { window: fmtWindow(w.windowMinutes, t), suffix })}
         </span>
         <span className="mono text-[10.5px] text-muted">
-          {pct >= 100 ? "한도 도달" : `${Math.round(pct)}% 사용 · ${Math.round(left)}% 남음`}
-          {w.resetsAt ? ` · ${fmtDateTime(w.resetsAt * 1000)} 초기화` : ""}
+          {pct >= 100 ? t("usage.limits.reached") : t("usage.limits.usedLeft", { used: Math.round(pct), left: Math.round(left) })}
+          {w.resetsAt ? ` · ${t("usage.limits.resets", { time: fmtDateTime(w.resetsAt * 1000, loc) })}` : ""}
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-panel-2">
@@ -754,9 +756,9 @@ function RateLimitBar({
 }
 
 /** 오늘이면 시:분, 아니면 월/일 시:분. 한도 초기화 시각처럼 날짜와 시각이 모두 필요한 곳에. */
-function fmtDateTime(ts: number): string {
+function fmtDateTime(ts: number, loc: string): string {
   const d = new Date(ts);
-  const time = d.toLocaleTimeString("ko-KR", {
+  const time = d.toLocaleTimeString(loc, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -764,19 +766,19 @@ function fmtDateTime(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
 }
 
-function fmtTime(ts: number): string {
+function fmtTime(ts: number, loc: string): string {
   const d = new Date(ts);
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
   return sameDay
-    ? d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
+    ? d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString(loc, { month: "numeric", day: "numeric" });
 }
 
-function fmtWindow(min: number): string {
-  if (min >= 1440) return `${Math.round(min / 1440)}일`;
-  if (min >= 60) return `${Math.round(min / 60)}시간`;
-  return `${min}분`;
+function fmtWindow(min: number, t: TFunction): string {
+  if (min >= 1440) return t("usage.limits.day", { count: Math.round(min / 1440) });
+  if (min >= 60) return t("usage.limits.hour", { count: Math.round(min / 60) });
+  return t("usage.limits.minute", { count: min });
 }
 
 function shorten(p: string): string {

@@ -2,13 +2,14 @@
 import { usePaneFocusRef } from "../pane-focus";
 // 주소창·뒤로/앞으로/새로고침·외부 브라우저 열기를 둔다. 탭 키(초기 URL 또는 browser:<n>)는 고정이고 이동은 이 안에서만 일어난다.
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
 import { normalizeUrl } from "../browser-url";
 import { browserTabLabel } from "../editor-tabs";
 import type { ChatImageDto } from "@shared/ipc";
 import { PICKER_STOP_SCRIPT, dataUrlImage, elementImage, formatElementAttachment, parsePickMessage, pickerScript } from "@shared/element-pick";
 import { DIAG_MAX_CONSOLE, formatDiagnostics, pushCapped, type ConsoleLine } from "@shared/browser-diagnostics";
-import { DEFAULT_VIEWPORT, VIEWPORTS, nextZoom, viewportById, zoomLevelToPercent } from "../browser-viewport";
+import { DEFAULT_VIEWPORT, VIEWPORTS, nextZoom, type ViewportId, viewportById, zoomLevelToPercent } from "../browser-viewport";
 import { parseHistory, recordVisit, suggest, type HistoryEntry } from "@shared/browser-history";
 import { kvGet, kvSet } from "../kv-store";
 
@@ -50,6 +51,10 @@ export function BrowserPane({
   /** 보고 있는 주소가 바뀔 때. 탭이 내려갔다 올라와도 같은 페이지로 돌아오게 밖에서 들고 있는다. */
   onUrlChange?: (url: string) => void;
 }) {
+  const { t } = useTranslation();
+  // 웹뷰 이벤트 리스너는 한 번 붙이고 오래 남으므로, 언어가 바뀐 뒤에도 최신 t 를 쓰도록 ref 로 건넨다.
+  const tRef = useRef(t);
+  tRef.current = t;
   const view = useRef<AtelierWebview | null>(null);
   // <webview> 는 주소가 생긴 뒤에야 렌더되므로, 마운트 시점을 state 로 잡아 그때 리스너를 붙인다.
   const [mounted, setMounted] = useState(false);
@@ -88,7 +93,7 @@ export function BrowserPane({
   // 페이지 내 찾기 — ⌘F 는 대화 검색과 겹치므로 브라우저에 포커스가 있을 때만 이쪽이 잡는다(ChatView 가 라우팅).
   const [find, setFind] = useState<{ open: boolean; text: string; matches: number; at: number }>({ open: false, text: "", matches: 0, at: 0 });
   const findRef = useRef<HTMLInputElement>(null);
-  const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
+  const [viewport, setViewport] = useState<ViewportId>(DEFAULT_VIEWPORT);
   const [zoom, setZoom] = useState(0);
   // 선택 세션마다 새 표식 — 페이지가 표식을 미리 알 수 없어 위조가 어렵고, 옛 세션의 늦은 메시지도 걸러진다
   const nonceRef = useRef("");
@@ -101,7 +106,7 @@ export function BrowserPane({
       await el.executeJavaScript(pickerScript(nonceRef.current));
       setPicking(true);
     } catch (e) {
-      setPickMsg(`요소 선택을 시작하지 못했습니다: ${e instanceof Error ? e.message : String(e)}`);
+      setPickMsg(t("panel.browser.pickFailed", { error: e instanceof Error ? e.message : String(e) }));
     }
   };
   const stopPick = () => {
@@ -162,7 +167,7 @@ export function BrowserPane({
           /* 무시 */
         }
         onAttachRef.current?.(formatElementAttachment(picked, pageUrl), images);
-        setPickMsg(`${picked.selector} 를 입력창에 붙였습니다${images ? " (스크린샷 포함)" : ""}`);
+        setPickMsg(tRef.current(images ? "panel.browser.pickedWithShot" : "panel.browser.picked", { selector: picked.selector }));
         setTimeout(() => setPickMsg(null), 4000);
       })();
     };
@@ -199,7 +204,7 @@ export function BrowserPane({
         setNav({ back: el.canGoBack(), forward: el.canGoForward() });
         try {
           // 제목이 이미 왔으면 그걸 둔다 — 크롬처럼 탭에는 제목이 보여야 한다.
-          if (!titleRef.current) onLabelRef.current?.(browserTabLabel(u));
+          if (!titleRef.current) onLabelRef.current?.(browserTabLabel(u, tRef.current));
         } catch {
           /* 무시 */
         }
@@ -208,10 +213,10 @@ export function BrowserPane({
       }
     };
     const onTitle = (e: Event) => {
-      const t = (e as CustomEvent & { title?: string }).title ?? el.getTitle();
-      setTitle(t);
-      titleRef.current = t ?? "";
-      if (t) onLabelRef.current?.(t.length > 28 ? `${t.slice(0, 28)}…` : t);
+      const pageTitle = (e as CustomEvent & { title?: string }).title ?? el.getTitle();
+      setTitle(pageTitle);
+      titleRef.current = pageTitle ?? "";
+      if (pageTitle) onLabelRef.current?.(pageTitle.length > 28 ? `${pageTitle.slice(0, 28)}…` : pageTitle);
     };
     const onStart = () => {
       setLoading(true);
@@ -356,7 +361,7 @@ export function BrowserPane({
         images,
       );
       const errs = consoleRef.current.filter((c) => c.level >= 2).length;
-      setPickMsg(`진단을 입력창에 붙였습니다 (콘솔 ${errs}건 · 요청 실패 ${net.length}건${images ? " · 화면 캡처" : ""})`);
+      setPickMsg(t(images ? "panel.browser.diagAttachedWithShot" : "panel.browser.diagAttached", { errors: errs, failures: net.length }));
       setTimeout(() => setPickMsg(null), 4000);
     } finally {
       setDiagBusy(false);
@@ -437,10 +442,10 @@ export function BrowserPane({
   return (
     <div className="flex h-full min-h-0 flex-col" data-browser-pane={url || "blank"}>
       <div className="flex items-center gap-1 border-b border-line px-2 py-1">
-        <button onClick={() => view.current?.goBack()} disabled={!nav.back} className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30" title="뒤로" data-browser-back>
+        <button onClick={() => view.current?.goBack()} disabled={!nav.back} className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30" title={t("panel.browser.back")} data-browser-back>
           <Icon name="chevronRight" size={13} className="rotate-180" />
         </button>
-        <button onClick={() => view.current?.goForward()} disabled={!nav.forward} className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30" title="앞으로">
+        <button onClick={() => view.current?.goForward()} disabled={!nav.forward} className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30" title={t("panel.browser.forward")}>
           <Icon name="chevronRight" size={13} />
         </button>
         <button
@@ -454,7 +459,7 @@ export function BrowserPane({
           }}
           disabled={!url}
           className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
-          title={loading ? "중지" : "새로고침 (⌘R) · ⇧ 를 누르고 누르면 캐시 무시 (⌘⇧R)"}
+          title={loading ? t("panel.browser.stop") : t("panel.browser.reloadTitle")}
           data-browser-reload
         >
           <Icon name={loading ? "x" : "refresh"} size={13} className={loading ? "" : ""} />
@@ -501,7 +506,7 @@ export function BrowserPane({
                 setSugAt((i) => (i <= 0 ? sugs.length - 1 : i - 1));
               }
             }}
-            placeholder="주소를 입력하세요 (localhost:3000, example.com …)"
+            placeholder={t("panel.browser.addressPlaceholder")}
             spellCheck={false}
             className="w-full rounded-md border border-line bg-inset px-2.5 py-1 text-[12px] text-fg outline-none placeholder:text-muted focus:border-accent/50"
             style={{ userSelect: "text" }}
@@ -530,7 +535,7 @@ export function BrowserPane({
                   >
                     <Icon name="clock" size={11} className="shrink-0 opacity-60" />
                     <span className="truncate">{h.url}</span>
-                    {h.visits > 1 && <span className="ml-auto shrink-0 text-[10px] opacity-50">{h.visits}회</span>}
+                    {h.visits > 1 && <span className="ml-auto shrink-0 text-[10px] opacity-50">{t("panel.browser.visits", { count: h.visits })}</span>}
                   </button>
                 </li>
               ))}
@@ -541,34 +546,34 @@ export function BrowserPane({
           onClick={() => (picking ? stopPick() : void startPick())}
           disabled={!url || loading}
           className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] disabled:opacity-30 ${picking ? "border-accent/40 bg-accent-tint text-accent" : "border-line text-muted hover:bg-panel-2 hover:text-fg"}`}
-          title={picking ? "요소 선택 취소 (페이지에서 esc)" : "페이지의 요소를 클릭해 HTML·스타일·스크린샷을 입력창에 붙입니다"}
+          title={picking ? t("panel.browser.pickCancelTitle") : t("panel.browser.pickTitle")}
           data-browser-pick={picking ? "on" : "off"}
         >
           <Icon name="edit" size={11} />
-          {picking ? "요소를 클릭하세요…" : "요소 선택"}
+          {picking ? t("panel.browser.pickingLabel") : t("panel.browser.pick")}
         </button>
         <select
           value={viewport}
-          onChange={(e) => setViewport(e.target.value)}
+          onChange={(e) => setViewport(e.target.value as ViewportId)}
           disabled={!url}
           className="rounded-md border border-line bg-panel px-1.5 py-0.5 text-[11px] text-muted hover:text-fg disabled:opacity-30"
-          title="보기 폭 — 창을 줄이지 않고 좁은 화면을 확인한다"
+          title={t("panel.browser.viewportTitle")}
           data-browser-viewport
         >
           {VIEWPORTS.map((v) => (
-            <option key={v.id} value={v.id} title={v.hint}>
-              {v.label}
+            <option key={v.id} value={v.id} title={t(`panel.browser.viewport.${v.id}.hint`)}>
+              {t(`panel.browser.viewport.${v.id}.label`)}
             </option>
           ))}
         </select>
         <div className="flex shrink-0 items-center rounded-md border border-line" data-browser-zoom={zoomLevelToPercent(zoom)}>
-          <button onClick={() => applyZoom(nextZoom(zoom, -1))} disabled={!url} className="px-1.5 py-0.5 text-muted hover:text-fg disabled:opacity-30" title="축소 (⌘-)">
+          <button onClick={() => applyZoom(nextZoom(zoom, -1))} disabled={!url} className="px-1.5 py-0.5 text-muted hover:text-fg disabled:opacity-30" title={t("panel.browser.zoomOut")}>
             <Icon name="minus" size={11} />
           </button>
-          <button onClick={() => applyZoom(0)} disabled={!url} className="mono min-w-[38px] px-1 py-0.5 text-[10.5px] text-muted hover:text-fg disabled:opacity-30" title="100% 로 (⌘0)">
+          <button onClick={() => applyZoom(0)} disabled={!url} className="mono min-w-[38px] px-1 py-0.5 text-[10.5px] text-muted hover:text-fg disabled:opacity-30" title={t("panel.browser.zoomReset")}>
             {zoomLevelToPercent(zoom)}%
           </button>
-          <button onClick={() => applyZoom(nextZoom(zoom, 1))} disabled={!url} className="px-1.5 py-0.5 text-muted hover:text-fg disabled:opacity-30" title="확대 (⌘+)">
+          <button onClick={() => applyZoom(nextZoom(zoom, 1))} disabled={!url} className="px-1.5 py-0.5 text-muted hover:text-fg disabled:opacity-30" title={t("panel.browser.zoomIn")}>
             <Icon name="plus" size={11} />
           </button>
         </div>
@@ -576,11 +581,11 @@ export function BrowserPane({
           onClick={() => void attachDiagnostics()}
           disabled={!url || diagBusy}
           className="flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[11px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
-          title="지금 화면·콘솔 경고와 오류·실패한 요청을 한 번에 입력창에 붙입니다"
+          title={t("panel.browser.diagnoseTitle")}
           data-browser-diagnose
         >
           <Icon name="alert" size={11} />
-          {diagBusy ? "모으는 중…" : "진단 첨부"}
+          {diagBusy ? t("panel.browser.diagnosing") : t("panel.browser.diagnose")}
         </button>
         <button
           onClick={() => {
@@ -595,7 +600,7 @@ export function BrowserPane({
           }}
           disabled={!url}
           className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
-          title="개발자 도구 (콘솔·네트워크·요소)"
+          title={t("panel.browser.devtools")}
           data-browser-devtools
         >
           <Icon name="terminal" size={13} />
@@ -604,7 +609,7 @@ export function BrowserPane({
           onClick={() => url && void window.workbench.browser.openExternal(url)}
           disabled={!url}
           className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
-          title="기본 브라우저에서 열기"
+          title={t("panel.browser.openExternal")}
           data-browser-external
         >
           <Icon name="externalLink" size={13} />
@@ -633,21 +638,21 @@ export function BrowserPane({
               if (e.key === "Enter") runFind(find.text, false, !e.shiftKey);
               if (e.key === "Escape") closeFind();
             }}
-            placeholder="이 페이지에서 찾기"
+            placeholder={t("panel.browser.findPlaceholder")}
             className="mono min-w-0 flex-1 bg-transparent text-[11.5px] outline-none placeholder:text-muted-2"
             style={{ userSelect: "text" }}
             data-browser-find-input
           />
           <span className="mono shrink-0 text-[10.5px] text-muted-2" data-browser-find-count>
-            {find.text ? (find.matches > 0 ? `${find.at}/${find.matches}` : "없음") : ""}
+            {find.text ? (find.matches > 0 ? `${find.at}/${find.matches}` : t("common.none")) : ""}
           </span>
-          <button onClick={() => runFind(find.text, false, false)} disabled={find.matches === 0} className="rounded p-0.5 text-muted hover:text-fg disabled:opacity-30" title="이전 (⇧⏎)">
+          <button onClick={() => runFind(find.text, false, false)} disabled={find.matches === 0} className="rounded p-0.5 text-muted hover:text-fg disabled:opacity-30" title={t("panel.browser.findPrev")}>
             <Icon name="chevronDown" size={12} className="rotate-180" />
           </button>
-          <button onClick={() => runFind(find.text, false, true)} disabled={find.matches === 0} className="rounded p-0.5 text-muted hover:text-fg disabled:opacity-30" title="다음 (⏎)">
+          <button onClick={() => runFind(find.text, false, true)} disabled={find.matches === 0} className="rounded p-0.5 text-muted hover:text-fg disabled:opacity-30" title={t("panel.browser.findNext")}>
             <Icon name="chevronDown" size={12} />
           </button>
-          <button onClick={closeFind} className="rounded p-0.5 text-muted hover:text-fg" title="닫기 (esc)" data-browser-find-close>
+          <button onClick={closeFind} className="rounded p-0.5 text-muted hover:text-fg" title={t("panel.browser.findClose")} data-browser-find-close>
             <Icon name="x" size={12} />
           </button>
         </div>
@@ -673,13 +678,13 @@ export function BrowserPane({
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 bg-inset text-muted">
             <Icon name="globe" size={22} className="opacity-50" />
-            <span>위 주소창에 주소를 입력하면 여기에 열립니다.</span>
-            <span className="mono text-[10.5px] text-muted-2">개발 서버 미리보기 · 문서 · 채팅의 링크</span>
+            <span>{t("panel.browser.emptyHint")}</span>
+            <span className="mono text-[10.5px] text-muted-2">{t("panel.browser.emptyExamples")}</span>
           </div>
         )}
       </div>
       <div className="mono flex items-center gap-2 border-t border-line px-2 py-0.5 text-[10px] text-muted">
-        <span className="truncate">{title || (loading ? "불러오는 중…" : "")}</span>
+        <span className="truncate">{title || (loading ? t("common.loading") : "")}</span>
       </div>
     </div>
   );

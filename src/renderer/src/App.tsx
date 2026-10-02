@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { AppInfoDto, ShortcutName } from "@shared/ipc";
 import { activeWorkspace, tabCwd } from "@shared/workspace-model";
 import { Icon } from "./components/Icon";
@@ -22,6 +23,7 @@ import { SettingsView, type SettingsSection } from "./views/SettingsView";
 import { UsageView } from "./views/UsageView";
 
 export function App() {
+  const { t } = useTranslation();
   const [view, setView] = useState<View>("chat");
   // 사이드바 접힘. 아주 없애지 않고 얇은 띠로 두는 이유는 macOS 신호등 버튼 자리를 지켜야 해서다.
   const [railed, setRailed] = useState(() => kvGet("sidebar.railed") === "1");
@@ -176,13 +178,13 @@ export function App() {
   const newTab = useCallback(async () => {
     const wsId = activeWorkspace(model)?.id;
     if (!wsId) {
-      await api.create("새 워크스페이스");
+      await api.create(t("nav.empty.newWorkspace"));
       setView("chat");
       return;
     }
     await api.createTab(wsId);
     setView("chat");
-  }, [model, api]);
+  }, [model, api, t]);
 
   const openTab = useCallback(
     async (tabId: string) => {
@@ -456,7 +458,7 @@ export function App() {
                       onDoubleClick={() => setSplitRatio(50)}
                       className="w-1 shrink-0 cursor-col-resize bg-line/60 hover:bg-accent/40"
                       style={{ order: 1 }}
-                      title="끌어서 너비 조절 · 두 번 누르면 반반"
+                      title={t("nav.empty.resizeHint")}
                       data-chat-split-resizer
                     />
                   )}
@@ -466,7 +468,7 @@ export function App() {
                   hasWorkspace={model.workspaces.length > 0}
                   onAdd={() =>
                     void api
-                      .create("새 워크스페이스")
+                      .create(t("nav.empty.newWorkspace"))
                       .then(() => setView("chat"))
                   }
                   onNew={() => void newTab()}
@@ -525,7 +527,7 @@ export function App() {
           onAdd={(name) => {
             setSwitcher(false);
             void api
-              .create(name || "새 워크스페이스")
+              .create(name || t("nav.empty.newWorkspace"))
               .then(() => setView("chat"));
           }}
           onRemove={(id) => void api.remove(id)}
@@ -544,6 +546,7 @@ function EmptyState({
   onAdd: () => void;
   onNew: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="drag flex h-full flex-col items-center justify-center gap-4 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-panel text-accent">
@@ -551,12 +554,12 @@ function EmptyState({
       </div>
       <div>
         <div className="text-[15px] font-semibold">
-          {hasWorkspace ? "열린 세션이 없습니다" : "워크스페이스를 추가하세요"}
+          {hasWorkspace ? t("nav.empty.noSessions") : t("nav.empty.addWorkspace")}
         </div>
         <p className="mt-1 text-muted">
           {hasWorkspace
-            ? "새 세션을 열거나 왼쪽 최근 목록에서 이전 세션을 다시 여세요."
-            : "워크스페이스는 업무 단위 이름표입니다. 만든 뒤 세션마다 작업 경로를 고르면 그 안에서 Claude Code / Codex 가 실행됩니다."}
+            ? t("nav.empty.noSessionsHint")
+            : t("nav.empty.addWorkspaceHint")}
         </p>
       </div>
       <button
@@ -564,7 +567,7 @@ function EmptyState({
         className="no-drag flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-medium text-on-primary hover:bg-primary-hover"
       >
         <Icon name={hasWorkspace ? "edit" : "folder"} size={14} />
-        {hasWorkspace ? "새 세션 (⌘T)" : "워크스페이스 만들기"}
+        {hasWorkspace ? t("nav.empty.newSession") : t("nav.empty.createWorkspace")}
       </button>
     </div>
   );

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { WorkspaceStateDto } from "@shared/ipc";
 import { tabTitle } from "@shared/workspace-model";
 import { Icon } from "./Icon";
@@ -21,6 +22,7 @@ export function TabBar({
   /** 탭 더블클릭 → 이름 편집 (활성 탭만 편집, 아니면 활성화만). */
   onRename?: (tabId: string) => void;
 }) {
+  const { t } = useTranslation();
   const { model, statuses, attention } = ws;
   const ids = model.openTabIds;
   return (
@@ -52,7 +54,7 @@ export function TabBar({
                 onAuxClick={(e) => {
                   if (e.button === 1) onClose(id);
                 }}
-                title={`${tabTitle(tab)} — ${wsName} · ${effectiveLabel(status, att)} (⌘${i + 1}) · 더블클릭으로 이름 변경`}
+                title={t("nav.tabBar.tabTitle", { title: tabTitle(tab, t("shared.untitledTab")), workspace: wsName, status: effectiveLabel(status, att), index: i + 1 })}
                 className={`group flex h-8 min-w-[120px] max-w-[220px] cursor-default items-center gap-2 rounded-t-md pl-3 pr-2 text-[12.5px] ${
                   active
                     ? "bg-bg text-fg"
@@ -60,7 +62,7 @@ export function TabBar({
                 }`}
               >
                 <StatusDot status={status} attention={att} />
-                <span className="min-w-0 flex-1 truncate">{tabTitle(tab)}</span>
+                <span className="min-w-0 flex-1 truncate">{tabTitle(tab, t("shared.untitledTab"))}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -69,7 +71,7 @@ export function TabBar({
                   className={`rounded-sm p-0.5 hover:bg-panel-2 hover:text-fg ${
                     active ? "" : "opacity-0 group-hover:opacity-100"
                   }`}
-                  title="탭 닫기 (⌘W)"
+                  title={t("nav.tabBar.closeTab")}
                 >
                   <Icon name="x" size={11} />
                 </button>
@@ -81,7 +83,7 @@ export function TabBar({
       <button
         onClick={onNew}
         className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-panel/60 hover:text-fg"
-        title="새 세션 (⌘T)"
+        title={t("nav.tabBar.newSession")}
       >
         <Icon name="edit" size={13} />
       </button>

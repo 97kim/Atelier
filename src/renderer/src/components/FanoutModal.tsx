@@ -1,6 +1,7 @@
 // 팬아웃 시작 창 — 지시 하나 + 세션(제공자) 목록 + 정책. 각 세션은 별도의 git worktree에서 실행된다.
 import { usePaneFocusRef } from "../pane-focus";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { PermissionPolicy } from "@shared/chat-events";
 import type { FanoutStartDto, Provider } from "@shared/ipc";
 import { FANOUT_MAX_VARIANTS, FANOUT_MIN_VARIANTS, PROVIDER_NAME, variantLabel } from "@shared/fanout";
@@ -8,14 +9,11 @@ import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
 import { modelOptions, useModels } from "../models";
 
-const POLICY_LABEL: Record<PermissionPolicy, [string, string]> = {
-  ask: ["묻기", "CLI가 추가 권한을 요청하면 각 탭에서 승인할 수 있습니다."],
-  auto_edit: ["편집 자동", "작업 경로 안의 파일 편집을 허용합니다. 추가 승인 여부는 선택한 CLI의 권한 규칙에 따릅니다."],
-  full: ["전부 자동", "파일 변경과 명령 실행을 승인 없이 진행합니다. 명령은 이 Mac에서 실행됩니다."],
-};
+const POLICIES: PermissionPolicy[] = ["ask", "auto_edit", "full"];
 
 /** 세션 한 줄의 모델 셀렉트 — provider 의 실제 모델 목록(CLI 조회)을 쓴다. */
 function VariantModelSelect({ provider, value, onChange }: { provider: Provider; value: string; onChange: (model: string) => void }) {
+  const { t } = useTranslation();
   const { models, source } = useModels(provider);
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
   useEffect(() => {
@@ -30,7 +28,7 @@ function VariantModelSelect({ provider, value, onChange }: { provider: Provider;
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="mono min-w-0 flex-1 rounded-md border border-line bg-panel px-2 py-1 text-[11px] outline-none focus:border-accent"
-      title={source === "loading" ? "모델 목록을 CLI 에서 읽는 중…" : source === "static" ? "CLI 에서 목록을 못 읽어 기본 목록을 보여 줍니다" : "모델 (비우면 CLI 기본 설정)"}
+      title={source === "loading" ? t("fanout.modal.modelsLoading") : source === "static" ? t("fanout.modal.modelsStatic") : t("fanout.modal.modelsDefault")}
       data-fanout-model
       data-models-source={source}
     >
@@ -54,6 +52,7 @@ export function FanoutModal({
   onStart: (req: FanoutStartDto) => Promise<string | null>;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [prompt, setPrompt] = useState(initialPrompt);
   const [variants, setVariants] = useState<{ provider: Provider; model: string }[]>([
     { provider: defaultProvider, model: "" },
@@ -88,16 +87,16 @@ export function FanoutModal({
         <div className="flex items-center gap-3 border-b border-line px-5 py-3">
           <Icon name="sparkles" size={15} className="text-accent" />
           <div className="min-w-0 flex-1">
-            <div className="text-[14px] font-semibold">팬아웃</div>
-            <div className="mt-0.5 text-[11px] text-muted">같은 요청을 여러 격리 세션에 동시에 보냅니다. 세션마다 CLI와 모델을 선택할 수 있으며, 각각의 worktree에서 작업한 뒤 diff를 비교해 원본에 적용할 결과를 고릅니다.</div>
+            <div className="text-[14px] font-semibold">{t("fanout.modal.title")}</div>
+            <div className="mt-0.5 text-[11px] text-muted">{t("fanout.modal.description")}</div>
           </div>
-          <button onClick={onClose} className="rounded-md border border-line p-1.5 text-muted hover:text-fg" title="닫기 (esc)">
+          <button onClick={onClose} className="rounded-md border border-line p-1.5 text-muted hover:text-fg" title={t("fanout.modal.close")}>
             <Icon name="x" size={14} />
           </button>
         </div>
         <div className="flex flex-col gap-4 px-5 py-4">
           <label className="flex flex-col gap-1.5">
-            <span className="label text-muted">지시</span>
+            <span className="label text-muted">{t("fanout.modal.promptLabel")}</span>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -109,13 +108,13 @@ export function FanoutModal({
               }}
               rows={5}
               autoFocus
-              placeholder="예: 로그인 500 오류를 고치고 테스트를 추가해줘"
+              placeholder={t("fanout.modal.promptPlaceholder")}
               className="w-full resize-y rounded-md border border-line bg-inset px-3 py-2 text-[13px] leading-[1.6] outline-none focus:border-accent"
               data-fanout-prompt
             />
           </label>
           <div className="flex flex-col gap-1.5">
-            <span className="label text-muted">세션 ({variants.length}개)</span>
+            <span className="label text-muted">{t("fanout.modal.sessions", { count: variants.length })}</span>
             <div className="flex flex-col gap-1.5" data-fanout-variants>
               {variants.map((v, i) => (
                 <div key={i} className="flex items-center gap-2 rounded-md border border-line bg-inset px-2.5 py-1.5" data-fanout-variant={variantLabel(i)}>
@@ -138,7 +137,7 @@ export function FanoutModal({
                     onClick={() => setVariants((vs) => vs.filter((_, j) => j !== i))}
                     disabled={variants.length <= FANOUT_MIN_VARIANTS}
                     className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
-                    title="이 세션을 비교에서 제외"
+                    title={t("fanout.modal.removeVariant")}
                   >
                     <Icon name="x" size={11} />
                   </button>
@@ -152,26 +151,26 @@ export function FanoutModal({
                 data-fanout-add
               >
                 <Icon name="plus" size={10} />
-                세션 추가
+                {t("fanout.modal.addVariant")}
               </button>
             )}
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="label text-muted">권한 정책</span>
+            <span className="label text-muted">{t("fanout.modal.policyLabel")}</span>
             <div className="flex gap-1.5" data-fanout-policy={policy}>
-              {(Object.keys(POLICY_LABEL) as PermissionPolicy[]).map((p) => (
+              {POLICIES.map((p) => (
                 <button
                   key={p}
                   onClick={() => setPolicy(p)}
                   className={`rounded-md border px-2.5 py-1 text-[12px] ${policy === p ? "border-accent/40 bg-accent-tint text-accent" : "border-line text-muted hover:bg-panel-2"}`}
-                  title={POLICY_LABEL[p][1]}
+                  title={t(`fanout.modal.policy.${p}.description`)}
                   data-fanout-policy-option={p}
                 >
-                  {POLICY_LABEL[p][0]}
+                  {t(`fanout.modal.policy.${p}.label`)}
                 </button>
               ))}
             </div>
-            <div className="text-[11px] text-muted">{POLICY_LABEL[policy][1]} worktree는 파일 변경을 분리하지만, Mac 전체의 접근 권한을 제한하는 것은 아닙니다.</div>
+            <div className="text-[11px] text-muted">{t("fanout.modal.policyNote", { description: t(`fanout.modal.policy.${policy}.description`) })}</div>
           </div>
           {error && (
             <div className="rounded-md border border-err/40 bg-err-bg px-3 py-2 text-[12px] text-err" data-fanout-error>
@@ -181,7 +180,7 @@ export function FanoutModal({
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
           <button onClick={onClose} className="rounded-md border border-line px-3 py-1.5 hover:bg-panel-2">
-            취소
+            {t("common.cancel")}
           </button>
           <button
             onClick={() => void start()}
@@ -191,7 +190,7 @@ export function FanoutModal({
             data-fanout-start
           >
             <Icon name="play" size={10} />
-            {busy ? "worktree 만드는 중…" : `${variants.length}개 세션에 보내기`}
+            {busy ? t("fanout.modal.creating") : t("fanout.modal.send", { count: variants.length })}
           </button>
         </div>
       </div>

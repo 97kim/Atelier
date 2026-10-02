@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 // 탭의 턴이 끝난 뒤에도 계속 도는 작업(지금은 Codex 플러그인의 백그라운드 rescue).
 // 턴에 묶인 하위 에이전트 미러와 달리 프로세스가 앱에서 떨어져 나가므로, 플러그인이 디스크에 쓰는 작업 목록을 읽어서 보여 준다.
 
@@ -67,14 +68,15 @@ export function mergeJobs(jobs: BackgroundJobDto[]): BackgroundJobDto[] {
   return [...by.values()].sort((a, b) => a.startedAt - b.startedAt);
 }
 
-/** 진행 줄에 쓸 한 줄. "rescue · 3분 12초 경과" */
-export function jobElapsed(job: BackgroundJobDto, now: number): string {
+/** 진행 줄에 쓸 경과 시간. "3분 12초" */
+export function jobElapsed(job: BackgroundJobDto, now: number, t: TFunction): string {
   const secs = Math.max(0, Math.floor((now - job.startedAt) / 1000));
-  return secs >= 60 ? `${Math.floor(secs / 60)}분 ${secs % 60}초` : `${secs}초`;
+  return secs >= 60 ? t("shared.duration.minSec", { min: Math.floor(secs / 60), sec: secs % 60 }) : t("shared.duration.sec", { sec: secs });
 }
 
-export function jobRunningLabel(job: BackgroundJobDto, now: number): string {
-  return `${job.label} · ${jobElapsed(job, now)} 경과`;
+/** "rescue · 3분 12초 경과" */
+export function jobRunningLabel(job: BackgroundJobDto, now: number, t: TFunction): string {
+  return t("shared.jobs.elapsed", { label: job.label, time: jobElapsed(job, now, t) });
 }
 
 /**
@@ -82,8 +84,8 @@ export function jobRunningLabel(job: BackgroundJobDto, now: number): string {
  * "가장 오래 12초 경과" 는 읽고 무슨 뜻인지 되묻게 된다. 여럿을 띄울 땐 대개 같이 시작해 차이가 작고,
  * 펼치면 각 줄에 자기 시간이 따로 나오므로 여기서까지 정확할 필요가 없다.
  */
-export function jobsSummaryLabel(jobs: BackgroundJobDto[], now: number): string {
+export function jobsSummaryLabel(jobs: BackgroundJobDto[], now: number, t: TFunction): string {
   if (jobs.length === 0) return "";
   const oldest = jobs.reduce((a, j) => (j.startedAt < a.startedAt ? j : a), jobs[0]);
-  return `${jobs.length}개 · ${jobElapsed(oldest, now)} 경과`;
+  return t("shared.jobs.summary", { count: jobs.length, time: jobElapsed(oldest, now, t) });
 }

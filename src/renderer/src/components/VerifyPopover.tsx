@@ -1,6 +1,7 @@
 // "검증" 버튼의 명령 편집창 — 한 줄에 명령 하나. 저장은 워크스페이스에(같은 워크스페이스의 모든 탭이 공유), 실행은 이 탭의 cwd 에서.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { VERIFY_MAX_COMMANDS, parseVerifyCommands } from "@shared/verify";
 import { Icon } from "./Icon";
 
@@ -24,6 +25,7 @@ export function VerifyPopover({
   onRun: (commands: string[]) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [text, setText] = useState(saved.join("\n"));
   const [suggested, setSuggested] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -84,8 +86,8 @@ export function VerifyPopover({
     <div ref={ref} className="fixed z-40 w-[420px] max-w-[calc(100vw-16px)] rounded-lg border border-line bg-panel p-3 shadow-pop" style={{ top: pos.top, right: pos.right }} data-verify-popover>
       <div className="mb-2 flex items-center gap-2">
         <Icon name="check" size={12} className="text-accent" />
-        <span className="font-medium">검증 명령</span>
-        <span className="text-[11px] text-muted">한 줄에 하나, 위에서부터 순서대로 · 실패하면 멈춤</span>
+        <span className="font-medium">{t("chat.verifyPopover.title")}</span>
+        <span className="text-[11px] text-muted">{t("chat.verifyPopover.hint")}</span>
       </div>
       <textarea
         ref={ta}
@@ -104,8 +106,8 @@ export function VerifyPopover({
         data-verify-commands
       />
       <div className="mt-2 flex items-center gap-2 text-[11px] text-muted">
-        {suggested && saved.length === 0 && commands.length > 0 && <span data-verify-suggested>저장소에서 추천한 명령입니다. 고쳐서 쓰세요.</span>}
-        {commands.length > VERIFY_MAX_COMMANDS - 1 && <span>최대 {VERIFY_MAX_COMMANDS}개</span>}
+        {suggested && saved.length === 0 && commands.length > 0 && <span data-verify-suggested>{t("chat.verifyPopover.suggested")}</span>}
+        {commands.length > VERIFY_MAX_COMMANDS - 1 && <span>{t("chat.verifyPopover.max", { count: VERIFY_MAX_COMMANDS })}</span>}
         <span className="flex-1" />
         <button
           onClick={() => {
@@ -116,17 +118,17 @@ export function VerifyPopover({
           className="rounded-md border border-line px-2.5 py-1 hover:bg-panel-2 disabled:opacity-40"
           data-verify-save
         >
-          저장
+          {t("common.save")}
         </button>
         <button
           onClick={run}
           disabled={commands.length === 0}
           className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-on-accent hover:bg-accent/90 disabled:opacity-40"
-          title="저장하고 바로 실행 (⌘↩)"
+          title={t("chat.verifyPopover.saveAndRunHint")}
           data-verify-run
         >
           <Icon name="play" size={10} />
-          {dirty ? "저장하고 실행" : "실행"}
+          {dirty ? t("chat.verifyPopover.saveAndRun") : t("chat.verifyPopover.run")}
         </button>
       </div>
     </div>,

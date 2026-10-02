@@ -1,4 +1,90 @@
 import type { schedules as ko } from "../ko/schedules";
 import type { DeepPartial } from "../types";
 
-export const schedules: DeepPartial<typeof ko> = {};
+export const schedules: DeepPartial<typeof ko> = {
+  title: "Schedules",
+  description: "Sends a message to the AI at set times and keeps the results of each run.",
+  newSchedule: "New schedule",
+  notice: {
+    missed:
+      "Schedules run only while Atelier is open and your Mac is awake. If a run is missed because the app was closed or the Mac was asleep, Atelier tries to run it when you come back within the grace period, and skips it after that. A short extra margin is added for the run-check interval.",
+    cleanup:
+      "Before each new run, a schedule that uses an isolated session keeps its 3 most recent worktrees and automatically deletes older worktrees and their tabs. Uncommitted changes are deleted too, so save any results you need first. Tabs that are running are never deleted.",
+  },
+  status: {
+    pending: "Starting",
+    running: "Running",
+    needs_action: "Waiting for approval",
+    completed: "Completed",
+    failed: "Failed",
+    skipped_precheck: "Skipped · nothing to do",
+    skipped_missed: "Skipped · missed its time",
+    skipped_unavailable: "Skipped · couldn't run",
+    skipped_overlap: "Skipped · previous run still going",
+    interrupted: "Interrupted · result unknown",
+  },
+  weekday: {
+    sun: "Sun",
+    mon: "Mon",
+    tue: "Tue",
+    wed: "Wed",
+    thu: "Thu",
+    fri: "Fri",
+    sat: "Sat",
+  },
+  policy: {
+    ask: "Ask first",
+    auto_edit: "Auto-edit",
+    full: "Full auto",
+  },
+  repeat: {
+    hourly: "Every hour",
+    daily: "Every day",
+    weekdays: "Weekdays",
+    weekly: "Every week",
+    custom: "Custom",
+  },
+  label: {
+    hourly: "Hourly at :{{minute}}",
+    daily: "Daily at {{time}}",
+    weekdays: "Weekdays at {{time}}",
+    weekly: "Weekly on {{day}} at {{time}}",
+    invalid: "Unreadable schedule ({{cron}})",
+  },
+  today: "Today {{time}}",
+  form: {
+    namePlaceholder: "Schedule name (required)",
+    atMinute: "at minute <minute/>",
+    atCron: "at <cron/>",
+    atTime: "at <time/>",
+    inFolder: "in <folder/>",
+    runWith: "runs with <provider/> using <policy/> permissions.",
+    hour: "Hour",
+    minute: "Minute",
+    cronPlaceholder: "min hour day month weekday",
+    pickFolderTitle: "Choose the folder to run in",
+    pickFolder: "Choose folder",
+    nextRun: "Next run · {{when}}",
+    cronInvalid: "Not a cron expression — write five fields (min hour day month weekday)",
+    cwdAuto: "This schedule runs in <path>{{cwd}}</path>. It's a recently used working folder, so make sure it's the right one for this schedule.",
+    promptPlaceholder: "What to send — e.g. Skim yesterday's commits and tell me if any tests are missing.",
+    worktree: "Run in an isolated session",
+    worktreeHint: "Creates a worktree so the work stays separate from the original. Old worktrees are deleted automatically as described above.",
+    create: "Create",
+    fullWarning: "Changes files and runs commands without asking. Even in an isolated session, commands run on this Mac.",
+  },
+  empty: {
+    title: "No schedules yet.",
+    hint: "Create one with “New schedule” at the top right. You can also do it from the terminal:",
+    example: 'atelier schedule add --name morning-check --cron "30 9 * * *" --prompt "…" --ws repo',
+  },
+  item: {
+    isolated: "Isolated session",
+    next: "next {{when}}",
+    grace: "Grace period: {{minutes}} min · If Atelier comes back within this time, it tries to run a missed schedule.",
+    graceNone: "Missed schedules aren't kept waiting (0 min). Only the short margin needed for the run check is allowed.",
+    runNow: "Run once now",
+    edit: "Edit",
+    remove: "Delete the schedule and its history",
+  },
+};

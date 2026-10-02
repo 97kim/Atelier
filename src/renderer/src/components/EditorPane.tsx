@@ -1,5 +1,6 @@
 // 채팅 옆 에디터 패널: 파일 탭 스트립 + 파일마다 FileEditor(숨김 유지). 닫을 때 저장 안 된 변경은 확인을 받는다.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   activateEditorFile,
   closeEditorFile,
@@ -25,6 +26,7 @@ export function EditorPane({
   /** 에디터의 "채팅에 첨부" → 입력창 */
   onAttach?: (block: string, images?: ChatImageDto[]) => void;
 }) {
+  const { t } = useTranslation();
   // dirty 는 editor-tabs 모듈에 둔다 — 파일 트리(이름 변경·삭제)와 탭 상한 정리가 같이 봐야 한다.
   const dirty = new Set(tabs.dirty);
   const apis = useRef(new Map<string, FileEditorApi>());
@@ -63,10 +65,10 @@ export function EditorPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId, activeFile, tabs.dirty.join("\u0000")]);
 
-  const name = (p: string) => (isBrowserTab(p) ? (browserLabels[p] ?? browserTabLabel(p)) : (p.split("/").pop() ?? p));
+  const name = (p: string) => (isBrowserTab(p) ? (browserLabels[p] ?? browserTabLabel(p, t)) : (p.split("/").pop() ?? p));
   // 같은 이름의 파일이 둘이면 상위 폴더를 붙여 구분한다
   const label = (p: string) => {
-    if (isBrowserTab(p)) return browserLabels[p] ?? browserTabLabel(p);
+    if (isBrowserTab(p)) return browserLabels[p] ?? browserTabLabel(p, t);
     const n = name(p);
     return tabs.files.filter((f) => name(f) === n).length > 1 ? p.split("/").slice(-2).join("/") : n;
   };
@@ -112,7 +114,7 @@ export function EditorPane({
                       requestClose(f);
                     }}
                     className="flex h-4 w-4 shrink-0 items-center justify-center rounded hover:bg-panel-2"
-                    title="저장하지 않은 변경 — 닫기"
+                    title={t("panel.editorPane.closeDirty")}
                     data-editor-tab-close
                   >
                     <span className="h-2 w-2 rounded-full bg-accent group-hover:hidden" />
@@ -125,7 +127,7 @@ export function EditorPane({
                       requestClose(f);
                     }}
                     className="flex h-4 w-4 shrink-0 items-center justify-center rounded opacity-0 hover:bg-panel-2 group-hover:opacity-100"
-                    title="닫기"
+                    title={t("common.close")}
                     data-editor-tab-close
                   >
                     <Icon name="x" size={10} />
@@ -140,7 +142,7 @@ export function EditorPane({
         <button
           onClick={() => openBrowserTab(tabId)}
           className="flex shrink-0 items-center border-l border-line px-2 text-muted hover:text-fg"
-          title="새 브라우저 탭"
+          title={t("panel.editorPane.newBrowser")}
           data-editor-new-browser
         >
           <Icon name="globe" size={13} />
@@ -148,7 +150,7 @@ export function EditorPane({
         <button
           onClick={() => setEditorMaximized(tabId, !tabs.maximized)}
           className={`flex shrink-0 items-center px-2 ${tabs.maximized ? "text-accent" : "text-muted hover:text-fg"}`}
-          title={tabs.maximized ? "원래 크기로 (⌘⇧E)" : "창 전체로 넓히기 — 채팅·오른쪽 패널을 잠시 숨긴다 (⌘⇧E)"}
+          title={tabs.maximized ? t("panel.editorPane.restore") : t("panel.editorPane.maximize")}
           data-editor-maximize={tabs.maximized ? "on" : "off"}
         >
           <Icon name={tabs.maximized ? "minimize" : "maximize"} size={13} />
@@ -156,7 +158,7 @@ export function EditorPane({
         <button
           onClick={() => setEditorPaneVisible(tabId, false)}
           className="flex shrink-0 items-center px-2 text-muted hover:text-fg"
-          title="에디터 패널 접기 (파일은 열린 채 유지)"
+          title={t("panel.editorPane.hide")}
           data-editor-pane-hide
         >
           <Icon name="panelRight" size={13} />
@@ -166,7 +168,7 @@ export function EditorPane({
       {confirmClose && (
         <div className="flex items-center gap-2 border-b border-warn/40 bg-warn-bg px-3 py-1.5 text-[11.5px] text-warn" data-editor-close-confirm>
           <Icon name="alert" size={12} />
-          <span className="min-w-0 flex-1 truncate">{name(confirmClose)} 에 저장하지 않은 변경이 있습니다.</span>
+          <span className="min-w-0 flex-1 truncate">{t("panel.editorPane.unsaved", { name: name(confirmClose) })}</span>
           <button
             onClick={() =>
               void apis.current.get(confirmClose)?.save().then((ok) => {
@@ -180,13 +182,13 @@ export function EditorPane({
             }
             className="rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10"
           >
-            저장 후 닫기
+            {t("panel.editorPane.saveAndClose")}
           </button>
           <button onClick={() => doClose(confirmClose)} className="rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10" data-editor-close-discard>
-            버리고 닫기
+            {t("panel.editorPane.discardAndClose")}
           </button>
           <button onClick={() => setConfirmClose(null)} className="rounded px-2 py-0.5 hover:bg-warn/10">
-            계속 편집
+            {t("panel.editorPane.keepEditing")}
           </button>
         </div>
       )}

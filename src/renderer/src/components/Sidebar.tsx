@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { SessionStatus } from "@shared/chat-events";
 import { SCHEDULE_WORKSPACE } from "@shared/schedules";
 import type { AppInfoDto, WorkspaceStateDto, SessionAttention } from "@shared/ipc";
@@ -13,15 +14,15 @@ import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
 import { Logo } from "./Logo";
 import { SidebarLimits } from "./SidebarLimits";
-import { ATTENTION_LABEL, StatusDot } from "./StatusDot";
+import { attentionLabel, StatusDot } from "./StatusDot";
 
 export type View = "chat" | "usage" | "settings";
 
-const NAV: { id: View; label: string; icon: "chat" | "usage" | "settings" }[] =
+const NAV: { id: View; icon: "chat" | "usage" | "settings" }[] =
   [
-    { id: "chat", label: "채팅", icon: "chat" },
-    { id: "usage", label: "사용량", icon: "usage" },
-    { id: "settings", label: "설정", icon: "settings" },
+    { id: "chat", icon: "chat" },
+    { id: "usage", icon: "usage" },
+    { id: "settings", icon: "settings" },
   ];
 
 /** 워크스페이스마다 닫힌 세션은 이만큼만. 그 아래는 "n개 더" 로 접는다. */
@@ -100,6 +101,7 @@ export function Sidebar({
   onReorderTabs: (openTabIds: string[]) => void;
   onReorderWorkspaces: (workspaceIds: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const { model, statuses, attention } = ws;
   const attentionCount = model.openTabIds.filter((id) => attention[id]).length;
   const activeTab = model.tabs.find((t) => t.id === model.activeTabId) ?? null;
@@ -348,7 +350,7 @@ export function Sidebar({
         <button
           onClick={onToggleRail}
           className="no-drag mt-11 rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
-          title="사이드바 펼치기 (⌘B)"
+          title={t("nav.sidebar.expand")}
           data-sidebar-toggle
         >
           <Icon name="panelRight" size={15} />
@@ -358,7 +360,7 @@ export function Sidebar({
             <button
               key={item.id}
               onClick={() => onView(item.id)}
-              title={item.label}
+              title={t(`nav.items.${item.id}`)}
               className={`rounded-md p-1.5 transition-colors ${
                 view === item.id ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2/60 hover:text-fg"
               }`}
@@ -370,14 +372,14 @@ export function Sidebar({
         <button
           onClick={activeWs ? onNewTab : () => onToggleRail()}
           className="no-drag mt-2 rounded-md bg-primary p-1.5 text-on-primary hover:bg-primary-hover"
-          title={activeWs ? `${activeWs.name} 에 새 세션 (⌘T)` : "워크스페이스 추가 — 펼쳐서"}
+          title={activeWs ? t("nav.sidebar.newSessionIn", { name: activeWs.name }) : t("nav.sidebar.addWorkspaceExpand")}
         >
           <Icon name="edit" size={14} strokeWidth={2} />
         </button>
         <button
           onClick={onSearch}
           className="no-drag mt-1 rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
-          title="대화 검색 (⌘F)"
+          title={t("nav.sidebar.searchChatsRailTitle")}
         >
           <Icon name="search" size={15} />
         </button>
@@ -385,7 +387,7 @@ export function Sidebar({
           <button
             onClick={onJumpAttention}
             className="no-drag mt-1 rounded-md bg-warn-bg p-1.5 text-warn"
-            title={`응답이 필요한 세션 ${attentionCount}개 (⌘⇧↓)`}
+            title={t("nav.sidebar.attentionRailTitle", { count: attentionCount })}
           >
             <Icon name="alert" size={15} />
           </button>
@@ -401,7 +403,7 @@ export function Sidebar({
         <button
           onClick={onToggleRail}
           className="no-drag -mr-1 ml-auto rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
-          title="사이드바 접기 (⌘B)"
+          title={t("nav.sidebar.collapse")}
           data-sidebar-toggle
         >
           <Icon name="panelRight" size={14} />
@@ -413,7 +415,7 @@ export function Sidebar({
           <button
             key={item.id}
             onClick={() => onView(item.id)}
-            title={item.label}
+            title={t(`nav.items.${item.id}`)}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[12px] transition-colors ${
               view === item.id
                 ? "bg-panel-2 text-fg"
@@ -421,7 +423,7 @@ export function Sidebar({
             }`}
           >
             <Icon name={item.icon} size={13} />
-            {item.label}
+            {t(`nav.items.${item.id}`)}
           </button>
         ))}
       </nav>
@@ -431,34 +433,34 @@ export function Sidebar({
           onClick={activeWs ? onNewTab : () => setCreating(true)}
           className="flex w-full items-center gap-2 rounded-md bg-primary px-3 py-2 font-medium text-on-primary hover:bg-primary-hover"
           title={
-            activeWs ? `${activeWs.name} 에 새 세션 (⌘T)` : "워크스페이스 추가"
+            activeWs ? t("nav.sidebar.newSessionIn", { name: activeWs.name }) : t("nav.sidebar.addWorkspace")
           }
         >
           <Icon name="edit" size={14} strokeWidth={2} />
           <span className="flex-1 text-left">
-            {activeWs ? "새 세션" : "워크스페이스 추가"}
+            {activeWs ? t("nav.sidebar.newSession") : t("nav.sidebar.addWorkspace")}
           </span>
           {activeWs && <kbd className="mono text-[10px] opacity-70">⌘T</kbd>}
         </button>
         <button
           onClick={onSearch}
           className="mt-1.5 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-muted hover:bg-panel-2 hover:text-fg"
-          title="모든 세션의 대화 내용 검색 (⌘F)"
+          title={t("nav.sidebar.searchChatsTitle")}
           data-search-button
         >
           <Icon name="search" size={13} />
-          <span className="flex-1 text-left">대화 검색</span>
+          <span className="flex-1 text-left">{t("nav.sidebar.searchChats")}</span>
           <kbd className="mono text-[10px] opacity-70">⌘F</kbd>
         </button>
         {attentionCount > 0 && (
           <button
             onClick={onJumpAttention}
             className="mt-1 flex w-full items-center gap-2 rounded-md bg-warn-bg px-3 py-1.5 text-warn hover:brightness-95"
-            title="응답이 필요한 세션(권한 대기·확인 안 한 완료)으로 이동 (⌘⇧↓, 이전은 ⌘⇧↑)"
+            title={t("nav.sidebar.attentionJumpTitle")}
             data-attention-jump
           >
             <Icon name="alert" size={13} />
-            <span className="flex-1 text-left">응답 필요 {attentionCount}</span>
+            <span className="flex-1 text-left">{t("nav.sidebar.attentionJump", { count: attentionCount })}</span>
             <kbd className="mono text-[10px] opacity-70">⌘⇧↓</kbd>
           </button>
         )}
@@ -476,19 +478,19 @@ export function Sidebar({
         data-workspace-tree
       >
         <div className="label mb-1 flex items-center justify-between px-1">
-          <span>워크스페이스</span>
+          <span>{t("nav.sidebar.workspaces")}</span>
           <span className="flex items-center gap-0.5">
             <button
               onClick={onSwitchWorkspace}
               className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
-              title="워크스페이스 전환 (⌘K)"
+              title={t("nav.sidebar.switchWorkspace")}
             >
               <Icon name="search" size={11} />
             </button>
             <button
               onClick={() => setCreating(true)}
               className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
-              title="워크스페이스 추가…"
+              title={t("nav.sidebar.addWorkspaceEllipsis")}
             >
               <Icon name="plus" size={12} />
             </button>
@@ -510,7 +512,7 @@ export function Sidebar({
                   setCreateDraft("");
                 }
               }}
-              placeholder="워크스페이스 이름 (업무 단위)"
+              placeholder={t("nav.sidebar.workspaceNameDraft")}
               className="min-w-0 flex-1 bg-transparent text-fg outline-none"
               style={{ userSelect: "text" }}
               data-ws-create
@@ -519,8 +521,7 @@ export function Sidebar({
         )}
         {workspaces.length === 0 && !creating && (
           <p className="px-1 text-muted">
-            워크스페이스는 업무 단위 이름표입니다. 만들고 나서 세션마다 작업
-            경로를 고릅니다.
+            {t("nav.sidebar.workspaceHint")}
           </p>
         )}
 
@@ -541,8 +542,8 @@ export function Sidebar({
             <div key={w.id} className="mb-1.5" data-workspace={w.id} {...dropTarget("ws", w.id, w.id, true)}>
               {confirm?.kind === "ws" && confirm.id === w.id ? (
                 <ConfirmRow
-                  text="세션 기록까지 제거할까요?"
-                  action="제거"
+                  text={t("nav.sidebar.removeWorkspaceConfirm")}
+                  action={t("nav.sidebar.removeWorkspaceAction")}
                   onYes={() => {
                     setConfirm(null);
                     onRemoveWorkspace(w.id);
@@ -574,8 +575,8 @@ export function Sidebar({
                   }
                   title={
                     w.path
-                      ? `기본 경로 ${w.path}`
-                      : "기본 경로 없음 · 세션 헤더에서 작업 경로를 고릅니다"
+                      ? t("nav.sidebar.defaultPath", { path: w.path })
+                      : t("nav.sidebar.noDefaultPathTitle")
                   }
                 >
                   <Icon
@@ -602,7 +603,7 @@ export function Sidebar({
                         if (e.key === "Enter") commitWsRename();
                         else if (e.key === "Escape") setRenamingWs(null);
                       }}
-                      placeholder="워크스페이스 이름"
+                      placeholder={t("nav.sidebar.workspaceName")}
                       className="-mx-1 min-w-0 flex-1 rounded border border-accent/50 bg-panel px-1 font-medium text-fg outline-none"
                       style={{ userSelect: "text" }}
                     />
@@ -610,7 +611,7 @@ export function Sidebar({
                     <span
                       className={`min-w-0 flex-1 truncate font-medium ${isActiveWs ? "text-fg" : "text-fg/80"}`}
                       // 정해 둔 기본 경로를 볼 데가 없으면 정했는지도 알 수 없다.
-                      title={w.path ? `기본 경로 · ${w.path}` : "기본 경로 없음 — 우클릭해서 정합니다"}
+                      title={w.path ? t("nav.sidebar.defaultPathDot", { path: w.path }) : t("nav.sidebar.noDefaultPathHint")}
                       data-ws-name
                     >
                       {w.name}
@@ -619,7 +620,7 @@ export function Sidebar({
                   {unread > 0 ? (
                     <span
                       className="label shrink-0 rounded-full bg-accent/20 px-1.5 font-medium text-accent group-hover:hidden"
-                      title={`확인하지 않은 응답 ${unread}개`}
+                      title={t("nav.sidebar.unreadReplies", { count: unread })}
                       data-ws-unread={unread}
                     >
                       {unread}
@@ -637,7 +638,7 @@ export function Sidebar({
                       onNewTabIn(w.id);
                     }}
                     className="hidden shrink-0 rounded p-0.5 text-muted hover:bg-panel hover:text-fg group-hover:block"
-                    title="이 워크스페이스에 새 세션"
+                    title={t("nav.sidebar.newSessionInWorkspace")}
                     data-ws-new
                   >
                     <Icon name="plus" size={12} />
@@ -649,15 +650,15 @@ export function Sidebar({
                 <ul className="ml-3 flex flex-col gap-px border-l border-line pl-1.5">
                   {tabs.length === 0 && (
                     <li className="px-2 py-1 text-[11px] text-muted-2">
-                      세션 없음
+                      {t("nav.sidebar.noSessions")}
                     </li>
                   )}
                   {visible.map((tab) => (
                     <li key={tab.id}>
                       {confirm?.kind === "tab" && confirm.id === tab.id ? (
                         <ConfirmRow
-                          text="기록까지 삭제할까요?"
-                          action="삭제"
+                          text={t("nav.sidebar.deleteSessionConfirm")}
+                          action={t("nav.sidebar.deleteSessionAction")}
                           onYes={() => {
                             setConfirm(null);
                             onDeleteTab(tab.id);
@@ -721,7 +722,7 @@ export function Sidebar({
                         }
                         className="px-2 py-1 text-[11px] text-muted hover:text-fg"
                       >
-                        닫힌 세션 {hiddenClosed}개 더 보기
+                        {t("nav.sidebar.showMoreClosed", { count: hiddenClosed })}
                       </button>
                     </li>
                   )}
@@ -747,7 +748,7 @@ export function Sidebar({
             <>
               {menuTab.open && menuTab.id !== model.activeTabId && (
                 <MenuItem
-                  label="오른쪽에 나란히 열기"
+                  label={t("nav.sidebar.menu.openSplit")}
                   onPick={() => {
                     setMenu(null);
                     onSplitTab(menuTab.id);
@@ -755,7 +756,7 @@ export function Sidebar({
                 />
               )}
               <MenuItem
-                label={menuTab.open ? "닫기" : "열기"}
+                label={menuTab.open ? t("nav.sidebar.menu.close") : t("nav.sidebar.menu.open")}
                 onPick={() => {
                   setMenu(null);
                   if (menuTab.open) onCloseTab(menuTab.id);
@@ -763,7 +764,7 @@ export function Sidebar({
                 }}
               />
               <MenuItem
-                label="이름 변경"
+                label={t("nav.sidebar.menu.rename")}
                 onPick={() => {
                   setMenu(null);
                   setRenaming({
@@ -775,7 +776,7 @@ export function Sidebar({
               {menuTab.open && (
                 <>
                   <MenuItem
-                    label="위로 이동"
+                    label={t("nav.sidebar.menu.moveUp")}
                     disabled={!neighborOf(openTabIdsOf(menuTab.workspaceId), menuTab.id, "up")}
                     onPick={() => {
                       setMenu(null);
@@ -783,7 +784,7 @@ export function Sidebar({
                     }}
                   />
                   <MenuItem
-                    label="아래로 이동"
+                    label={t("nav.sidebar.menu.moveDown")}
                     disabled={!neighborOf(openTabIdsOf(menuTab.workspaceId), menuTab.id, "down")}
                     onPick={() => {
                       setMenu(null);
@@ -793,7 +794,7 @@ export function Sidebar({
                 </>
               )}
               <MenuItem
-                label="마크다운으로 내보내기…"
+                label={t("nav.sidebar.menu.exportMarkdown")}
                 onPick={() => {
                   setMenu(null);
                   onExportTab(menuTab.id);
@@ -801,7 +802,7 @@ export function Sidebar({
               />
               <div className="my-1 h-px bg-line" />
               <MenuItem
-                label="삭제…"
+                label={t("nav.sidebar.menu.delete")}
                 danger
                 onPick={() => {
                   setMenu(null);
@@ -813,35 +814,35 @@ export function Sidebar({
           {menuWs && (
             <>
               <MenuItem
-                label="새 세션"
+                label={t("nav.sidebar.menu.newSession")}
                 onPick={() => {
                   setMenu(null);
                   onNewTabIn(menuWs.id);
                 }}
               />
               <MenuItem
-                label="격리 세션 (git worktree)"
+                label={t("nav.sidebar.menu.isolatedSession")}
                 onPick={() => {
                   setMenu(null);
                   onNewWorktreeIn(menuWs.id);
                 }}
               />
               <MenuItem
-                label={collapsed.has(menuWs.id) ? "펼치기" : "접기"}
+                label={collapsed.has(menuWs.id) ? t("nav.sidebar.menu.expand") : t("nav.sidebar.menu.collapse")}
                 onPick={() => {
                   setMenu(null);
                   toggleCollapsed(menuWs.id);
                 }}
               />
               <MenuItem
-                label="이름 변경"
+                label={t("nav.sidebar.menu.rename")}
                 onPick={() => {
                   setMenu(null);
                   setRenamingWs({ id: menuWs.id, draft: menuWs.name });
                 }}
               />
               <MenuItem
-                label="위로 이동"
+                label={t("nav.sidebar.menu.moveUp")}
                 disabled={!neighborOf(model.workspaces.map((w) => w.id), menuWs.id, "up")}
                 onPick={() => {
                   setMenu(null);
@@ -849,7 +850,7 @@ export function Sidebar({
                 }}
               />
               <MenuItem
-                label="아래로 이동"
+                label={t("nav.sidebar.menu.moveDown")}
                 disabled={!neighborOf(model.workspaces.map((w) => w.id), menuWs.id, "down")}
                 onPick={() => {
                   setMenu(null);
@@ -857,7 +858,7 @@ export function Sidebar({
                 }}
               />
               <MenuItem
-                label={menuWs.path ? "기본 경로 변경…" : "기본 경로 설정…"}
+                label={menuWs.path ? t("nav.sidebar.menu.changeDefaultPath") : t("nav.sidebar.menu.setDefaultPath")}
                 onPick={() => {
                   setMenu(null);
                   onSetWorkspacePath(menuWs.id);
@@ -865,7 +866,7 @@ export function Sidebar({
               />
               {menuWs.path && (
                 <MenuItem
-                  label="기본 경로 해제"
+                  label={t("nav.sidebar.menu.clearDefaultPath")}
                   onPick={() => {
                     setMenu(null);
                     onClearWorkspacePath(menuWs.id);
@@ -874,7 +875,7 @@ export function Sidebar({
               )}
               <div className="my-1 h-px bg-line" />
               <MenuItem
-                label="워크스페이스 제거…"
+                label={t("nav.sidebar.menu.removeWorkspace")}
                 danger
                 onPick={() => {
                   setMenu(null);
@@ -891,7 +892,7 @@ export function Sidebar({
       <div className="px-4 py-3">
         <div className="text-[12px] font-medium">{info?.userName ?? ""}</div>
         <div className="mono text-[10px] text-muted">
-          {model.workspaces.length}개 워크스페이스{" "}
+          {t("nav.sidebar.workspaceCount", { count: model.workspaces.length })}{" "}
           {info ? `· v${info.version}` : ""}
         </div>
       </div>
@@ -935,6 +936,7 @@ function SessionRow({
   drag: React.HTMLAttributes<HTMLDivElement> & { draggable: boolean };
   dragging: boolean;
 }) {
+  const { t } = useTranslation();
   const unread = tab.open ? attention : null;
   return (
     <div
@@ -965,7 +967,7 @@ function SessionRow({
             if (e.key === "Enter") onRenameCommit();
             else if (e.key === "Escape") onRenameCancel();
           }}
-          placeholder="세션 이름"
+          placeholder={t("nav.sidebar.sessionName")}
           className="-mx-1 block min-w-0 flex-1 rounded border border-accent/50 bg-panel px-1 text-fg outline-none"
           style={{ userSelect: "text" }}
         />
@@ -975,14 +977,14 @@ function SessionRow({
             tab.open ? (unread ? "font-semibold text-fg" : "text-fg") : "text-muted"
           }`}
         >
-          {tabTitle(tab)}
+          {tabTitle(tab, t("shared.untitledTab"))}
         </span>
       )}
       {/* 안 본 응답은 목록을 훑을 때 바로 눈에 들어와야 한다 — 왼쪽 상태 점은 색만 바뀌어 잘 안 보인다. */}
       {unread && (
         <span
           className={`h-2 w-2 shrink-0 rounded-full ${unread === "error" ? "bg-err" : unread === "permission" ? "bg-warn" : "bg-accent"}`}
-          title={ATTENTION_LABEL[unread]}
+          title={attentionLabel(unread)}
           data-unread={unread}
         />
       )}
@@ -997,7 +999,7 @@ function SessionRow({
             ? "text-muted hover:bg-panel hover:text-fg"
             : "text-muted hover:bg-err-bg hover:text-err"
         }`}
-        title={tab.open ? "닫기" : "삭제…"}
+        title={tab.open ? t("nav.sidebar.menu.close") : t("nav.sidebar.menu.delete")}
         data-session-x
       >
         <Icon name="x" size={11} />
@@ -1017,6 +1019,7 @@ function ConfirmRow({
   onYes: () => void;
   onNo: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 rounded-md bg-err-bg px-2 py-1.5 text-[12px] text-err">
       <span className="min-w-0 flex-1 truncate">{text}</span>
@@ -1030,7 +1033,7 @@ function ConfirmRow({
         onClick={onNo}
         className="rounded px-1.5 py-0.5 text-muted hover:bg-panel-2"
       >
-        취소
+        {t("common.cancel")}
       </button>
     </div>
   );

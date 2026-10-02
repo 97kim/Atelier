@@ -9,10 +9,11 @@ import { orchestration } from "./ko/orchestration";
 import { panel } from "./ko/panel";
 import { schedules } from "./ko/schedules";
 import { settings } from "./ko/settings";
+import { shared } from "./ko/shared";
 import { toolCard } from "./ko/toolCard";
 import { usage } from "./ko/usage";
 
-export const ko = { chat, common, fanout, nav, orchestration, panel, schedules, settings, toolCard, usage };
+export const ko = { chat, common, fanout, nav, orchestration, panel, schedules, settings, shared, toolCard, usage };
 
 /** 사전의 모양. 값은 모두 문자열이다. */
 export type Dictionary = typeof ko;

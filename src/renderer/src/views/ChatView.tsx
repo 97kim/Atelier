@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { intlLocale, type Locale } from "@shared/i18n/locale";
 import {
   CONTEXT_WARN_PCT,
   contextUsage,
@@ -102,6 +104,7 @@ export function ChatView({
   /** 설정 화면으로. 섹션을 주지 않으면 CLI 탐지(/config). */
   onOpenSettings: (section?: "general" | "cli") => void;
 }) {
+  const { t } = useTranslation();
   const tabId = tab.id;
   const { state, config, setConfig, loaded } = useSession(tabId);
   const [switching, setSwitching] = useState(false);
@@ -379,7 +382,7 @@ export function ChatView({
     [tabId],
   );
 
-  const title = tabTitle(tab);
+  const title = tabTitle(tab, t("shared.untitledTab"));
   // 세션 이름 인라인 편집: 제목 클릭 또는 탭 더블클릭. Enter 저장, esc 취소, 빈 값이면 자동 제목으로.
   const [editingTitle, setEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
@@ -407,9 +410,9 @@ export function ChatView({
   // (닫은 조합은 모듈에 기억해 탭을 오가며 다시 마운트돼도 유지). 세션 스냅샷이 오기 전엔 cwd 를 모르므로 계산하지 않는다(격리 탭 오탐 방지).
   const concurrent =
     cwd && config
-      ? ws.model.tabs.filter((t) => t.id !== tabId && t.open && tabCwd(ws.model, t) === cwd && BUSY_STATUS.has(ws.statuses[t.id] ?? ""))
+      ? ws.model.tabs.filter((x) => x.id !== tabId && x.open && tabCwd(ws.model, x) === cwd && BUSY_STATUS.has(ws.statuses[x.id] ?? ""))
       : [];
-  const concurrentKey = concurrent.map((t) => t.id).sort().join(",");
+  const concurrentKey = concurrent.map((x) => x.id).sort().join(",");
   const [concurrentDismissed, setConcurrentDismissedState] = useState(() => dismissedConcurrent.get(tabId) ?? "");
   const setConcurrentDismissed = (key: string) => {
     dismissedConcurrent.set(tabId, key);
@@ -421,7 +424,7 @@ export function ChatView({
   // 패널 토글 라벨: 파일 탭과 브라우저 탭을 따로 센다(브라우저만 열려 있는데 "코드 1" 로 보이지 않게).
   const fileTabCount = editorTabs.files.filter((f) => !isBrowserTab(f)).length;
   const browserTabCount = editorTabs.files.length - fileTabCount;
-  const paneLabel = [fileTabCount > 0 ? `코드 ${fileTabCount}` : null, browserTabCount > 0 ? `브라우저 ${browserTabCount}` : null].filter(Boolean).join(" · ");
+  const paneLabel = [fileTabCount > 0 ? t("chat.header.codeCount", { count: fileTabCount }) : null, browserTabCount > 0 ? t("chat.header.browserCount", { count: browserTabCount }) : null].filter(Boolean).join(" · ");
   const provider = config?.provider ?? tab.provider;
 
   const snippets = useSnippets();
@@ -470,14 +473,14 @@ export function ChatView({
                   if (e.key === "Enter") void commitRename();
                   else if (e.key === "Escape") setEditingTitle(false);
                 }}
-                placeholder="세션 이름"
+                placeholder={t("chat.header.sessionName")}
                 className="no-drag -mx-1.5 w-full max-w-[480px] rounded-md border border-accent/50 bg-panel px-1.5 text-[15px] font-semibold outline-none"
                 style={{ userSelect: "text" }}
               />
             ) : (
               <button
                 onClick={startRename}
-                title="클릭해서 이름 변경"
+                title={t("chat.header.renameHint")}
                 className="no-drag group -mx-1.5 flex max-w-full items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-panel-2"
               >
                 <span className="truncate text-[15px] font-semibold">
@@ -505,7 +508,7 @@ export function ChatView({
                   title={
                     running
                       ? cwd
-                      : `${cwd}\n작업 경로 변경 (AI와의 대화를 새로 시작합니다)`
+                      : `${cwd}\n${t("chat.header.changeCwdHint")}`
                   }
                   data-cwd
                 >
@@ -516,11 +519,11 @@ export function ChatView({
                 <button
                   onClick={() => void pickCwd()}
                   className="no-drag flex shrink-0 items-center gap-1 rounded bg-accent-tint px-1.5 py-0.5 text-accent hover:bg-accent/15"
-                  title="이 대화에서 사용할 작업 경로를 선택합니다"
+                  title={t("chat.header.pickCwdHint")}
                   data-cwd
                 >
                   <Icon name="folder" size={10} />
-                  작업 경로 선택…
+                  {t("chat.header.pickCwd")}
                 </button>
               )}
               {tab.worktree && (
@@ -536,7 +539,7 @@ export function ChatView({
                   <span className="shrink-0">·</span>
                   <span
                     className="shrink-0"
-                    title={`${config?.model ? `이 세션에 설정한 모델: ${config.model}` : "기본 모델 사용 중"}${state.model ? ` · 마지막 응답: ${state.model}` : ""} (/model 로 변경)`}
+                    title={t(`chat.header.modelTitle.${config?.model ? "set" : "default"}${state.model ? "Last" : ""}`, { model: config?.model, last: state.model })}
                     data-header-model
                   >
                     {headerModelLabel(config?.model, state.model)}
@@ -548,28 +551,31 @@ export function ChatView({
                   <span className="shrink-0">·</span>
                   <span
                     className="shrink-0 text-accent-2"
-                    title="동시에 작업할 채팅 수를 넘겨 기다리는 중입니다. 자리가 나면 자동으로 시작합니다. 중단을 누르면 대기를 취소합니다."
+                    title={t("chat.header.queuedHint")}
                     data-queue-status
                   >
                     {config?.queueInfo
-                      ? `실행 대기 ${config.queueInfo.position}번째 · 진행 중 ${config.queueInfo.running}/${config.queueInfo.max}${
-                          config.queueInfo.waitingPermission > 0 ? ` (승인 대기 ${config.queueInfo.waitingPermission}개 포함)` : ""
-                        }`
-                      : "실행 대기"}
+                      ? t(config.queueInfo.waitingPermission > 0 ? "chat.header.queuePositionWaiting" : "chat.header.queuePosition", {
+                          position: config.queueInfo.position,
+                          running: config.queueInfo.running,
+                          max: config.queueInfo.max,
+                          waiting: config.queueInfo.waitingPermission,
+                        })
+                      : t("chat.header.queued")}
                   </span>
                   <button
                     onClick={() => onOpenSettings("general")}
                     className="no-drag shrink-0 text-muted underline-offset-2 hover:text-fg hover:underline"
-                    title="설정 > 일반에서 동시에 작업할 채팅 수를 바꿉니다"
+                    title={t("chat.header.limitSettingHint")}
                   >
-                    상한 설정
+                    {t("chat.header.limitSetting")}
                   </button>
                 </>
               )}
               {config?.handoffPending && (
                 <>
                   <span>·</span>
-                  <span className="text-accent">요약 전달 대기</span>
+                  <span className="text-accent">{t("chat.header.handoffPending")}</span>
                 </>
               )}
             </div>
@@ -582,7 +588,7 @@ export function ChatView({
                   ? "border-accent/40 bg-accent-tint text-accent"
                   : "border-line bg-panel hover:bg-panel-2"
               }`}
-              title={editorShown ? `에디터 패널 접기 (${paneLabel})` : `에디터 패널 펼치기 (${paneLabel})`}
+              title={t(editorShown ? "chat.header.editorCollapse" : "chat.header.editorExpand", { label: paneLabel })}
               data-editor-toggle={editorShown ? "open" : "closed"}
             >
               {/* 옆의 "브라우저"(새 탭 열기) 버튼과 헷갈리지 않게 패널 아이콘 — 이 버튼은 패널을 접고 펴는 것 */}
@@ -593,29 +599,29 @@ export function ChatView({
           <button
             onClick={() => openBrowserTab(tabId)}
             className={`no-drag flex min-h-[31px] shrink-0 items-center gap-2 rounded-md border border-line bg-panel py-1.5 hover:bg-panel-2 px-2 @min-[800px]/chathead:px-3`}
-            title="인앱 브라우저를 열어 개발 중인 화면이나 문서를 봅니다"
+            title={t("chat.header.openBrowserHint")}
             data-browser-open
           >
             <Icon name="globe" size={11} className="size-[13px] @min-[800px]/chathead:size-[11px]" />
-            <span className="hidden @min-[800px]/chathead:inline">{browserTabCount > 0 ? "새 브라우저" : "브라우저"}</span>
+            <span className="hidden @min-[800px]/chathead:inline">{browserTabCount > 0 ? t("chat.header.newBrowser") : t("chat.header.browser")}</span>
           </button>
           <div className="relative flex shrink-0 items-stretch" ref={verifyAnchor}>
             <button
               onClick={onVerifyClick}
               disabled={!cwd || verifyRunning}
               className={`no-drag flex min-h-[31px] items-center gap-2 rounded-l-md border border-line bg-panel py-1.5 hover:bg-panel-2 disabled:opacity-40 px-2 @min-[800px]/chathead:px-3`}
-              title={savedVerify.length > 0 ? `저장한 검증 명령 실행: ${savedVerify.join(" → ")}` : "검증 명령(테스트·빌드)을 정해 두고 한 번에 실행합니다"}
+              title={savedVerify.length > 0 ? t("chat.header.runVerifyHint", { commands: savedVerify.join(" → ") }) : t("chat.header.setVerifyHint")}
               data-verify={verifyRunning ? "running" : savedVerify.length > 0 ? "ready" : "empty"}
             >
               {verifyRunning ? <span className="spin inline-block h-3 w-3 rounded-full border-[1.5px] border-accent border-t-transparent" /> : <Icon name="check" size={11} className="size-[13px] @min-[800px]/chathead:size-[11px]" />}
-              <span className="hidden @min-[800px]/chathead:inline">{verifyRunning ? "검증 중" : "검증"}</span>
+              <span className="hidden @min-[800px]/chathead:inline">{verifyRunning ? t("chat.header.verifying") : t("chat.header.verify")}</span>
             </button>
             <button
               ref={verifyToggle}
               onClick={() => setVerifyOpen((o) => !o)}
               disabled={!cwd}
               className={`no-drag flex min-h-[31px] items-center rounded-r-md border border-l-0 border-line px-1.5 py-1.5 hover:bg-panel-2 disabled:opacity-40 ${verifyOpen ? "bg-accent-tint text-accent" : "bg-panel text-muted"}`}
-              title="검증 명령 편집"
+              title={t("chat.header.editVerify")}
               data-verify-edit
             >
               <Icon name="edit" size={10} />
@@ -631,7 +637,7 @@ export function ChatView({
                 ? "border-accent/40 bg-accent-tint text-accent hover:bg-accent/15"
                 : "border-line bg-panel hover:bg-panel-2"
             }`}
-            title={terminalOpen ? "터미널 닫기 (⌘J)" : "터미널 열기 — 하단·우측 중 고릅니다 (⌘J 는 마지막 위치로)"}
+            title={terminalOpen ? t("chat.header.closeTerminalHint") : t("chat.header.openTerminalHint")}
             data-terminal-toggle={terminalOpen ? "open" : "closed"}
           >
             <span
@@ -643,7 +649,7 @@ export function ChatView({
             >
               <Icon name="terminal" size={11} />
             </span>
-            <span className="hidden @min-[800px]/chathead:inline">터미널</span>
+            <span className="hidden @min-[800px]/chathead:inline">{t("chat.header.terminal")}</span>
           </button>
           {terminalMenuOpen && (
             <HeaderMenu
@@ -651,9 +657,9 @@ export function ChatView({
               onClose={() => setTerminalMenuOpen(false)}
               items={(["bottom", "right"] as const).map((d) => ({
                 key: `terminal-${d}`,
-                label: `${d === "bottom" ? "하단에 열기" : "우측에 열기"}${d === terminalDock ? " · ⌘J" : ""}`,
+                label: `${t(`chat.header.terminalDock.${d}.label`)}${d === terminalDock ? " · ⌘J" : ""}`,
                 icon: d === "bottom" ? "panelBottom" : "panelRight",
-                hint: d === "bottom" ? "채팅 아래에 엽니다. 위쪽 가장자리를 끌어 높이를 바꿉니다" : "채팅 오른쪽에 세로로 엽니다. 왼쪽 가장자리를 끌어 폭을 바꿉니다",
+                hint: t(`chat.header.terminalDock.${d}.hint`),
                 onSelect: () => openTerminalAt(d),
               }))}
             />
@@ -662,30 +668,30 @@ export function ChatView({
           {terminalControlled && config?.terminalExternal ? (
             <span
               className="no-drag flex shrink-0 items-center gap-2 rounded-md border border-accent/40 bg-accent-tint px-3 py-1.5 text-accent"
-              title="터미널에서 시작한 CLI에 연결되어 있습니다. 터미널에서 /exit로 종료하면 채팅으로 돌아옵니다."
+              title={t("chat.header.externalHint")}
               data-external-terminal
             >
               <Icon name="terminal" size={12} />
               <span className="@min-[800px]/chathead:hidden">CLI</span>
-              <span className="hidden @min-[800px]/chathead:inline">터미널 CLI에 연결됨</span>
+              <span className="hidden @min-[800px]/chathead:inline">{t("chat.header.externalLabel")}</span>
             </span>
           ) : terminalControlled ? (
             <button
               onClick={detachTerminal}
               className="no-drag flex shrink-0 items-center gap-2 rounded-md border border-accent/40 bg-accent-tint px-3 py-1.5 text-accent hover:bg-accent/15"
-              title="터미널에서 실행 중인 CLI를 종료하고 채팅으로 돌아옵니다"
+              title={t("chat.header.detachHint")}
               data-detach-terminal
             >
               <Icon name="chat" size={12} />
-              <span className="@min-[800px]/chathead:hidden">채팅으로</span>
-              <span className="hidden @min-[800px]/chathead:inline">채팅으로 돌아가기</span>
+              <span className="@min-[800px]/chathead:hidden">{t("chat.header.backToChatShort")}</span>
+              <span className="hidden @min-[800px]/chathead:inline">{t("chat.header.backToChat")}</span>
             </button>
           ) : null}
           <div className="relative flex shrink-0" ref={moreAnchor}>
             <button
               onClick={() => setMoreOpen((o) => !o)}
               className={`no-drag flex min-h-[31px] items-center rounded-md border px-2 py-1.5 ${moreOpen ? "border-accent/40 bg-accent-tint text-accent" : "border-line bg-panel text-muted hover:bg-panel-2 hover:text-fg"}`}
-              title="팬아웃·교차 리뷰·오케스트레이션·터미널로 이어가기"
+              title={t("chat.header.moreHint")}
               data-header-more={moreOpen ? "open" : "closed"}
             >
               <Icon name="more" size={14} strokeWidth={3} />
@@ -697,36 +703,36 @@ export function ChatView({
                 items={[
                   {
                     key: "fanout",
-                    label: "팬아웃",
+                    label: t("chat.header.fanout.label"),
                     icon: "sparkles",
-                    hint: "여러 격리 세션에 같은 요청을 보내고, diff를 비교해 원본에 적용할 결과를 고릅니다",
+                    hint: t("chat.header.fanout.hint"),
                     disabled: !cwd || terminalControlled,
-                    disabledReason: !cwd ? "작업 경로를 먼저 고르세요" : "현재 터미널의 CLI가 이 대화를 제어하고 있습니다",
+                    disabledReason: !cwd ? t("chat.header.needCwd") : t("chat.header.terminalControlled"),
                     onSelect: () => setFanoutOpen(true),
                   },
                   {
                     key: "cross-review",
-                    label: "교차 리뷰",
+                    label: t("chat.header.crossReview.label"),
                     icon: "switch",
-                    hint: `작업 트리 변경을 ${provider === "claude" ? "Codex" : "Claude Code"} 새 탭에 보내 독립 리뷰를 받습니다`,
+                    hint: t("chat.header.crossReview.hint", { target: provider === "claude" ? "Codex" : "Claude Code" }),
                     disabled: !cwd || terminalControlled || reviewBusy,
-                    disabledReason: reviewBusy ? "리뷰가 이미 돌고 있습니다" : !cwd ? "작업 경로를 먼저 고르세요" : "현재 터미널의 CLI가 이 대화를 제어하고 있습니다",
+                    disabledReason: reviewBusy ? t("chat.header.crossReview.busy") : !cwd ? t("chat.header.needCwd") : t("chat.header.terminalControlled"),
                     onSelect: () => void requestCrossReview(),
                   },
                   {
                     key: "orchestration",
-                    label: "오케스트레이션",
+                    label: t("chat.header.orchestration.label"),
                     icon: "list",
-                    hint: "워커의 작업과 인박스를 확인합니다. Run은 atelier orch 명령으로 만듭니다",
+                    hint: t("chat.header.orchestration.hint"),
                     onSelect: () => setOrchPanel({ runId: null }),
                   },
                   {
                     key: "attach-terminal",
-                    label: "터미널에서 이어가기",
+                    label: t("chat.header.attachTerminal.label"),
                     icon: "play",
-                    hint: "같은 대화를 터미널의 CLI에서 이어갑니다. CLI를 종료하면 채팅으로 돌아옵니다",
+                    hint: t("chat.header.attachTerminal.hint"),
                     disabled: !cwd || running || terminalControlled,
-                    disabledReason: terminalControlled ? "이미 터미널의 CLI에 연결되어 있습니다" : running ? "현재 작업이 끝난 뒤 사용할 수 있습니다" : "작업 경로를 먼저 고르세요",
+                    disabledReason: terminalControlled ? t("chat.header.attachTerminal.already") : running ? t("chat.header.attachTerminal.waitIdle") : t("chat.header.needCwd"),
                     onSelect: () => void attachTerminal(),
                   },
                 ]}
@@ -746,7 +752,7 @@ export function ChatView({
             <button
               onClick={onUnsplit}
               className="no-drag flex shrink-0 items-center rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
-              title="분할 해제 (이 칸을 빼고 옆 칸만 봅니다. 탭은 열려 있습니다)"
+              title={t("chat.header.unsplit")}
               data-unsplit
             >
               <Icon name="x" size={13} />
@@ -831,15 +837,15 @@ export function ChatView({
               <div className="mx-6 mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-warn/40 bg-warn-bg px-3 py-2 text-[12px] text-warn" data-concurrent-banner>
                 <Icon name="alert" size={13} className="shrink-0" />
                 <span className="min-w-0 flex-1">
-                  같은 작업 경로에서 다른 탭 {concurrent.length}개가 작업 중입니다: {concurrent.map((t) => shortTitle(tabTitle(t))).join(", ")}. 같은 파일을 고치면 서로 덮어쓸 수 있습니다.
+                  {t("chat.concurrent.message", { count: concurrent.length, titles: concurrent.map((x) => shortTitle(tabTitle(x, t("shared.untitledTab")))).join(", ") })}
                 </span>
                 <button onClick={() => onActivateTab(concurrent[0].id)} className="shrink-0 rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10" data-concurrent-view>
-                  보기
+                  {t("chat.concurrent.view")}
                 </button>
-                <button onClick={onIsolate} className="shrink-0 rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10" title="현재 저장소에 worktree를 만들어 격리 세션을 시작합니다" data-concurrent-isolate>
-                  격리 세션으로
+                <button onClick={onIsolate} className="shrink-0 rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10" title={t("chat.concurrent.isolateHint")} data-concurrent-isolate>
+                  {t("chat.concurrent.isolate")}
                 </button>
-                <button onClick={() => setConcurrentDismissed(concurrentKey)} className="shrink-0 rounded p-0.5 hover:bg-warn/10" title="닫기" data-concurrent-dismiss>
+                <button onClick={() => setConcurrentDismissed(concurrentKey)} className="shrink-0 rounded p-0.5 hover:bg-warn/10" title={t("common.close")} data-concurrent-dismiss>
                   <Icon name="x" size={12} />
                 </button>
               </div>
@@ -866,14 +872,10 @@ export function ChatView({
               >
                 <Icon name="alert" size={13} className="shrink-0" />
                 <span className="min-w-0 flex-1">
-                  컨텍스트 창을 {ctxPct}% 썼습니다
                   {ctx?.window
-                    ? ` (${Math.round(Math.min(ctx.used, ctx.window) / 1000)}k / ${Math.round(ctx.window / 1000)}k)`
-                    : ""}
-                  .
-                  {ctxLevel === "critical"
-                    ? " 곧 자동 압축이 일어나거나 응답 품질이 떨어질 수 있습니다."
-                    : " 대화를 요약해 새 세션으로 이어가면 비용과 지연이 줄어듭니다."}
+                    ? t("chat.context.usedWithWindow", { pct: ctxPct, used: Math.round(Math.min(ctx.used, ctx.window) / 1000), window: Math.round(ctx.window / 1000) })
+                    : t("chat.context.used", { pct: ctxPct })}{" "}
+                  {ctxLevel === "critical" ? t("chat.context.adviceCritical") : t("chat.context.adviceWarn")}
                 </span>
                 <button
                   onClick={() => void compactContext()}
@@ -883,16 +885,16 @@ export function ChatView({
                       ? "border-err/40 hover:bg-err/10"
                       : "border-warn/40 hover:bg-warn/10"
                   }`}
-                  title="대화를 압축해 컨텍스트를 줄입니다. Claude 는 세션을 유지한 채 스스로 요약합니다"
+                  title={t("chat.context.compactHint")}
                   data-context-compact
                 >
-                  {ctxBusy ? "압축 중…" : "압축하기"}
+                  {ctxBusy ? t("chat.context.compacting") : t("chat.context.compact")}
                 </button>
                 <button
                   onClick={dismissCtx}
                   className="shrink-0 rounded p-0.5 hover:bg-fg/5"
                   data-context-dismiss
-                  title="닫기 (5% 더 차거나 95% 를 넘으면 다시 알립니다)"
+                  title={t("chat.context.dismissHint")}
                 >
                   <Icon name="x" size={12} />
                 </button>
@@ -920,7 +922,7 @@ export function ChatView({
                   {attachError ??
                     (attention ? (
                       <>
-                        터미널에서 권한 승인을 기다리고 있습니다:{" "}
+                        {t("chat.terminalBanner.attention")}{" "}
                         <span className="font-medium">{attention.tool}</span>
                         {attention.summary && (
                           <code className="ml-1.5 rounded bg-fg/10 px-1 py-px font-mono text-[11px]">
@@ -930,8 +932,8 @@ export function ChatView({
                       </>
                     ) : (
                       config?.terminalExternal
-                        ? "터미널에서 시작한 CLI에 연결되어 있습니다. 첫 메시지를 보낸 뒤부터 대화가 여기에도 표시됩니다. 터미널에서 /exit로 종료하면 채팅으로 돌아옵니다."
-                        : "터미널의 CLI에서 대화를 이어가며 내용은 여기에도 표시됩니다. 터미널에서 /exit로 종료하거나 위의 ‘채팅으로 돌아가기’를 누르세요."
+                        ? t("chat.terminalBanner.external")
+                        : t("chat.terminalBanner.mirrored")
                     ))}
                 </span>
                 {attention && !terminalOpen && (
@@ -939,7 +941,7 @@ export function ChatView({
                     onClick={toggleTerminal}
                     className="shrink-0 rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10"
                   >
-                    터미널 보기
+                    {t("chat.terminalBanner.show")}
                   </button>
                 )}
                 {attachError && (
@@ -958,10 +960,10 @@ export function ChatView({
             <Composer
               disabled={!cwd || terminalControlled}
               disabledText={
-                terminalControlled ? "터미널이 세션을 제어 중입니다" : undefined
+                terminalControlled ? t("chat.terminalBanner.controlled") : undefined
               }
               running={running}
-              runningHint={agentBusy ? `${agentViaCodex ? `${agentBusy} 이 맡긴 Codex 가 작업 중` : `${agentBusy} 가 하위 에이전트를 돌리는 중`} — 끝나면 답이 이어집니다. 다음 지시를 써 두면 그 뒤에 보냅니다…` : undefined}
+              runningHint={agentBusy ? t(agentViaCodex ? "chat.composerHint.codex" : "chat.composerHint.subagent", { name: agentBusy }) : undefined}
               providerLabel={PROVIDER_LABEL[provider]}
               policy={config?.policy ?? "ask"}
               commands={commands}
@@ -983,7 +985,7 @@ export function ChatView({
                 <div
                   onMouseDown={onEditorDragStart}
                   onDoubleClick={onEditorSplitEven}
-                  title="끌어서 넓이 조절 · 두 번 누르면 반반"
+                  title={t("chat.header.resizeHint")}
                   className="w-1 shrink-0 cursor-col-resize hover:bg-accent/30"
                   data-editor-resizer
                 />
@@ -1084,10 +1086,12 @@ function WorktreeChip({
   running: boolean;
   onChanged: (snapshot: SessionSnapshotDto | null) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<WorktreeStatusDto | null>(null);
   const [busy, setBusy] = useState<"merge" | "remove" | null>(null);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // 문구는 값으로 두고 그릴 때 번역한다(언어를 바꾸면 따라온다). text 는 main 이 준 오류 문구
+  const [msg, setMsg] = useState<{ ok: true; merged: number } | { ok: false; text: string } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -1102,7 +1106,7 @@ function WorktreeChip({
     setBusy("merge");
     const r = await window.workbench.worktree.merge(tabId);
     setBusy(null);
-    setMsg(r.ok ? { ok: true, text: r.merged === 0 ? "가져올 커밋이 없습니다." : `${r.merged}개 커밋을 ${worktree.base} 로 가져왔습니다.` } : { ok: false, text: r.error });
+    setMsg(r.ok ? { ok: true, merged: r.merged } : { ok: false, text: r.error });
   };
   const remove = async (force: boolean) => {
     setBusy("remove");
@@ -1119,7 +1123,7 @@ function WorktreeChip({
       <button
         onClick={() => setOpen((o) => !o)}
         className="no-drag flex items-center gap-1 rounded bg-accent-tint px-1.5 py-0.5 text-accent hover:bg-accent/15"
-        title={`격리 세션 · ${worktree.branch}\n${worktree.path}`}
+        title={t("chat.worktree.chipTitle", { branch: worktree.branch, path: worktree.path })}
         data-worktree-chip
       >
         <Icon name="branch" size={10} />
@@ -1137,60 +1141,60 @@ function WorktreeChip({
                 {" · "}
                 {status.exists ? (
                   <>
-                    커밋 <span className="text-fg">{status.ahead}</span>개 앞
-                    {status.behind > 0 && <>, {status.behind}개 뒤</>}
-                    {status.dirty > 0 && <span className="text-warn"> · 미커밋 {status.dirty}</span>}
+                    <Trans i18nKey="chat.worktree.ahead" values={{ count: status.ahead }} components={{ n: <span className="text-fg" /> }} />
+                    {status.behind > 0 && t("chat.worktree.behind", { count: status.behind })}
+                    {status.dirty > 0 && <span className="text-warn">{t("chat.worktree.dirty", { count: status.dirty })}</span>}
                   </>
                 ) : (
-                  <span className="text-err">worktree 폴더가 없습니다</span>
+                  <span className="text-err">{t("chat.worktree.missing")}</span>
                 )}
               </>
             ) : (
-              " · 확인 중…"
+              ` · ${t("chat.worktree.checking")}`
             )}
           </div>
           <button
             onClick={() => void merge()}
             disabled={busy !== null || running || !status?.exists || status.ahead === 0 || status.dirty > 0}
             className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-panel-2 disabled:opacity-40"
-            title={status?.dirty ? "먼저 커밋하거나 버리세요" : `이 브랜치의 커밋을 ${worktree.base} 에 merge 합니다 (원본 저장소에서)`}
+            title={status?.dirty ? t("chat.worktree.mergeBlocked") : t("chat.worktree.mergeHint", { base: worktree.base })}
             data-worktree-merge
           >
             <Icon name="check" size={12} className="text-accent" />
-            {busy === "merge" ? "가져오는 중…" : `변경 가져오기 (${worktree.base} 로 merge)`}
+            {busy === "merge" ? t("chat.worktree.merging") : t("chat.worktree.merge", { base: worktree.base })}
           </button>
           {!confirmRemove ? (
             <button
               onClick={() => setConfirmRemove(true)}
               disabled={busy !== null || running}
               className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-panel-2 disabled:opacity-40"
-              title="worktree 폴더를 지우고 이 세션을 원본 저장소 경로로 되돌립니다"
+              title={t("chat.worktree.removeHint")}
               data-worktree-remove
             >
               <Icon name="trash" size={12} className="text-muted" />
-              worktree 정리
+              {t("chat.worktree.remove")}
             </button>
           ) : (
             <div className="mt-1 flex items-center gap-2 rounded-md border border-err/40 bg-err-bg px-2 py-1.5 text-err" data-worktree-confirm>
               <span className="min-w-0 flex-1">
-                {status?.dirty ? `미커밋 변경 ${status.dirty}개가 사라집니다.` : "worktree 폴더를 지웁니다."}
-                {status && status.ahead > 0 ? " 가져오지 않은 커밋은 브랜치에 남습니다." : ""}
+                {status?.dirty ? t("chat.worktree.confirmDirty", { count: status.dirty }) : t("chat.worktree.confirmPlain")}
+                {status && status.ahead > 0 ? ` ${t("chat.worktree.confirmAhead")}` : ""}
               </span>
               <button
                 onClick={() => void remove(Boolean(status?.dirty))}
                 className="rounded bg-err px-2 py-0.5 font-medium text-white hover:opacity-90"
                 data-worktree-confirm-yes
               >
-                정리
+                {t("chat.worktree.confirmYes")}
               </button>
               <button onClick={() => setConfirmRemove(false)} className="rounded px-1.5 py-0.5 hover:bg-err/10">
-                취소
+                {t("common.cancel")}
               </button>
             </div>
           )}
           {msg && (
             <div className={`mono mt-1 px-1 text-[10.5px] ${msg.ok ? "text-ok" : "text-err"}`} data-worktree-msg>
-              {msg.text}
+              {msg.ok ? (msg.merged === 0 ? t("chat.worktree.nothingToMerge") : t("chat.worktree.merged", { count: msg.merged, base: worktree.base })) : msg.text}
             </div>
           )}
         </div>
@@ -1215,6 +1219,7 @@ function PendingQueue({
   steerable: boolean;
   onChanged: (snapshot: SessionSnapshotDto) => void;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [steering, setSteering] = useState<string | null>(null);
   const [steerError, setSteerError] = useState<string | null>(null);
@@ -1224,7 +1229,7 @@ function PendingQueue({
     const r = await window.workbench.chat.queueSteer(tabId, id);
     setSteering(null);
     onChanged(r.snapshot);
-    if (!r.ok) setSteerError(r.error ?? "바로 반영하지 못했습니다. 대기열에 남겨 두었습니다.");
+    if (!r.ok) setSteerError(r.error ?? ""); // 빈 문자열이면 기본 문구를 그릴 때 번역한다
   };
   const save = async () => {
     if (!editing) return;
@@ -1235,15 +1240,15 @@ function PendingQueue({
     <div className="mx-6 mb-2 rounded-md border border-line bg-panel px-3 py-2 text-[12px]" data-pending-queue>
       <div className="label mb-1 flex items-center gap-1.5 text-muted">
         <Icon name="clock" size={11} />
-        {idle ? `대기 중인 요청 ${items.length}개 · 지금 보내기를 누르면 시작합니다` : `다음에 보낼 요청 ${items.length}개`}
+        {idle ? t("chat.pending.idle", { count: items.length }) : t("chat.pending.next", { count: items.length })}
         {idle && (
           <button
             onClick={() => void window.workbench.chat.queueSendNext(tabId).then(onChanged)}
             className="ml-auto rounded border border-line px-1.5 py-0.5 text-[11px] text-fg hover:bg-panel-2"
-            title="대기열 맨 앞 지시를 지금 보냅니다"
+            title={t("chat.pending.sendNextHint")}
             data-pending-send-next
           >
-            지금 보내기
+            {t("chat.pending.sendNext")}
           </button>
         )}
       </div>
@@ -1271,9 +1276,9 @@ function PendingQueue({
               <button
                 onClick={() => steering !== p.id && setEditing({ id: p.id, text: p.text })}
                 className="min-w-0 flex-1 truncate rounded px-1 text-left text-fg hover:bg-panel-2"
-                title={`${p.text}\n\n클릭해서 편집`}
+                title={`${p.text}\n\n${t("chat.pending.editHint")}`}
               >
-                {p.text || "(이미지)"}
+                {p.text || t("chat.pending.imageOnly")}
                 {p.hasImages && <span className="ml-1 text-muted">📎</span>}
               </button>
             )}
@@ -1282,18 +1287,18 @@ function PendingQueue({
                 onClick={() => void steer(p.id)}
                 disabled={steering !== null}
                 className="flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-fg hover:bg-panel-2 disabled:opacity-40"
-                title="작업이 끝나길 기다리지 않고 지금 하고 있는 Codex 작업에 이 지시를 바로 전달합니다"
+                title={t("chat.pending.steerHint")}
                 data-pending-steer
               >
                 <Icon name="play" size={9} />
-                {steering === p.id ? "반영 중…" : "지금 반영"}
+                {steering === p.id ? t("chat.pending.steering") : t("chat.pending.steer")}
               </button>
             )}
             <button
               onClick={() => void window.workbench.chat.queueRemove(tabId, p.id).then(onChanged)}
               disabled={steering === p.id}
               className="shrink-0 rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-              title="대기 중인 요청 삭제"
+              title={t("chat.pending.removeHint")}
               data-pending-remove
             >
               <Icon name="x" size={11} />
@@ -1301,9 +1306,9 @@ function PendingQueue({
           </li>
         ))}
       </ul>
-      {steerError && (
+      {steerError !== null && (
         <div className="mt-1 px-1 text-[11px] text-err" data-pending-steer-error>
-          {steerError}
+          {steerError || t("chat.pending.steerFailed")}
         </div>
       )}
     </div>
@@ -1320,13 +1325,14 @@ function LimitWaitBanner({
   wait: LimitWaitDto;
   onChanged: (snapshot: SessionSnapshotDto) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(t);
   }, []);
   const remainMin = wait.until ? Math.max(0, Math.ceil((wait.until - now) / 60_000)) : null;
-  const at = wait.until ? new Date(wait.until).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : null;
+  const at = wait.until ? new Date(wait.until).toLocaleTimeString(intlLocale(i18n.language as Locale), { hour: "2-digit", minute: "2-digit" }) : null;
   return (
     <div
       className="mx-6 mb-2 flex items-center gap-2 rounded-md border border-warn/40 bg-warn-bg px-3 py-2 text-[12px] text-warn"
@@ -1334,22 +1340,22 @@ function LimitWaitBanner({
     >
       <Icon name="clock" size={13} className="shrink-0" />
       <span className="min-w-0 flex-1 truncate" title={wait.message}>
-        사용 한도에 도달했습니다.{" "}
+        {t("chat.limit.reached")}{" "}
         {at
-          ? `${at} 에 자동으로 다시 시도합니다 (약 ${remainMin}분 후${wait.attempts > 1 ? `, ${wait.attempts}번째` : ""}).`
-          : "자동 재시도가 예약되지 않았습니다. 사용 한도를 확인한 뒤 직접 다시 시도하세요."}
+          ? t(wait.attempts > 1 ? "chat.limit.retryAtAttempt" : "chat.limit.retryAt", { time: at, minutes: remainMin, attempt: wait.attempts })
+          : t("chat.limit.notScheduled")}
       </span>
       <button
         onClick={() => void window.workbench.chat.limitRetryNow(tabId).then(onChanged)}
         className="shrink-0 rounded border border-warn/40 px-2 py-0.5 hover:bg-warn/10"
         data-limit-retry
       >
-        지금 재시도
+        {t("chat.limit.retryNow")}
       </button>
       <button
         onClick={() => void window.workbench.chat.limitCancel(tabId).then(onChanged)}
         className="shrink-0 rounded p-0.5 hover:bg-fg/5"
-        title="재시도 취소"
+        title={t("chat.limit.cancelRetry")}
         data-limit-cancel
       >
         <Icon name="x" size={12} />

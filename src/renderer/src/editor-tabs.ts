@@ -1,5 +1,6 @@
 // 에디터 패널의 열린 파일 목록 — 채팅 탭(tabId)마다 따로. ChatView 가 탭마다 다시 마운트되므로 컴포넌트 밖에 둔다.
 import { useEffect, useState } from "react";
+import type { TFunction } from "i18next";
 import { kvGet, kvSet } from "./kv-store";
 
 export interface EditorTabsState {
@@ -384,16 +385,16 @@ export function closeEditorPaths(path: string): void {
  * 브라우저 탭에 보일 라벨: 보통은 호스트(+경로 앞부분). 에디터 HTML 미리보기(127.0.0.1 의 /p/<token>/<root>/…)는
  * 주소가 알아볼 수 없는 토큰이라 파일 이름을 쓴다. 빈 탭은 "브라우저".
  */
-export function browserTabLabel(key: string): string {
-  if (key.startsWith("browser:")) return "브라우저";
+export function browserTabLabel(key: string, t: TFunction): string {
+  if (key.startsWith("browser:")) return t("panel.browser.tabLabel");
   try {
     const u = new URL(key);
     if (/^127\.0\.0\.1$/.test(u.hostname) && u.pathname.startsWith("/p/")) {
       const last = u.pathname.split("/").filter(Boolean).pop() ?? "";
       try {
-        return `${decodeURIComponent(last)} 미리보기`;
+        return t("panel.browser.previewOf", { name: decodeURIComponent(last) });
       } catch {
-        return "미리보기";
+        return t("panel.browser.preview");
       }
     }
     return u.host + (u.pathname !== "/" ? u.pathname.slice(0, 24) : "");

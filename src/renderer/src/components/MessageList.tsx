@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { clearReveal, onReveal, pendingReveal } from "../reveal";
 import type { ForkPoint, SessionStatus } from "@shared/chat-events";
 import type { Provider } from "@shared/ipc";
@@ -50,6 +51,7 @@ export function MessageList({
   /** 기록을 아직 불러오는 중. 빈 대화와 구분해 "대화가 없다" 고 단정하지 않는다. */
   loading?: boolean;
 }) {
+  const { t } = useTranslation();
   const endRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   // 검색 결과에서 "이 블록으로": 예약된 블록이 이 탭의 것이고 화면에 생겼으면 스크롤 + 잠깐 강조.
@@ -184,7 +186,7 @@ export function MessageList({
               <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-panel text-fg">
                 <Logo size={20} />
               </div>
-              <p className="text-muted">무엇을 조사하거나 고칠까요?</p>
+              <p className="text-muted">{t("chat.messages.empty")}</p>
             </div>
           ))}
         {groups.map((g, i) => (
@@ -211,11 +213,11 @@ export function MessageList({
             scrollToBottom();
           }}
           className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-panel px-3 py-1 text-[11px] text-muted shadow-md hover:text-fg"
-          title="맨 아래로 (새 내용이 오면 다시 따라갑니다)"
+          title={t("chat.messages.scrollBottomHint")}
           data-scroll-bottom
         >
           <Icon name="arrowUp" size={11} className="rotate-180" />
-          맨 아래로
+          {t("chat.messages.scrollBottom")}
         </button>
       )}
     </div>
@@ -245,6 +247,7 @@ function Thinking({
 }) {
   // 총 경과 시간은 맨 아래 RunningFooter 가 보여 주므로 여기선 라벨만
   void since;
+  const { t } = useTranslation();
   const tail = reasoning
     .split("\n")
     // Codex 요약은 단락 제목을 "**Preparing review**" 처럼 굵게 표시해 보낸다 — 일반 텍스트로 보여 주므로 기호만 걷는다
@@ -252,7 +255,7 @@ function Thinking({
     .filter(Boolean)
     .slice(-2)
     .join("\n");
-  const label = afterTool ? `${afterTool} 결과 보는 중` : "생각 중";
+  const label = afterTool ? t("chat.messages.thinkingAfterTool", { tool: afterTool }) : t("chat.messages.thinking");
   return (
     <div className={`flex gap-3 ${withAvatar ? "items-start" : "-mt-3"}`} aria-live="polite" data-thinking>
       {withAvatar ? <Avatar provider={provider} /> : <div className="avatar-gap" />}
@@ -286,10 +289,11 @@ function Thinking({
  */
 
 function RunningFooter({ since, blocks, status, ambientFromBg }: { since: number; blocks: Block[]; status: SessionStatus; ambientFromBg: boolean }) {
+  const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, []);
   const secs = Math.max(0, Math.floor((now - since) / 1000));
   let tools = 0;
@@ -306,16 +310,16 @@ function RunningFooter({ since, blocks, status, ambientFromBg }: { since: number
   const askingQuestion = blocks.some((b) => b.kind === "tool" && b.permission === "pending" && b.name === "AskUserQuestion");
   // 사용자가 아무 말도 안 했는데 도는 턴이 있다. 백그라운드 작업이 끝나 CLI 가 그 결과를 들고
   // 스스로 이어간 것인데, 그걸 "응답 중" 이라고 적으면 무엇에 답하는 중인지 알 수 없다.
-  const running0 = ambientFromBg ? "백그라운드 결과 처리 중" : "응답 중";
-  const label = status === "queued" ? "대기열 (요청 후)" : status === "waiting_permission" ? (askingQuestion ? "답변 대기" : "권한 대기") : running > 0 ? `도구 실행 중` : running0;
+  const running0 = ambientFromBg ? t("chat.messages.footer.ambient") : t("chat.messages.footer.responding");
+  const label = status === "queued" ? t("chat.messages.footer.queued") : status === "waiting_permission" ? (askingQuestion ? t("toolCard.state.waiting_answer") : t("toolCard.state.waiting_permission")) : running > 0 ? t("chat.messages.footer.toolRunning") : running0;
   return (
     <div className="content-indent flex items-center gap-2 text-[11px] text-muted-2" data-turn-elapsed={secs}>
       <span className="spin inline-block h-2.5 w-2.5 rounded-full border-[1.5px] border-accent border-t-transparent" />
       <span className="shimmer" style={{ "--shimmer-base": "var(--color-muted)", "--shimmer-hi": "var(--color-fg)" } as React.CSSProperties}>
         {label}
       </span>
-      <span className="mono">{secs >= 60 ? `${Math.floor(secs / 60)}분 ${secs % 60}초` : `${secs}초`}</span>
-      {tools > 0 && <span className="mono">· 도구 {tools}회</span>}
+      <span className="mono">{secs >= 60 ? t("chat.messages.elapsedMinSec", { min: Math.floor(secs / 60), sec: secs % 60 }) : t("chat.messages.elapsedSec", { sec: secs })}</span>
+      {tools > 0 && <span className="mono">{t("chat.messages.footer.tools", { count: tools })}</span>}
     </div>
   );
 }
@@ -347,6 +351,7 @@ function Group({
   onCompareFanout?: (fanoutId: string) => void;
   onOpenOrchestration?: (runId: string) => void;
 }) {
+  const { t } = useTranslation();
   if (group.kind === "orchestration") {
     const b = group.blocks[0];
     return b.kind === "orchestration" ? <OrchestrationCard block={b} onOpen={(id) => onOpenOrchestration?.(id)} /> : null;
@@ -371,8 +376,9 @@ function Group({
       <div className="flex items-center gap-3 py-1 text-[11px] text-muted" data-compacted={b.trigger}>
         <div className="h-px flex-1 bg-line" />
         <span className="shrink-0">
-          {b.trigger === "auto" ? "자동 압축" : "압축"} · {k(b.preTokens)}
-          {b.postTokens !== undefined ? ` → ${k(b.postTokens)}` : ""} · 위쪽 대화는 요약으로 대체됐습니다
+          {t(b.trigger === "auto" ? "chat.messages.compactedAuto" : "chat.messages.compacted", {
+            tokens: `${k(b.preTokens)}${b.postTokens !== undefined ? ` → ${k(b.postTokens)}` : ""}`,
+          })}
         </span>
         <div className="h-px flex-1 bg-line" />
       </div>
@@ -501,17 +507,19 @@ function Group({
  * 경우에만 표시가 빠진다 — 실제로 재어 보고 옮겼다.
  */
 function LoadingConversation() {
+  const { t } = useTranslation();
   return (
     <div className="late-in mt-24 text-center" data-message-list-loading>
       <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-panel">
         <span className="spin inline-block h-4 w-4 rounded-full border-[1.5px] border-muted border-t-transparent" />
       </div>
-      <p className="text-muted">대화를 불러오는 중…</p>
+      <p className="text-muted">{t("chat.messages.loading")}</p>
     </div>
   );
 }
 
 function BlockView({ block }: { block: Block }) {
+  const { t } = useTranslation();
   switch (block.kind) {
     case "user":
       return (
@@ -567,7 +575,7 @@ function BlockView({ block }: { block: Block }) {
         <div className="mt-1 flex items-center gap-2 rounded-md border border-err/40 bg-err-bg px-3 py-2 text-err">
           <Icon name="alert" size={13} />
           <span className="flex-1">
-            {block.errorText ?? "작업을 완료하지 못했습니다. 변경된 파일을 확인한 뒤 다시 요청하세요."}
+            {block.errorText ?? t("chat.messages.turnFailed")}
           </span>
           <span className="opacity-80">{stats}</span>
         </div>
@@ -586,6 +594,7 @@ const ForkContext = createContext<ForkCtx | null>(null);
 
 /** 턴 통계 줄의 "여기서 분기". 줄에 올렸을 때만 보인다. 새 탭이 열리면 앱이 그리로 옮겨 간다. */
 function ForkButton({ point }: { point: ForkPoint }) {
+  const { t } = useTranslation();
   const ctx = useContext(ForkContext);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -604,11 +613,11 @@ function ForkButton({ point }: { point: ForkPoint }) {
         }}
         disabled={busy}
         className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] hover:bg-panel-2 hover:text-fg disabled:opacity-60 ${busy || error ? "" : "opacity-0 group-hover/turn:opacity-100 focus:opacity-100"}`}
-        title="이 턴까지의 대화를 새 탭으로 갈라 다른 방향으로 이어 갑니다. 원래 탭은 그대로 두고, 파일은 되돌리지 않습니다"
+        title={t("chat.messages.forkHint")}
         data-fork-turn
       >
         <Icon name="switch" size={10} />
-        {busy ? "분기 중…" : "여기서 분기"}
+        {busy ? t("chat.messages.forking") : t("chat.messages.fork")}
       </button>
     </>
   );
@@ -620,11 +629,12 @@ function fmt(n: number): string {
 
 /** 교차 리뷰 카드: 요청 중엔 shimmer + 경과, 끝나면 리뷰 본문(마크다운). 리뷰 탭으로 바로 갈 수 있다. */
 function ReviewCard({ block }: { block: ReviewBlock }) {
+  const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (block.status !== "requested") return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, [block.status]);
   const name = block.reviewer === "claude" ? "Claude Code" : "Codex";
   const secs = Math.max(0, Math.floor((now - block.ts) / 1000));
@@ -632,26 +642,26 @@ function ReviewCard({ block }: { block: ReviewBlock }) {
     <div className="content-indent rounded-lg border border-line bg-panel" data-review-card={block.id} data-review-status={block.status}>
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <ProviderLogo provider={block.reviewer} size={18} />
-        <span className="font-medium">교차 리뷰 · {name}</span>
+        <span className="font-medium">{t("chat.messages.review.title", { name })}</span>
         {block.scope && <span className="mono text-[10.5px] text-muted-2">{block.scope}</span>}
         <span className="flex-1" />
         {block.status === "requested" && (
           <span className="label flex items-center gap-1.5 text-accent">
             <span className="shimmer" style={{ "--shimmer-base": "var(--color-accent)", "--shimmer-hi": "var(--color-fg)" } as React.CSSProperties}>
-              리뷰 중
+              {t("chat.messages.review.running")}
             </span>
-            {secs >= 3 && <span className="mono normal-case tracking-normal text-muted-2">{secs >= 60 ? `${Math.floor(secs / 60)}분 ${secs % 60}초` : `${secs}초`}</span>}
+            {secs >= 3 && <span className="mono normal-case tracking-normal text-muted-2">{secs >= 60 ? t("chat.messages.elapsedMinSec", { min: Math.floor(secs / 60), sec: secs % 60 }) : t("chat.messages.elapsedSec", { sec: secs })}</span>}
           </span>
         )}
-        {block.status === "done" && <span className="label text-ok">완료</span>}
-        {block.status === "failed" && <span className="label text-err">실패</span>}
+        {block.status === "done" && <span className="label text-ok">{t("chat.messages.review.done")}</span>}
+        {block.status === "failed" && <span className="label text-err">{t("chat.messages.review.failed")}</span>}
         <button
           onClick={() => void window.workbench.workspaces.activateTab(block.id)}
           className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg"
-          title="리뷰가 진행된 탭으로 이동"
+          title={t("chat.messages.review.openHint")}
           data-review-open
         >
-          리뷰 탭
+          {t("chat.messages.review.open")}
         </button>
       </div>
       {block.status === "done" && (
@@ -660,7 +670,7 @@ function ReviewCard({ block }: { block: ReviewBlock }) {
         </div>
       )}
       {block.status === "failed" && <div className="px-3 py-2 text-[12px] text-err">{block.text}</div>}
-      {block.status === "requested" && <div className="px-3 py-2 text-[12px] text-muted">{name} 가 변경 사항을 살펴보고 있습니다. 끝나면 여기에 결과가 붙습니다.</div>}
+      {block.status === "requested" && <div className="px-3 py-2 text-[12px] text-muted">{t("chat.messages.review.waiting", { name })}</div>}
     </div>
   );
 }

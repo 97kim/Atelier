@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import hljs from "highlight.js/lib/common";
 import { diffLines } from "diff";
 import type { FileViewDto } from "@shared/ipc";
@@ -163,6 +164,7 @@ export function CodeTable({ html, lines }: { html: string; lines: number }) {
 }
 
 export function DiffTable({ rows }: { rows: DiffRow[] }) {
+  const { t } = useTranslation();
   const shown = rows.slice(0, MAX_DIFF_ROWS);
   return (
     <div className="code-view min-w-max">
@@ -170,7 +172,7 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
         r.kind === "skip" ? (
           <div key={i} className="flex bg-panel-2 text-muted">
             <span className="w-[5.5rem] shrink-0" />
-            <span className="px-4">… {r.count}줄 생략</span>
+            <span className="px-4">… {t("panel.viewer.skippedLines", { count: r.count })}</span>
           </div>
         ) : (
           <div
@@ -189,7 +191,7 @@ export function DiffTable({ rows }: { rows: DiffRow[] }) {
         ),
       )}
       {rows.length > MAX_DIFF_ROWS && (
-        <div className="px-4 py-2 text-muted">… {rows.length - MAX_DIFF_ROWS}줄 더 있음</div>
+        <div className="px-4 py-2 text-muted">… {t("panel.diff.moreLines", { count: rows.length - MAX_DIFF_ROWS })}</div>
       )}
     </div>
   );

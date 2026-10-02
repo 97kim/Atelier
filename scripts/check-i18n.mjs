@@ -36,6 +36,8 @@ function scan(file) {
     hits.push({ line: line + 1, text: value.replace(/\s+/g, " ").trim().slice(0, 80) });
   };
   const visit = (node) => {
+    // console.* 로그는 화면 문구가 아니다
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.expression.getText(sf) === "console") return;
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) add(node, node.text);
     else if (ts.isTemplateExpression(node)) add(node, node.head.text + node.templateSpans.map((s) => s.literal.text).join("…"));
     else if (ts.isJsxText(node)) add(node, node.text);

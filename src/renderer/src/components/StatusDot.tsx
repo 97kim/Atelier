@@ -1,13 +1,10 @@
+import i18next from "i18next";
+import { useTranslation } from "react-i18next";
 import type { SessionStatus } from "@shared/chat-events";
 import type { SessionAttention } from "@shared/ipc";
 
-export const STATUS_LABEL: Record<SessionStatus, string> = {
-  idle: "대기",
-  queued: "대기열",
-  running: "실행 중",
-  waiting_permission: "권한 대기",
-  error: "오류",
-};
+// 라벨은 부를 때 번역한다(문구를 값으로 담아 두지 않는다). 밖에서는 문자열로 읽으므로 renderer 의 i18next 를 직접 쓴다.
+export const statusLabel = (status: SessionStatus): string => i18next.t(`chat.status.${status}`);
 
 export function statusColor(status: SessionStatus): string {
   switch (status) {
@@ -24,18 +21,14 @@ export function statusColor(status: SessionStatus): string {
   }
 }
 
-export const ATTENTION_LABEL: Record<SessionAttention, string> = {
-  permission: "권한 대기",
-  done: "응답 도착",
-  error: "오류 — 확인 필요",
-};
+export const attentionLabel = (kind: SessionAttention): string => i18next.t(`chat.attention.${kind}`);
 
 /** 응답 필요 표시가 있으면 그것이 상태 점을 대신한다 (터미널 모드는 status 가 idle 이라 이 경로가 필요). */
 export function effectiveLabel(
   status: SessionStatus,
   attention: SessionAttention | null | undefined,
 ): string {
-  return attention ? ATTENTION_LABEL[attention] : STATUS_LABEL[status];
+  return attention ? attentionLabel(attention) : statusLabel(status);
 }
 
 function attentionColor(kind: SessionAttention): string {
@@ -61,6 +54,7 @@ export function StatusDot({
   dim?: boolean;
   className?: string;
 }) {
+  useTranslation(); // 언어를 바꾸면 title 이 따라오게 다시 그린다
   const color = dim
     ? "bg-muted-2"
     : attention

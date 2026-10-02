@@ -54,8 +54,8 @@ DMG로 직접 설치한 앱도 새 버전을 확인할 수 있지만 앱 안에�
 ## 국제화 (i18n)
 
 표시 언어는 한국어(ko)와 영어(en)다. 설정의 `language`(`system`·`ko`·`en`)를 main 이 해석해 `resolvedLocale` 로 내려 주고,
-`system` 은 macOS 의 선호 언어(`app.getPreferredSystemLanguages()[0]`)가 한국어일 때만 ko 다. 문구는 단계적으로 옮기는 중이라
-사전에 없는 화면은 아직 코드의 한국어 그대로다.
+`system` 은 macOS 의 선호 언어(`app.getPreferredSystemLanguages()[0]`)가 한국어일 때만 ko 다. 화면(renderer) 문구는 모두 사전으로 옮겼고,
+main·CLI 가 만드는 문구(메뉴, 오류, 알림)는 아직 코드의 한국어 그대로다.
 
 - 사전은 `src/shared/i18n/ko.ts`(원본)와 `en.ts` 다. 영어에 없는 키는 한국어로 보인다. 영어 값에 빈 문자열을 넣지 않는다(번역이 있는 것으로 취급된다).
 - renderer 는 `useTranslation()` 의 `t`, main 은 `mainI18n().t` 를 쓴다. main 이 번역하는 것은 메뉴·macOS 알림처럼 main 이 직접 그리는 문구뿐이다.
@@ -63,7 +63,9 @@ DMG로 직접 설치한 앱도 새 버전을 확인할 수 있지만 앱 안에�
 - 번역 결과를 상수나 state 에 담아 두지 않는다. 키와 값을 들고 있다가 그릴 때 번역해야 언어를 바꿨을 때 따라온다.
 - 화면 문구로 동작을 정하지 않는다. 상태는 값으로 두고 문구는 그 값에서 만든다(`src/shared/tool-state.ts` 가 예다).
 - 모델에게 보내는 프롬프트, 외부 오류 문구를 읽는 파서(`usage-limit.ts`), 계산용 로케일(`cron.ts` 의 `en-US`)은 번역 대상이 아니다.
-- `yarn i18n:check` 는 코드에 남은 한국어 문구를 센다. `--list <경로>` 로 위치를 보고, 다 옮긴 경로는 `--strict <경로>` 로 지킨다.
+- `yarn i18n:check` 는 코드에 남은 한국어 문구를 센다(`console.*` 로그는 세지 않는다). `--list <경로>` 로 위치를 본다.
+  화면(`src/renderer`)은 다 옮겼으므로 `yarn i18n:strict` 가 0개여야 한다 — 새 화면 문구는 사전(`src/shared/i18n/ko/*.ts`, `en/*.ts`)에 넣는다.
+- `src/shared` 의 함수가 표시 문구를 만들면 `t: TFunction` 을 인자로 받는다(`verifySummary`, `formatDuration` 이 예다). 문구는 `shared` 영역에 둔다.
 - 전환 확인은 `e2e/check-i18n-switch.cjs`.
 
 ## 실기기 검증 (e2e)

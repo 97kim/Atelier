@@ -1,6 +1,18 @@
 // 변경 파일 목록 + 커밋 폼 상태. 컨텍스트 패널의 "변경 파일" 섹션과 변경 리뷰 오버레이가 같은 상태를 공유한다.
 import { useCallback, useEffect, useState } from "react";
+import type { TFunction } from "i18next";
 import type { GitChangeDto, GitInfoDto } from "@shared/ipc";
+
+/** 커밋·되돌리기의 결과. 문구는 값에서 만들어 그릴 때 번역한다(언어를 바꿔도 따라오게). */
+export type GitResult =
+  | { ok: false; text: string }
+  | { ok: true; kind: "committed"; hash: string; files: number }
+  | { ok: true; kind: "reverted"; path: string };
+
+export function gitResultText(t: TFunction, r: GitResult): string {
+  if (!r.ok) return r.text;
+  return r.kind === "committed" ? t("panel.git.committed", { hash: r.hash, count: r.files }) : t("panel.git.reverted", { path: r.path });
+}
 
 export interface GitChangesState {
   git: GitInfoDto | null;
@@ -12,7 +24,7 @@ export interface GitChangesState {
   message: string;
   setMessage(v: string): void;
   busy: "draft" | "commit" | "revert" | null;
-  result: { ok: boolean; text: string } | null;
+  result: GitResult | null;
   draft(): Promise<void>;
   commit(): Promise<void>;
   /** 파일 하나의 변경을 버린다. 성공하면 목록을 새로 읽는다. */
@@ -26,7 +38,7 @@ export function useGitChanges(cwd: string | null, refreshDep: string | number | 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<GitChangesState["busy"]>(null);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [result, setResult] = useState<GitResult | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
   // 밖에서(터미널 커밋, 에이전트 편집, 에디터 저장) 바뀐 것도 따라오게: 창이 포커스를 얻을 때와 5초마다 다시 읽는다.
@@ -99,7 +111,7 @@ export function useGitChanges(cwd: string | null, refreshDep: string | number | 
     setBusy(null);
     if (r.ok) {
       setMessage("");
-      setResult({ ok: true, text: `${r.hash} · ${r.files}개 파일 커밋됨` });
+      setResult({ ok: true, kind: "committed", hash: r.hash, files: r.files });
       refresh();
     } else setResult({ ok: false, text: r.error });
   };
@@ -110,7 +122,7 @@ export function useGitChanges(cwd: string | null, refreshDep: string | number | 
     const r = await window.workbench.git.revert(cwd, path);
     setBusy(null);
     if (r.ok) {
-      setResult({ ok: true, text: `${path} 되돌림` });
+      setResult({ ok: true, kind: "reverted", path });
       refresh();
     } else setResult({ ok: false, text: r.error });
   };

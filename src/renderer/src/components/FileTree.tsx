@@ -8,6 +8,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { DirEntryDto, GitChangeDto } from "@shared/ipc";
 import { useOpenFile } from "./FileViewer";
 import { Icon } from "./Icon";
@@ -15,11 +17,11 @@ import { CheckMark } from "./CheckMark";
 import { closeEditorPaths, dirtyEditorPathsUnder, renameEditorPaths } from "../editor-tabs";
 
 /** 편집 중(저장 안 됨)인 파일을 건드리는 조작은 거부한다 — 이름 변경·삭제는 에디터 버퍼를 조용히 버리기 때문. */
-function dirtyBlockMessage(path: string): string | null {
+function dirtyBlockMessage(t: TFunction, path: string): string | null {
   const d = dirtyEditorPathsUnder(path);
   if (d.length === 0) return null;
   const name = d[0].split("/").pop() ?? d[0];
-  return d.length === 1 ? `${name} 에 저장하지 않은 변경이 있습니다. 먼저 저장하거나 닫으세요.` : `저장하지 않은 파일이 ${d.length}개 있습니다. 먼저 저장하거나 닫으세요.`;
+  return d.length === 1 ? t("panel.fileTree.dirtyOne", { name }) : t("panel.fileTree.dirtyMany", { count: d.length });
 }
 
 /** 파일 조작(새 파일·폴더, 이름 변경, 삭제)과 디렉토리별 새로 고침. 트리 어디서든 context 로 쓴다. */
@@ -101,6 +103,7 @@ const HIDDEN_KEY = "workbench.fileTree.showHidden";
 const ShowHiddenContext = createContext(false);
 
 export function FileTree({ root }: { root: string }) {
+  const { t } = useTranslation();
   const [version, setVersion] = useState(0);
   const openFile = useOpenFile();
   // 파일 조작 상태: 우클릭 메뉴, 이름 입력 중인 항목, 마지막 오류, 디렉토리별 새로 고침 카운터
@@ -123,7 +126,7 @@ export function FileTree({ root }: { root: string }) {
   const parentOf = (p: string) => p.split("/").slice(0, -1).join("/") || "/";
   const doDelete = async (entry: DirEntryDto) => {
     setConfirmDelete(null);
-    const blocked = dirtyBlockMessage(entry.path);
+    const blocked = dirtyBlockMessage(t, entry.path);
     if (blocked) return setOpError(blocked);
     const r = await window.workbench.files.remove(root, entry.path);
     if (!r.ok) return setOpError(r.error);
@@ -215,17 +218,17 @@ export function FileTree({ root }: { root: string }) {
           <button
             onClick={() => setShowHidden((v) => !v)}
             className="flex shrink-0 cursor-default items-center gap-1.5 rounded px-1 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg"
-            title="dot 파일·폴더 표시"
+            title={t("panel.fileTree.showHiddenTitle")}
             role="checkbox"
             aria-checked={showHidden}
           >
             <CheckMark checked={showHidden} />
-            숨김 파일
+            {t("panel.fileTree.showHidden")}
           </button>
           <button
             onClick={() => ops.setPending({ mode: "create", dir: root, kind: "file" })}
             className="shrink-0 rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
-            title="새 파일 (루트)"
+            title={t("panel.fileTree.newFileRoot")}
             data-tree-new-file
           >
             <Icon name="plus" size={11} />
@@ -233,7 +236,7 @@ export function FileTree({ root }: { root: string }) {
           <button
             onClick={() => setVersion((v) => v + 1)}
             className="shrink-0 rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
-            title="새로 고침"
+            title={t("common.refresh")}
           >
             <Icon name="refresh" size={11} />
           </button>
@@ -253,13 +256,13 @@ export function FileTree({ root }: { root: string }) {
           {confirmDelete && (
             <div className="mb-1 flex items-center gap-2 rounded-md border border-err/40 bg-err-bg px-2 py-1.5 text-[11px] text-err" data-tree-confirm-delete>
               <span className="min-w-0 flex-1 truncate">
-                {confirmDelete.name}{confirmDelete.kind === "dir" ? " 폴더" : ""} 를 휴지통으로 보냅니다.
+                {t(confirmDelete.kind === "dir" ? "panel.fileTree.trashDir" : "panel.fileTree.trashFile", { name: confirmDelete.name })}
               </span>
               <button onClick={() => void doDelete(confirmDelete)} className="rounded bg-err px-2 py-0.5 font-medium text-white hover:opacity-90" data-tree-confirm-yes>
-                삭제
+                {t("common.delete")}
               </button>
               <button onClick={() => setConfirmDelete(null)} className="rounded px-1.5 py-0.5 hover:bg-err/10">
-                취소
+                {t("common.cancel")}
               </button>
             </div>
           )}
@@ -275,15 +278,15 @@ export function FileTree({ root }: { root: string }) {
           data-tree-menu
         >
           {menu.target?.kind === "file" && (
-            <TreeMenuItem label="열기" onPick={() => { setMenu(null); openFile(menu.target!.path); }} />
+            <TreeMenuItem label={t("common.open")} onPick={() => { setMenu(null); openFile(menu.target!.path); }} />
           )}
-          <TreeMenuItem label="새 파일" onPick={() => { setMenu(null); ops.setPending({ mode: "create", dir: menuDir, kind: "file" }); }} />
-          <TreeMenuItem label="새 폴더" onPick={() => { setMenu(null); ops.setPending({ mode: "create", dir: menuDir, kind: "dir" }); }} />
+          <TreeMenuItem label={t("panel.fileTree.newFile")} onPick={() => { setMenu(null); ops.setPending({ mode: "create", dir: menuDir, kind: "file" }); }} />
+          <TreeMenuItem label={t("panel.fileTree.newFolder")} onPick={() => { setMenu(null); ops.setPending({ mode: "create", dir: menuDir, kind: "dir" }); }} />
           {menu.target && (
             <>
               <div className="my-1 h-px bg-line" />
-              <TreeMenuItem label="이름 변경" onPick={() => { setMenu(null); ops.setPending({ mode: "rename", entry: menu.target! }); }} />
-              <TreeMenuItem label="휴지통으로 이동…" danger onPick={() => { setMenu(null); setConfirmDelete(menu.target); }} />
+              <TreeMenuItem label={t("common.rename")} onPick={() => { setMenu(null); ops.setPending({ mode: "rename", entry: menu.target! }); }} />
+              <TreeMenuItem label={t("panel.fileTree.moveToTrash")} danger onPick={() => { setMenu(null); setConfirmDelete(menu.target); }} />
             </>
           )}
         </div>
@@ -296,6 +299,7 @@ export function FileTree({ root }: { root: string }) {
 }
 
 function DirChildren({ dir, depth }: { dir: string; depth: number }) {
+  const { t } = useTranslation();
   const [all, setAll] = useState<DirEntryDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const showHidden = useContext(ShowHiddenContext);
@@ -320,17 +324,17 @@ function DirChildren({ dir, depth }: { dir: string; depth: number }) {
   if (error)
     return (
       <div className="mono px-2 py-1 text-[10.5px] text-err">
-        읽기 실패: {error}
+        {t("panel.fileTree.readFailed", { error })}
       </div>
     );
   if (!entries)
     return (
-      <div className="px-2 py-1 text-[10.5px] text-muted">불러오는 중…</div>
+      <div className="px-2 py-1 text-[10.5px] text-muted">{t("common.loading")}</div>
     );
   if (entries.length === 0 && !creating)
     return (
       <div className="px-2 py-1 text-[10.5px] text-muted">
-        {all && all.length > 0 ? "숨김 항목만 있음" : "빈 폴더"}
+        {all && all.length > 0 ? t("panel.fileTree.onlyHidden") : t("panel.fileTree.emptyFolder")}
       </div>
     );
   return (
@@ -341,7 +345,7 @@ function DirChildren({ dir, depth }: { dir: string; depth: number }) {
             depth={depth + (creating.kind === "dir" ? 0 : 1)}
             kind={creating.kind}
             initial=""
-            placeholder={creating.kind === "dir" ? "새 폴더 이름" : "새 파일 이름"}
+            placeholder={creating.kind === "dir" ? t("panel.fileTree.newFolderName") : t("panel.fileTree.newFileName")}
             onCancel={() => ops.setPending(null)}
             onCommit={async (name) => {
               const r = await window.workbench.files.create(ops.root, `${dir}/${name}`, creating.kind);
@@ -371,6 +375,7 @@ function rowClass(depth: number) {
 }
 
 function DirNode({ entry, depth }: { entry: DirEntryDto; depth: number }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const dim = DIM_DIRS.has(entry.name) || entry.name.startsWith(".");
   const root = useContext(TreeRootContext);
@@ -404,7 +409,7 @@ function DirNode({ entry, depth }: { entry: DirEntryDto; depth: number }) {
         <Icon name="folder" size={12} className="shrink-0 text-accent" />
         <span className="truncate">{entry.name}</span>
         {hasChanges && !open && (
-          <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-warn" title="안에 변경된 파일이 있습니다" data-dir-changed />
+          <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-warn" title={t("panel.fileTree.hasChanges")} data-dir-changed />
         )}
       </button>
       {open && <DirChildren dir={entry.path} depth={depth + 1} />}
@@ -413,6 +418,7 @@ function DirNode({ entry, depth }: { entry: DirEntryDto; depth: number }) {
 }
 
 function FileNode({ entry, depth }: { entry: DirEntryDto; depth: number }) {
+  const { t } = useTranslation();
   const openFile = useOpenFile();
   const onClick = useCallback(
     () => openFile(entry.path),
@@ -432,7 +438,7 @@ function FileNode({ entry, depth }: { entry: DirEntryDto; depth: number }) {
       onContextMenu={(e) => ops?.openMenu(e, entry)}
       className={`${rowClass(depth)} ${kind ? "hover:bg-transparent" : ""} ${color}`}
       style={{ paddingLeft: 6 + 14 + depth * 14 }}
-      title={`${entry.path} · ${fmtSize(entry.size)}${kind ? ` · ${kind === "added" ? "새 파일" : kind === "modified" ? "수정됨" : kind === "renamed" ? "이름 변경" : "삭제"}` : ""}`}
+      title={`${entry.path} · ${fmtSize(entry.size)}${kind ? ` · ${t(`panel.fileTree.status.${kind}`)}` : ""}`}
       data-file={entry.path}
       data-git-kind={kind}
     >
@@ -526,17 +532,18 @@ function NameInput({
 }
 
 function RenameRow({ entry, depth, ops }: { entry: DirEntryDto; depth: number; ops: TreeOps }) {
+  const { t } = useTranslation();
   const parent = entry.path.split("/").slice(0, -1).join("/") || "/";
   return (
     <NameInput
       depth={depth + (entry.kind === "dir" ? 0 : 1)}
       kind={entry.kind === "dir" ? "dir" : "file"}
       initial={entry.name}
-      placeholder="새 이름"
+      placeholder={t("panel.fileTree.newName")}
       onCancel={() => ops.setPending(null)}
       onCommit={async (name) => {
         const to = `${parent}/${name}`;
-        const blocked = dirtyBlockMessage(entry.path);
+        const blocked = dirtyBlockMessage(t, entry.path);
         if (blocked) return blocked;
         const r = await window.workbench.files.rename(ops.root, entry.path, to);
         if (!r.ok) return r.error;

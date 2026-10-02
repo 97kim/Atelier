@@ -1,5 +1,6 @@
 import { Children, isValidElement, memo, useContext, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import { useTranslation } from "react-i18next";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { Element, ElementContent, Root, Text } from "hast";
@@ -77,6 +78,7 @@ interface FileRefProps {
 }
 
 function FileRef({ path, line, endLine, as, className, children }: FileRefProps) {
+  const { t } = useTranslation();
   const { cwd, locate } = useLocateFile();
   const openFile = useOpenFile();
   const key = `${cwd ?? ""}\0${path}`;
@@ -127,7 +129,7 @@ function FileRef({ path, line, endLine, as, className, children }: FileRefProps)
   const Tag = as;
   if (!found || found.length === 0) {
     // 링크로 쓰였는데 파일이 없으면 링크처럼 보이지 않게(눌러도 아무 일 없으니). 확인 중(found=null)일 때도 잠깐 이 모양.
-    if (as === "a") return <span className={className} title={found ? `파일을 찾지 못했습니다: ${path}` : undefined}>{children}</span>;
+    if (as === "a") return <span className={className} title={found ? t("chat.markdown.notFound", { path }) : undefined}>{children}</span>;
     return <Tag className={className}>{children}</Tag>;
   }
 
@@ -142,8 +144,9 @@ function FileRef({ path, line, endLine, as, className, children }: FileRefProps)
     if (found.length === 1) return open(found[0]);
     setChooser({ x: e.clientX, y: e.clientY + 6 });
   };
-  const where = line ? ` (${line}${endLine ? `–${endLine}` : ""}줄)` : "";
-  const title = found.length === 1 ? `에디터로 열기${where}\n${found[0]}` : `에디터로 열기${where} · ${found.length}개 중 선택`;
+  const range = line ? `${line}${endLine ? `–${endLine}` : ""}` : null;
+  const openLabel = found.length === 1 ? (range ? t("chat.markdown.openInEditorLines", { range }) : t("chat.markdown.openInEditor")) : range ? t("chat.markdown.openInEditorLinesChoose", { range, count: found.length }) : t("chat.markdown.openInEditorChoose", { count: found.length });
+  const title = found.length === 1 ? `${openLabel}\n${found[0]}` : openLabel;
   const style = chooser ? { left: Math.min(chooser.x, window.innerWidth - 420), top: Math.min(chooser.y, window.innerHeight - 40 * Math.min(found.length, 8) - 24) } : undefined;
   return (
     <>
@@ -152,7 +155,7 @@ function FileRef({ path, line, endLine, as, className, children }: FileRefProps)
       </Tag>
       {chooser && (
         <span role="menu" className="fixed z-50 flex w-[400px] flex-col rounded-lg border border-line bg-panel p-1.5 shadow-xl" style={style} onMouseDown={(e) => e.stopPropagation()} data-file-ref-chooser>
-          <span className="px-2 pb-1 pt-0.5 text-[10px] text-muted">같은 이름의 파일이 여러 개입니다</span>
+          <span className="px-2 pb-1 pt-0.5 text-[10px] text-muted">{t("chat.markdown.ambiguous")}</span>
           {found.slice(0, 8).map((p) => (
             <button key={p} role="menuitem" onClick={() => open(p)} className="mono truncate rounded-md px-2 py-1.5 text-left text-[11.5px] hover:bg-panel-2" title={p}>
               {cwd && p.startsWith(cwd + "/") ? p.slice(cwd.length + 1) : p}
@@ -213,6 +216,7 @@ function MdLink(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { node?: 
 }
 
 function MdWebLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  const { t } = useTranslation();
   const openFile = useOpenFile();
   const [chooser, setChooser] = useState<{ x: number; y: number } | null>(null);
   const anchor = useRef<HTMLAnchorElement>(null);
@@ -239,7 +243,7 @@ function MdWebLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLA
         href={href}
         onClick={onClick}
         onAuxClick={(e) => e.button === 1 && onClick(e)}
-        title={href ? `${href}\n클릭: 어디서 열지 선택 · ⌘클릭: 기본 브라우저 · ⌥클릭: 인앱 브라우저` : undefined}
+        title={href ? `${href}\n${t("chat.markdown.linkHint")}` : undefined}
         {...rest}
       >
         {children}
@@ -266,6 +270,7 @@ function MdWebLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLA
  * 넣기만 하고 Enter 는 사용자가 친다(⌥클릭이면 바로 실행). 터미널을 열 수 없는 탭(작업 경로 없음)에서는 버튼이 없다.
  */
 function MdPre(props: React.HTMLAttributes<HTMLPreElement> & { node?: unknown }) {
+  const { t } = useTranslation();
   const { node: _node, children, ...rest } = props;
   const run = useContext(RunInTerminalContext);
   const ref = useRef<HTMLPreElement>(null);
@@ -285,11 +290,11 @@ function MdPre(props: React.HTMLAttributes<HTMLPreElement> & { node?: unknown })
       <button
         onClick={send}
         className="absolute right-2 top-2 flex items-center gap-1 rounded-md border border-line bg-panel px-1.5 py-0.5 text-[10.5px] text-muted opacity-0 shadow-sm hover:text-fg group-hover:opacity-100 focus:opacity-100"
-        title="터미널에 넣습니다. Enter 는 직접 치세요 (⌥클릭: 바로 실행)"
+        title={t("chat.markdown.runInTerminalHint")}
         data-run-in-terminal
       >
         <Icon name="terminal" size={11} />
-        터미널에서 실행
+        {t("chat.markdown.runInTerminal")}
       </button>
     </div>
   );

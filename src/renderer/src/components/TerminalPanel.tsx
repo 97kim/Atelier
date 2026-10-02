@@ -7,6 +7,7 @@
 // 첫 칸(active)과 포커스가 다를 수 있어서 active 를 기준으로 하면 엉뚱한 칸이 닫힌다.
 
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Terminal, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -62,6 +63,8 @@ export function TerminalPanel({
   /** "채팅에 첨부": 포커스가 있던 터미널의 선택 영역(없으면 최근 출력 40줄)을 입력창에 잇는다. */
   onAttach?: (block: string) => void;
 }) {
+  // 이 파일은 탭을 `t` 로 부르는 곳이 많아 번역 함수는 tr 로 받는다.
+  const { t: tr } = useTranslation();
   const terms = useRef(new Map<string, Terminal>());
   const searches = useRef(new Map<string, SearchAddon>());
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
@@ -104,7 +107,7 @@ export function TerminalPanel({
     if (!target || !onAttach) return;
     const term = terms.current.get(target);
     if (!term) return;
-    const title = tabs.find((t) => t.id === target)?.title ?? "";
+    const title = tabs.find((t) => t.id === target)?.title || tr("panel.terminal.shell");
     onAttach(terminalAttachment(term, title));
   };
 
@@ -119,7 +122,7 @@ export function TerminalPanel({
         title: t.title,
       }));
       if (restored.length === 0)
-        restored.push({ id: `${prefix}t1`, kind: "shell", title: "셸" });
+        restored.push({ id: `${prefix}t1`, kind: "shell", title: "" });
       const layout = loadTerminalLayout(
         tabId,
         restored.map((t) => t.id),
@@ -170,7 +173,7 @@ export function TerminalPanel({
 
   const addTab = () => {
     const id = nextTermId();
-    setTabs((prev) => [...prev, { id, kind: "shell", title: "셸" }]);
+    setTabs((prev) => [...prev, { id, kind: "shell", title: "" }]);
     setActive(id);
   };
 
@@ -207,7 +210,7 @@ export function TerminalPanel({
       return;
     }
     const id = nextTermId();
-    setTabs((prev) => [...prev, { id, kind: "shell", title: "셸" }]);
+    setTabs((prev) => [...prev, { id, kind: "shell", title: "" }]);
     setSplit({ dir, id });
     setRatio(50);
   };
@@ -225,7 +228,7 @@ export function TerminalPanel({
     onClose();
     // 다음에 열면 셸 하나로 다시 시작
     setTimeout(() => {
-      setTabs([{ id: `${prefix}t1`, kind: "shell", title: "셸" }]);
+      setTabs([{ id: `${prefix}t1`, kind: "shell", title: "" }]);
       setActive(`${prefix}t1`);
       setLoaded(true);
     }, 0);
@@ -294,8 +297,8 @@ export function TerminalPanel({
     takeTerminalRun(tabId);
     if (!atPrompt()) {
       navigator.clipboard.writeText(req.command).then(
-        () => showNotice("셸이 입력을 받을 상태가 아니라 클립보드에 복사했습니다"),
-        () => showNotice("셸이 입력을 받을 상태가 아니고, 클립보드에도 복사하지 못했습니다"),
+        () => showNotice(tr("panel.terminal.copiedNotReady")),
+        () => showNotice(tr("panel.terminal.copyFailedNotReady")),
       );
       term.focus();
       if (pendingTerminalRuns(tabId) > 0) return later();
@@ -450,7 +453,7 @@ export function TerminalPanel({
       <div
         onMouseDown={onDragStart}
         onDoubleClick={onSplitEven}
-        title={dock === "right" ? "끌어서 폭 조절 · 두 번 누르면 반반" : "끌어서 높이 조절 · 두 번 누르면 반반"}
+        title={dock === "right" ? tr("panel.terminal.resizeWidth") : tr("panel.terminal.resizeHeight")}
         className={`absolute z-10 ${dock === "right" ? "-left-1 bottom-0 top-0 w-2 cursor-col-resize" : "-top-1 left-0 right-0 h-2 cursor-row-resize"}`}
         data-terminal-resizer
       />
@@ -475,14 +478,14 @@ export function TerminalPanel({
               {t.kind === "command" && (
                 <Icon name="play" size={10} className="text-accent" />
               )}
-              <span className="mono">{t.title}</span>
+              <span className="mono">{t.title || tr("panel.terminal.shell")}</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(t.id);
                 }}
                 className="rounded p-0.5 text-muted opacity-0 hover:bg-panel-2 hover:text-err group-hover:opacity-100"
-                title={t.kind === "command" ? "터미널 CLI 종료 (⌘W)" : "셸 종료 (⌘W)"}
+                title={t.kind === "command" ? tr("panel.terminal.closeCli") : tr("panel.terminal.closeShell")}
               >
                 <Icon name="x" size={10} />
               </button>
@@ -491,7 +494,7 @@ export function TerminalPanel({
           <button
             onClick={addTab}
             className="shrink-0 rounded p-1 text-muted hover:bg-panel/60 hover:text-fg"
-            title="새 터미널 탭"
+            title={tr("panel.terminal.newTab")}
           >
             <Icon name="plus" size={12} />
           </button>
@@ -507,17 +510,17 @@ export function TerminalPanel({
             <button
               onClick={attachTarget}
               className="mr-1 flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted hover:bg-panel-2 hover:text-fg"
-              title="선택한 출력(없으면 최근 40줄)을 채팅 입력창에 넣습니다 (터미널 안에서 ⌘⇧A)"
+              title={tr("panel.terminal.attachTitle")}
               data-attach-chat-terminal
             >
               <Icon name="chat" size={11} />
-              채팅에 첨부
+              {tr("panel.terminal.attach")}
             </button>
           )}
           <button
             onClick={() => splitTerm("row")}
             className={`rounded p-1 hover:bg-panel-2 hover:text-fg ${split?.dir === "row" ? "text-accent" : "text-muted"}`}
-            title="좌우로 나누기 (⌘D)"
+            title={tr("panel.terminal.splitRow")}
             data-terminal-split="row"
           >
             <Icon name="splitRow" size={12} />
@@ -525,7 +528,7 @@ export function TerminalPanel({
           <button
             onClick={() => splitTerm("col")}
             className={`rounded p-1 hover:bg-panel-2 hover:text-fg ${split?.dir === "col" ? "text-accent" : "text-muted"}`}
-            title="위아래로 나누기 (⌘⇧D)"
+            title={tr("panel.terminal.splitCol")}
             data-terminal-split="col"
           >
             <Icon name="splitCol" size={12} />
@@ -533,7 +536,7 @@ export function TerminalPanel({
           <button
             onClick={openFind}
             className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
-            title="터미널에서 찾기 (⌘F)"
+            title={tr("panel.terminal.findToggle")}
             data-terminal-find-toggle
           >
             <Icon name="search" size={12} />
@@ -541,14 +544,14 @@ export function TerminalPanel({
           <button
             onClick={onClose}
             className="rounded p-1 text-muted hover:bg-panel-2 hover:text-fg"
-            title="패널 접기 (⌘J)"
+            title={tr("panel.terminal.collapse")}
           >
             <Icon name="minus" size={12} />
           </button>
           <button
             onClick={closeAll}
             className="rounded p-1 text-muted hover:bg-panel-2 hover:text-err"
-            title="터미널 모두 종료하고 닫기"
+            title={tr("panel.terminal.closeAll")}
           >
             <Icon name="x" size={12} />
           </button>
@@ -641,7 +644,7 @@ export function TerminalPanel({
                   doFind(query, e.shiftKey ? "prev" : "next");
                 }
               }}
-              placeholder="터미널에서 찾기"
+              placeholder={tr("panel.terminal.findPlaceholder")}
               spellCheck={false}
               className="mono w-44 bg-transparent text-[11px] text-fg outline-none placeholder:text-muted-2"
             />
@@ -652,13 +655,13 @@ export function TerminalPanel({
                   : `${findResult.index + 1}/${findResult.count}`
                 : ""}
             </span>
-            <button onClick={() => doFind(query, "prev")} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title="이전 (⇧Enter)">
+            <button onClick={() => doFind(query, "prev")} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title={tr("panel.terminal.findPrev")}>
               <Icon name="chevronUp" size={11} />
             </button>
-            <button onClick={() => doFind(query, "next")} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title="다음 (Enter)">
+            <button onClick={() => doFind(query, "next")} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title={tr("panel.terminal.findNext")}>
               <Icon name="chevronDown" size={11} />
             </button>
-            <button onClick={closeFind} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title="닫기 (Esc)">
+            <button onClick={closeFind} className="rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg" title={tr("panel.terminal.findClose")}>
               <Icon name="x" size={11} />
             </button>
           </div>
@@ -728,6 +731,9 @@ function TerminalView({
   onFindResults?: (index: number, count: number) => void;
   onAttach?: () => void;
 }) {
+  const { t: tr } = useTranslation();
+  const trRef = useRef(tr);
+  trRef.current = tr;
   // 출력 속 링크: URL 은 답변 속 링크와 같은 규칙으로, 파일 경로는 실제로 있는 것만 에디터로. 이 컴포넌트는 ChatView 의 provider 안에 있다.
   const { cwd: locateCwd, locate } = useLocateFile();
   const openFile = useOpenFile();
@@ -761,7 +767,7 @@ function TerminalView({
       term.rows,
     );
     if (!r.ok) {
-      setError(r.error ?? "셸을 시작하지 못했습니다.");
+      setError(r.error ?? trRef.current("panel.terminal.startFailed"));
       cbs.current.onReady?.(false);
       return;
     }
@@ -1006,10 +1012,10 @@ function TerminalView({
             termRef.current?.focus();
           }}
           className="absolute bottom-3 right-5 z-10 flex items-center gap-1 rounded-full border border-line bg-panel px-2 py-0.5 text-[10.5px] text-muted shadow-sm hover:text-fg"
-          title="맨 아래로"
+          title={tr("panel.terminal.scrollBottom")}
           data-terminal-unread
         >
-          새 출력
+          {tr("panel.terminal.newOutput")}
           <Icon name="chevronDown" size={10} />
         </button>
       )}
@@ -1034,8 +1040,8 @@ function TerminalView({
           className="absolute inset-0 flex items-center justify-center bg-inset/85 text-[12px] text-muted hover:text-fg"
         >
           {error
-            ? `${error} · 클릭해서 다시 시도`
-            : `${kind === "command" ? "CLI가" : "셸이"} 종료되었습니다${exit !== null && exit >= 0 ? ` (종료 코드 ${exit})` : ""} · 클릭하면 셸을 시작합니다`}
+            ? tr("panel.terminal.retry", { error })
+            : tr(`panel.terminal.exited.${kind}${exit !== null && exit >= 0 ? "WithCode" : ""}`, { code: exit })}
         </button>
       )}
     </div>

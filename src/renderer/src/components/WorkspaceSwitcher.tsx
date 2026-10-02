@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { WorkspaceStateDto } from "@shared/ipc";
 import { shorten } from "./ContextPanel";
 import { Icon } from "./Icon";
@@ -17,6 +18,7 @@ export function WorkspaceSwitcher({
   onAdd: (name: string) => void;
   onRemove: (workspaceId: string) => void;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
 
@@ -66,7 +68,7 @@ export function WorkspaceSwitcher({
               setQuery(e.target.value);
               setCursor(0);
             }}
-            placeholder="워크스페이스 검색…"
+            placeholder={t("nav.switcher.placeholder")}
             className="flex-1 bg-transparent outline-none placeholder:text-muted"
             style={{ userSelect: "text" }}
           />
@@ -90,11 +92,11 @@ export function WorkspaceSwitcher({
                   <span className="min-w-0 flex-1">
                     <span className="block font-medium">{w.name}</span>
                     <span className="mono block truncate text-[10.5px] text-muted">
-                      {w.path ? shorten(w.path) : "기본 경로 없음"}
+                      {w.path ? shorten(w.path) : t("nav.switcher.noDefaultPath")}
                     </span>
                   </span>
                   {openCount > 0 && (
-                    <span className="label">{openCount}개 열림</span>
+                    <span className="label">{t("nav.switcher.openCount", { count: openCount })}</span>
                   )}
                   <button
                     onClick={(e) => {
@@ -102,7 +104,7 @@ export function WorkspaceSwitcher({
                       onRemove(w.id);
                     }}
                     className="rounded p-1 text-muted opacity-0 hover:bg-panel-2 hover:text-err group-hover:opacity-100"
-                    title="워크스페이스 제거 (세션 기록도 삭제)"
+                    title={t("nav.switcher.remove")}
                   >
                     <Icon name="trash" size={12} />
                   </button>
@@ -123,15 +125,15 @@ export function WorkspaceSwitcher({
               </span>
               <span className="font-medium">
                 {query.trim()
-                  ? `"${query.trim()}" 워크스페이스 만들기`
-                  : "새 워크스페이스…"}
+                  ? t("nav.switcher.createNamed", { name: query.trim() })
+                  : t("nav.switcher.createNew")}
               </span>
             </div>
           </li>
         </ul>
         <div className="label flex justify-between border-t border-line px-4 py-2">
-          <span>↑↓ 이동 · ⏎ 새 세션 열기</span>
-          <span>{ws.model.workspaces.length}개</span>
+          <span>{t("nav.switcher.navHint")}</span>
+          <span>{t("nav.switcher.count", { count: ws.model.workspaces.length })}</span>
         </div>
       </div>
     </div>

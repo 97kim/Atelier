@@ -1,37 +1,15 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { PermissionPolicy } from "@shared/chat-events";
 import type { SessionSnapshotDto } from "@shared/ipc";
-import { useGitChanges } from "../hooks/useGitChanges";
+import { gitResultText, useGitChanges } from "../hooks/useGitChanges";
 import { ChangeReview } from "./ChangeReview";
 import { CheckMark, KindBadge } from "./CheckMark";
 import { contextUsage, type SessionState } from "@shared/session-state";
 import { useOpenFile } from "./FileViewer";
 import { Icon } from "./Icon";
 
-const POLICIES: { id: PermissionPolicy; label: string; codexLabel: string; help: string; codexHelp: string }[] =
-  [
-    {
-      id: "ask",
-      label: "변경 전 물어보기",
-      codexLabel: "읽기 전용 · 필요 시 승인",
-      help: "파일 변경이나 명령 실행에 승인이 필요하면 이 화면에서 물어봅니다.",
-      codexHelp: "기본적으로 파일을 읽기만 합니다. Codex가 추가 권한을 요청하면 이 화면에서 승인할 수 있습니다.",
-    },
-    {
-      id: "auto_edit",
-      label: "편집 자동 승인",
-      codexLabel: "작업 경로 내 파일 편집 허용",
-      help: "파일 편집은 자동으로 허용합니다. 추가 승인이 필요한 명령은 실행 전에 물어봅니다.",
-      codexHelp: "작업 경로 안의 파일 변경과 네트워크 접근을 허용합니다. Codex가 추가 권한을 요청하면 승인을 물어봅니다.",
-    },
-    {
-      id: "full",
-      label: "전부 자동 (주의)",
-      codexLabel: "전체 접근 (주의)",
-      help: "파일 변경과 명령 실행을 승인 없이 진행합니다. AI가 작업에 필요한 질문을 하면 답을 기다립니다.",
-      codexHelp: "파일 변경과 명령 실행을 승인 없이 진행하며, 작업 경로 밖에도 접근할 수 있습니다.",
-    },
-  ];
+const POLICY_IDS: PermissionPolicy[] = ["ask", "auto_edit", "full"];
 
 export function ContextPanel({
   state,
@@ -44,6 +22,7 @@ export function ContextPanel({
   onPolicy: (p: PermissionPolicy) => void;
   onClear: () => void;
 }) {
+  const { t } = useTranslation();
   const cwd = config?.cwd ?? null;
   const idle =
     state.status === "idle" ||
@@ -55,7 +34,7 @@ export function ContextPanel({
   const gitResult = g.result;
   const [showAll, setShowAll] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [exportResult, setExportResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [exportResult, setExportResult] = useState<{ ok: true; path: string } | { ok: false; text: string } | null>(null);
   const openFile = useOpenFile();
 
   const last = state.lastTurn;
@@ -69,7 +48,7 @@ export function ContextPanel({
     // 구분선 대신 배경 위에 떠 있는 둥근 카드. 섹션도 선이 아니라 여백으로 나눈다.
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto">
-        <Section title="저장소" badge={git ? "ACTIVE" : undefined}>
+        <Section title={t("panel.context.repo")} badge={git ? "ACTIVE" : undefined}>
           {cwd ? (
             <>
               <div className="flex items-center gap-2 text-[14px] font-semibold">
@@ -88,40 +67,40 @@ export function ContextPanel({
                 </div>
               )}
               {!git && (
-                <p className="mt-2 text-muted">git 저장소가 아닙니다.</p>
+                <p className="mt-2 text-muted">{t("panel.context.notGit")}</p>
               )}
             </>
           ) : (
-            <p className="text-muted">작업 경로를 선택하세요.</p>
+            <p className="text-muted">{t("panel.context.pickCwd")}</p>
           )}
         </Section>
 
         <Section
-          title="변경 파일"
+          title={t("panel.context.changedFiles")}
           badge={changes.length > 0 ? String(changes.length) : undefined}
         >
           {changes.length === 0 ? (
-            <p className="text-muted">변경 사항 없음</p>
+            <p className="text-muted">{t("panel.changes.none")}</p>
           ) : (
             <>
               <div className="mb-1.5 flex items-center justify-between text-[10.5px] text-muted">
-                <span>{selectedPaths.length}개 선택</span>
+                <span>{t("panel.context.selected", { count: selectedPaths.length })}</span>
                 <span className="flex items-center gap-1">
                   <button
                     onClick={() => g.selectAll(selectedPaths.length !== changes.length)}
                     className="rounded px-1 hover:bg-panel-2 hover:text-fg"
                   >
-                    {selectedPaths.length === changes.length ? "모두 해제" : "모두 선택"}
+                    {selectedPaths.length === changes.length ? t("panel.changes.deselectAll") : t("panel.changes.selectAll")}
                   </button>
                   <span className="text-muted-2">·</span>
                   <button
                     onClick={() => setReviewOpen(true)}
                     className="flex items-center gap-1 rounded px-1 text-accent hover:bg-panel-2"
-                    title="파일별 diff를 확인하고, 변경을 버리거나 커밋합니다"
+                    title={t("panel.context.reviewTitle")}
                     data-review-open
                   >
                     <Icon name="branch" size={10} />
-                    리뷰
+                    {t("panel.context.review")}
                   </button>
                 </span>
               </div>
@@ -135,7 +114,7 @@ export function ContextPanel({
                       <div
                         role="checkbox"
                         aria-checked={on}
-                        aria-label={`${c.path} 커밋에 포함`}
+                        aria-label={t("panel.changes.includeInCommit", { path: c.path })}
                         tabIndex={0}
                         onClick={() => toggle(c.path)}
                         onDoubleClick={open}
@@ -166,7 +145,7 @@ export function ContextPanel({
                             open();
                           }}
                           className="hidden shrink-0 rounded p-0.5 text-muted hover:bg-panel hover:text-fg group-hover:block"
-                          title="파일 열기"
+                          title={t("panel.context.openFile")}
                           data-change-open
                         >
                           <Icon name="file" size={12} />
@@ -181,7 +160,7 @@ export function ContextPanel({
                       onClick={() => setShowAll((v) => !v)}
                       className="text-muted hover:text-fg"
                     >
-                      {showAll ? "접기" : `외 ${changes.length - 12}개 보기`}
+                      {showAll ? t("panel.context.collapse") : t("panel.context.showMore", { count: changes.length - 12 })}
                     </button>
                   </li>
                 )}
@@ -198,7 +177,7 @@ export function ContextPanel({
                     }
                   }}
                   rows={message.includes("\n") ? 5 : 2}
-                  placeholder="커밋 메시지 (⌘⏎ 커밋)"
+                  placeholder={t("panel.changes.commitPlaceholder")}
                   disabled={busy !== null}
                   className="mono w-full resize-none rounded-md border border-line bg-inset px-2 py-1.5 text-[11.5px] leading-5 text-fg outline-none placeholder:text-muted focus:border-accent/50 disabled:opacity-60"
                   style={{ userSelect: "text" }}
@@ -208,11 +187,11 @@ export function ContextPanel({
                     onClick={() => void draft()}
                     disabled={busy !== null || selectedPaths.length === 0}
                     className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-                    title="선택한 파일의 diff를 Claude에 보내 커밋 메시지 초안을 만듭니다"
+                    title={t("panel.changes.draftTitle")}
                     data-git-draft
                   >
                     <Icon name="sparkles" size={11} />
-                    {busy === "draft" ? "초안 작성 중…" : "초안"}
+                    {busy === "draft" ? t("panel.changes.drafting") : t("panel.changes.draft")}
                   </button>
                   <button
                     onClick={() => void commit()}
@@ -225,13 +204,13 @@ export function ContextPanel({
                     className="ml-auto flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40"
                     title={
                       !idle
-                        ? "AI가 작업 중일 때는 커밋할 수 없습니다"
-                        : "고른 파일만 커밋합니다 (파일의 작업 트리 내용 전체가 들어갑니다)"
+                        ? t("panel.changes.commitBlocked")
+                        : t("panel.context.commitTitle")
                     }
                     data-git-commit-button
                   >
                     <Icon name="check" size={11} />
-                    {busy === "commit" ? "커밋 중…" : `커밋 ${selectedPaths.length}`}
+                    {busy === "commit" ? t("panel.changes.committing") : t("panel.changes.commitButton", { n: selectedPaths.length })}
                   </button>
                 </div>
                 {gitResult && (
@@ -239,7 +218,7 @@ export function ContextPanel({
                     className={`mono text-[10.5px] ${gitResult.ok ? "text-ok" : "text-err"}`}
                     data-git-result
                   >
-                    {gitResult.text}
+                    {gitResultText(t, gitResult)}
                   </p>
                 )}
               </div>
@@ -248,7 +227,7 @@ export function ContextPanel({
         </Section>
 
         <Section
-          title="컨텍스트 사용량"
+          title={t("panel.context.usage")}
           badge={pct !== null ? `${pct}%` : undefined}
           badgeClass="text-accent"
         >
@@ -263,42 +242,41 @@ export function ContextPanel({
                 </div>
               )}
               <div className="mono flex justify-between text-muted">
-                <span>{fmt(used)} 사용</span>
+                <span>{t("panel.context.used", { amount: fmt(used) })}</span>
                 <span>
-                  {contextWindow ? `${fmt(contextWindow)} 최대` : "최대 미상"}
+                  {contextWindow ? t("panel.context.max", { amount: fmt(contextWindow) }) : t("panel.context.maxUnknown")}
                 </span>
               </div>
               <div className="mono mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted">
                 <Dot
                   color="bg-accent"
-                  label={`입력 ${fmt(last.usage.input)}`}
+                  label={t("panel.context.input", { amount: fmt(last.usage.input) })}
                 />
                 <Dot
                   color="bg-accent-2"
-                  label={`캐시 ${fmt(last.usage.cacheRead)}`}
+                  label={t("panel.context.cache", { amount: fmt(last.usage.cacheRead) })}
                 />
-                <Dot color="bg-ok" label={`출력 ${fmt(last.usage.output)}`} />
+                <Dot color="bg-ok" label={t("panel.context.output", { amount: fmt(last.usage.output) })} />
               </div>
               <p className="mt-2 text-[10px] text-muted">
-                마지막 응답 기준 · 총 {state.totals.turns}회 응답
                 {isCodex
-                  ? " · 이 대화의 Codex 비용은 집계하지 않습니다. 추정 비용은 사용량 화면에서 확인하세요."
-                  : ` · 누적 비용 $${state.totals.costUsd.toFixed(3)}`}
+                  ? t("panel.context.footerCodex", { count: state.totals.turns })
+                  : t("panel.context.footerCost", { count: state.totals.turns, cost: state.totals.costUsd.toFixed(3) })}
               </p>
             </>
           ) : (
-            <p className="text-muted">첫 응답을 받은 뒤 표시됩니다.</p>
+            <p className="text-muted">{t("panel.context.afterFirst")}</p>
           )}
         </Section>
 
-        <Section title="권한 · 도구">
+        <Section title={t("panel.context.permissions")}>
           <div className="flex flex-col gap-1.5">
-            {POLICIES.map((p) => {
-              const active = (config?.policy ?? "ask") === p.id;
+            {POLICY_IDS.map((id) => {
+              const active = (config?.policy ?? "ask") === id;
               return (
                 <button
-                  key={p.id}
-                  onClick={() => onPolicy(p.id)}
+                  key={id}
+                  onClick={() => onPolicy(id)}
                   className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left ${
                     active
                       ? "border-accent/50 bg-accent-tint text-fg"
@@ -311,7 +289,7 @@ export function ContextPanel({
                     className={active ? "text-accent" : ""}
                   />
                   <span className="flex-1">
-                    {isCodex ? p.codexLabel : p.label}
+                    {t(`panel.context.policy.${id}.${isCodex ? "codexLabel" : "label"}`)}
                   </span>
                   {active && (
                     <Icon name="check" size={12} className="text-accent" />
@@ -321,10 +299,7 @@ export function ContextPanel({
             })}
           </div>
           <p className="mt-2 text-[10px] text-muted">
-            {(() => {
-              const policy = POLICIES.find((p) => p.id === (config?.policy ?? "ask"));
-              return isCodex ? policy?.codexHelp : policy?.help;
-            })()}
+            {t(`panel.context.policy.${config?.policy ?? "ask"}.${isCodex ? "codexHelp" : "help"}`)}
           </p>
         </Section>
       </div>
@@ -335,7 +310,7 @@ export function ContextPanel({
             <span
               className={`h-1.5 w-1.5 rounded-full ${idle ? "bg-muted" : "bg-ok"}`}
             />
-            {idle ? "대기 중" : "실행 중"}
+            {idle ? t("panel.context.idle") : t("panel.context.running")}
           </span>
           <Timer since={config?.startedAt ?? null} />
         </div>
@@ -345,33 +320,33 @@ export function ContextPanel({
               config &&
               void window.workbench.chat
                 .exportMarkdown(config.tabId)
-                .then((p) => p && setExportResult({ ok: true, text: `내보냄: ${p}` }))
+                .then((p) => p && setExportResult({ ok: true, path: p }))
                 .catch((e: unknown) =>
                   setExportResult({ ok: false, text: e instanceof Error ? e.message : String(e) }),
                 )
             }
             disabled={!config || state.blocks.length === 0}
             className="flex flex-1 items-center justify-center gap-2 rounded-md border border-line py-2 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-            title="이 세션을 마크다운 파일로 저장합니다"
+            title={t("panel.context.exportTitle")}
             data-export-button
           >
             <Icon name="file" size={13} />
-            내보내기
+            {t("panel.context.export")}
           </button>
           {/* 휴지통은 과장이었다. 이 버튼은 대화를 지우지 않는다 — 화면에서 치우고 새 세션으로 갈 뿐이고,
               비운 대화는 보관본으로 남는다(탭당 10회분). Claude 쪽 기록도 원래부터 그대로 남아 있었다. */}
           <button
             onClick={onClear}
             className="flex flex-1 items-center justify-center gap-2 rounded-md border border-line py-2 text-muted hover:bg-panel-2 hover:text-fg"
-            title="지금 대화를 접고 새 세션으로 시작합니다. 비운 대화는 최근 10회분까지 보관됩니다."
+            title={t("panel.context.newChatTitle")}
             data-clear-button
           >
             <Icon name="refresh" size={13} />
-            새 대화
+            {t("panel.context.newChat")}
           </button>
         </div>
         {exportResult && (
-          <p className={`mono mt-1.5 text-[10.5px] ${exportResult.ok ? "text-ok" : "text-err"}`}>{exportResult.text}</p>
+          <p className={`mono mt-1.5 text-[10.5px] ${exportResult.ok ? "text-ok" : "text-err"}`}>{exportResult.ok ? t("panel.context.exported", { path: exportResult.path }) : exportResult.text}</p>
         )}
         {reviewOpen && cwd && (
           <ChangeReview cwd={cwd} gitState={g} canCommit={idle} onClose={() => setReviewOpen(false)} />

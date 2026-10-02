@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { usePaneFocusRef } from "../pane-focus";
 import type { PermissionAnswer, PermissionRequestEvent } from "@shared/chat-events";
 import { DiffView, UnifiedDiff } from "./DiffView";
@@ -31,6 +32,7 @@ export function PermissionPrompt({
   request: PermissionRequestEvent;
   onAnswer: (answer: PermissionAnswer) => void;
 }) {
+  const { t } = useTranslation();
   const isQuestion = request.tool === "AskUserQuestion";
   const root = useRef<HTMLDivElement>(null);
   const paneFocus = usePaneFocusRef();
@@ -72,7 +74,7 @@ export function PermissionPrompt({
     <div ref={root} className="mx-6 mb-2 rounded-xl border border-warn/50 bg-panel p-4 shadow-2xl">
       <div className="mb-1 flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-warn" />
-        <span className="font-medium">{request.title ?? `${tool} 실행을 허용할까요?`}</span>
+        <span className="font-medium">{request.title ?? t("chat.permission.title", { tool })}</span>
       </div>
       {request.description && <p className="mb-2 text-muted">{request.description}</p>}
       <div className="mb-3 max-h-64 overflow-auto">
@@ -84,21 +86,21 @@ export function PermissionPrompt({
           onClick={() => onAnswer({ behavior: "allow" })}
           className="rounded-md bg-primary px-3.5 py-1.5 font-medium text-on-primary hover:bg-primary-hover"
         >
-          허용 <kbd className="ml-1 text-[10px] opacity-70">⏎</kbd>
+          {t("chat.permission.allow")} <kbd className="ml-1 text-[10px] opacity-70">⏎</kbd>
         </button>
         {request.canAlwaysAllow && (
           <button
             onClick={() => onAnswer({ behavior: "allow", always: true })}
             className="rounded-md border border-line px-3 py-1 hover:bg-panel-2"
           >
-            이 세션에서 항상 허용
+            {t("chat.permission.alwaysAllow")}
           </button>
         )}
         <button
           onClick={() => onAnswer({ behavior: "deny" })}
           className="ml-auto rounded-md border border-line px-3 py-1 text-muted hover:bg-panel-2 hover:text-fg"
         >
-          거부 <kbd className="ml-1 text-[10px] opacity-70">esc</kbd>
+          {t("chat.permission.deny")} <kbd className="ml-1 text-[10px] opacity-70">esc</kbd>
         </button>
       </div>
     </div>
@@ -139,6 +141,7 @@ function QuestionPrompt({
   request: PermissionRequestEvent;
   onAnswer: (answer: PermissionAnswer) => void;
 }) {
+  const { t } = useTranslation();
   const questions = questionsOf(request.input);
   // 질문 index → 고른 라벨 집합(직접 입력은 OTHER 키)
   const [picked, setPicked] = useState<Record<number, Set<string>>>({});
@@ -186,7 +189,7 @@ function QuestionPrompt({
     <div className="mx-6 mb-2 rounded-xl border border-accent/50 bg-panel p-4 shadow-2xl" data-question-prompt>
       <div className="mb-2 flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-accent" />
-        <span className="font-medium">{questions.length > 1 ? `질문 ${questions.length}개에 답해 주세요` : "질문에 답해 주세요"}</span>
+        <span className="font-medium">{questions.length > 1 ? t("chat.permission.questionsMany", { count: questions.length }) : t("chat.permission.questionsOne")}</span>
       </div>
       <div className="flex max-h-[60vh] flex-col gap-4 overflow-auto">
         {questions.map((q, i) => {
@@ -223,7 +226,7 @@ function QuestionPrompt({
                   onClick={() => !set.has(OTHER) && toggle(i, OTHER, Boolean(q.multiSelect))}
                   data-question-other
                 >
-                  <span className="text-muted">직접 입력</span>
+                  <span className="text-muted">{t("chat.permission.other")}</span>
                   {set.has(OTHER) && (
                     <input
                       autoFocus
@@ -235,7 +238,7 @@ function QuestionPrompt({
                         if (e.key === "Enter" && complete) submit();
                         if (e.key === "Escape") toggle(i, OTHER, Boolean(q.multiSelect));
                       }}
-                      placeholder="원하는 답을 적고 Enter"
+                      placeholder={t("chat.permission.otherPlaceholder")}
                       className="mt-1.5 w-full rounded border border-line bg-inset px-2 py-1 outline-none focus:border-accent"
                     />
                   )}
@@ -255,15 +258,15 @@ function QuestionPrompt({
             onClick={() => submit()}
             className="rounded-md bg-primary px-3.5 py-1.5 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-50"
           >
-            답변 보내기
+            {t("chat.permission.sendAnswers")}
           </button>
         )}
         <button
           onClick={() => onAnswer({ behavior: "deny" })}
           className="ml-auto rounded-md border border-line px-3 py-1 text-muted hover:bg-panel-2 hover:text-fg"
-          title="답하지 않고 모델이 알아서 진행하게 둔다"
+          title={t("chat.permission.skipHint")}
         >
-          건너뛰기 <kbd className="ml-1 text-[10px] opacity-70">esc</kbd>
+          {t("chat.permission.skip")} <kbd className="ml-1 text-[10px] opacity-70">esc</kbd>
         </button>
       </div>
     </div>
@@ -271,6 +274,7 @@ function QuestionPrompt({
 }
 
 function Preview({ tool, input }: { tool: string; input: Record<string, unknown> }) {
+  const { t } = useTranslation();
   if (tool === "Bash") {
     return <pre className="mono whitespace-pre-wrap break-words rounded-md bg-inset p-2">$ {str(input.command)}</pre>;
   }
@@ -294,7 +298,7 @@ function Preview({ tool, input }: { tool: string; input: Record<string, unknown>
     return (
       <>
         <FileChangeList changes={input.changes} />
-        {str(input.grantRoot) && <p className="mono mt-2 text-[11px] text-muted">이 세션 동안 쓰기 허용 요청: {str(input.grantRoot)}</p>}
+        {str(input.grantRoot) && <p className="mono mt-2 text-[11px] text-muted">{t("chat.permission.grantRoot", { path: str(input.grantRoot) })}</p>}
       </>
     );
   }

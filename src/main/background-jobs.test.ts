@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BackgroundJobWatcher } from "./background-jobs";
 import { jobRunningLabel, jobsSummaryLabel, mergeJobs, parseBackgroundJob, type BackgroundJobDto } from "@shared/background-jobs";
+import { createI18n } from "@shared/i18n";
+
+// 문구 단언은 한국어 기준이다
+const t = createI18n("ko").t;
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -62,9 +66,9 @@ test("mergeJobs: 같은 저장소의 같은 id 는 하나로, 시작 순으로",
 
 test("jobRunningLabel: 분·초", () => {
   const j = { label: "rescue", startedAt: 1000 } as BackgroundJobDto;
-  assert.equal(jobRunningLabel(j, 1000 + 45_000), "rescue · 45초 경과");
-  assert.equal(jobRunningLabel(j, 1000 + 192_000), "rescue · 3분 12초 경과");
-  assert.equal(jobRunningLabel(j, 0), "rescue · 0초 경과", "시계가 뒤로 가도 음수는 안 나온다");
+  assert.equal(jobRunningLabel(j, 1000 + 45_000, t), "rescue · 45초 경과");
+  assert.equal(jobRunningLabel(j, 1000 + 192_000, t), "rescue · 3분 12초 경과");
+  assert.equal(jobRunningLabel(j, 0, t), "rescue · 0초 경과", "시계가 뒤로 가도 음수는 안 나온다");
 });
 
 test("BackgroundJobWatcher: 시작 때 이미 끝난 작업은 알리지 않고, 돌던 것이 끝나면 알린다", async (t) => {
@@ -149,11 +153,11 @@ test("여러 개일 때의 한 줄 — 시간은 가장 오래 돈 것 기준", 
     id, sessionId: "s", label: "명령", title: id, status: "running", summary: id, startedAt, completedAt: null, root: "/r",
   });
   const now = 100_000;
-  assert.equal(jobsSummaryLabel([], now), "");
-  assert.equal(jobsSummaryLabel([at("a", now - 5_000)], now), "1개 · 5초 경과");
+  assert.equal(jobsSummaryLabel([], now, t), "");
+  assert.equal(jobsSummaryLabel([at("a", now - 5_000)], now, t), "1개 · 5초 경과");
   // 순서가 뒤섞여 있어도 가장 오래된 것을 고른다
   assert.equal(
-    jobsSummaryLabel([at("a", now - 5_000), at("b", now - 130_000), at("c", now - 60_000)], now),
+    jobsSummaryLabel([at("a", now - 5_000), at("b", now - 130_000), at("c", now - 60_000)], now, t),
     "3개 · 2분 10초 경과",
   );
 });

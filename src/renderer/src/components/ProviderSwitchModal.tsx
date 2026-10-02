@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { usePaneFocusRef } from "../pane-focus";
 import type { Handoff } from "@shared/handoff";
 import { PROVIDERS, type CliStatusDto, type Provider } from "@shared/ipc";
@@ -22,6 +23,7 @@ export function ProviderSwitchModal({
   onSwitch: (opts: { provider: Provider; model?: string; preserveContext: boolean; askSummary?: boolean }) => Promise<void>;
   loadHandoff: () => Promise<Handoff>;
 }) {
+  const { t } = useTranslation();
   // 미리 고르지 않는다 — 사용자가 목록에서 직접 고른 뒤 확인한다(제공자가 늘어도 같은 흐름).
   const [selected, setSelected] = useState<Provider | null>(null);
   const [model, setModel] = useState("");
@@ -73,8 +75,8 @@ export function ProviderSwitchModal({
       >
         <div className="flex items-start justify-between border-b border-line px-6 py-5">
           <div>
-            <h2 className="text-[17px] font-semibold">코딩 에이전트 전환</h2>
-            <p className="mt-1 text-muted">작업을 이어갈 CLI를 바꿉니다. 이전 대화의 요약을 함께 전달할 수 있습니다.</p>
+            <h2 className="text-[17px] font-semibold">{t("nav.providerSwitch.title")}</h2>
+            <p className="mt-1 text-muted">{t("nav.providerSwitch.description")}</p>
           </div>
           <button onClick={onClose} className="rounded-md border border-line p-1.5 text-muted hover:text-fg">
             <Icon name="x" size={14} />
@@ -83,7 +85,7 @@ export function ProviderSwitchModal({
 
         <div className="flex flex-col gap-4 px-6 py-5">
           <div>
-            <div className="label mb-2">전환할 에이전트</div>
+            <div className="label mb-2">{t("nav.providerSwitch.targetAgent")}</div>
             <div className="flex flex-col gap-2" role="radiogroup">
               {PROVIDERS.map((p) => {
                 const s = status[p];
@@ -109,12 +111,12 @@ export function ProviderSwitchModal({
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className="font-medium">{LABEL[p]}</span>
-                        {isCurrent && <span className="label rounded bg-line px-1.5 py-0.5">현재</span>}
-                        {!isCurrent && s?.installed && <span className="label rounded bg-ok-bg px-1.5 py-0.5 text-ok">준비됨</span>}
-                        {s && !s.installed && <span className="label rounded bg-err-bg px-1.5 py-0.5 text-err" title={s.error}>미설치</span>}
+                        {isCurrent && <span className="label rounded bg-line px-1.5 py-0.5">{t("nav.providerSwitch.current")}</span>}
+                        {!isCurrent && s?.installed && <span className="label rounded bg-ok-bg px-1.5 py-0.5 text-ok">{t("nav.providerSwitch.ready")}</span>}
+                        {s && !s.installed && <span className="label rounded bg-err-bg px-1.5 py-0.5 text-err" title={s.error}>{t("nav.providerSwitch.notInstalled")}</span>}
                       </span>
                       <span className="mono mt-0.5 block truncate text-muted" title={s?.path ?? ""}>
-                        {s?.version ?? (s ? "" : "확인 중…")}
+                        {s?.version ?? (s ? "" : t("nav.providerSwitch.checking"))}
                         {s?.path ? ` · ${s.path}` : ""}
                       </span>
                     </span>
@@ -128,19 +130,19 @@ export function ProviderSwitchModal({
           </div>
 
           <div>
-            <div className="label mb-2">전환 옵션</div>
+            <div className="label mb-2">{t("nav.providerSwitch.options")}</div>
             <div className="rounded-lg border border-line bg-panel-2/40">
               <div className="flex items-center justify-between border-b border-line px-4 py-3">
                 <div>
-                  <div className="font-medium">모델</div>
-                  <div className="text-muted">전환 후 보낼 메시지부터 사용합니다.</div>
+                  <div className="font-medium">{t("nav.providerSwitch.model")}</div>
+                  <div className="text-muted">{t("nav.providerSwitch.modelHint")}</div>
                 </div>
                 <select
                   value={model}
                   disabled={!selected}
                   onChange={(e) => setModel(e.target.value)}
                   className="mono rounded-md border border-line bg-panel px-2.5 py-1.5 disabled:opacity-50"
-                  title={selected ? "" : "먼저 전환할 에이전트를 고르세요"}
+                  title={selected ? "" : t("nav.providerSwitch.pickAgentFirst")}
                 >
                   {modelOptions(targetModels, model, status[selected ?? current]?.defaultModel).map((m) => (
                     <option key={m.id} value={m.id}>
@@ -151,9 +153,9 @@ export function ProviderSwitchModal({
               </div>
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <div className="font-medium">대화 요약을 첫 메시지로 전달</div>
+                  <div className="font-medium">{t("nav.providerSwitch.carrySummary")}</div>
                   <div className="text-muted">
-                    전환할 AI는 이전 대화를 직접 볼 수 없어, 요약을 다음 메시지와 함께 전달합니다.
+                    {t("nav.providerSwitch.carrySummaryHint")}
                   </div>
                 </div>
                 <Toggle value={preserve} onChange={setPreserve} />
@@ -161,9 +163,9 @@ export function ProviderSwitchModal({
               {preserve && (
                 <div className="flex items-center justify-between border-t border-line px-4 py-3">
                   <div>
-                    <div className="font-medium">현재 AI가 작업 내용을 요약</div>
+                    <div className="font-medium">{t("nav.providerSwitch.askSummary")}</div>
                     <div className="text-muted">
-                      현재 AI에 요약을 요청합니다. 응답을 한 번 더 생성하므로 시간과 사용량이 추가됩니다.
+                      {t("nav.providerSwitch.askSummaryHint")}
                     </div>
                   </div>
                   <Toggle value={askSummary} onChange={setAskSummary} />
@@ -176,18 +178,18 @@ export function ProviderSwitchModal({
             <div className="rounded-lg border border-accent/30 bg-accent-tint px-4 py-3">
               <div className="mb-2 flex items-center gap-2 font-medium">
                 <Icon name="file" size={13} className="text-accent" />
-                {askSummary ? "요약 요청이 실패하면 사용할 대화 기록 요약" : "요약 준비됨"}
+                {askSummary ? t("nav.providerSwitch.fallbackSummary") : t("nav.providerSwitch.summaryReady")}
               </div>
               <div className="flex gap-8">
-                {[
-                  [handoff.stats.messages, "메시지"],
-                  [handoff.stats.files, "파일"],
-                  [handoff.stats.pendingTasks, "남은 할 일"],
-                  [`${(handoff.stats.tokensEstimate / 1000).toFixed(1)}K`, "토큰(추정)"],
-                ].map(([v, l]) => (
-                  <div key={String(l)}>
+                {([
+                  [handoff.stats.messages, "messages"],
+                  [handoff.stats.files, "files"],
+                  [handoff.stats.pendingTasks, "pendingTasks"],
+                  [`${(handoff.stats.tokensEstimate / 1000).toFixed(1)}K`, "tokens"],
+                ] as const).map(([v, l]) => (
+                  <div key={l}>
                     <div className="mono text-[14px]">{v}</div>
-                    <div className="text-[11px] text-muted">{l}</div>
+                    <div className="text-[11px] text-muted">{t(`nav.providerSwitch.stats.${l}`)}</div>
                   </div>
                 ))}
               </div>
@@ -197,16 +199,16 @@ export function ProviderSwitchModal({
           {running && (
             <div className="flex items-center gap-2 rounded-md bg-warn-bg px-3 py-2 text-warn">
               <Icon name="info" size={13} />
-              진행 중인 작업을 중단하고 전환합니다. 중단 전에 변경한 파일은 그대로 남습니다.
+              {t("nav.providerSwitch.runningWarning")}
             </div>
           )}
         </div>
 
         <div className="flex items-center justify-between border-t border-line px-6 py-4">
-          <span className="mono text-[10px] text-muted">esc 취소 · ⏎ 확인</span>
+          <span className="mono text-[10px] text-muted">{t("nav.providerSwitch.keyHint")}</span>
           <div className="flex gap-2">
             <button onClick={onClose} className="rounded-md border border-line px-4 py-1.5 hover:bg-panel-2">
-              취소
+              {t("common.cancel")}
             </button>
             <button
               onClick={() => void confirm()}
@@ -215,7 +217,7 @@ export function ProviderSwitchModal({
               data-switch-confirm
             >
               <Icon name="switch" size={13} />
-              {selected && selected !== current ? `${LABEL[selected]} 로 전환` : "전환할 에이전트를 고르세요"}
+              {selected && selected !== current ? t("nav.providerSwitch.switchTo", { name: LABEL[selected] }) : t("nav.providerSwitch.pickAgent")}
             </button>
           </div>
         </div>

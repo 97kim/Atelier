@@ -1,22 +1,23 @@
 // 브라우저 탭의 보기 폭 프리셋. 웹 작업에서 "좁은 화면에서 안 깨지나" 를 보려면 창을 줄이는 것 말고 방법이 없었다.
 // 실제 창을 건드리지 않고 <webview> 만 그 폭으로 좁혀 가운데 둔다.
 
+export type ViewportId = "full" | "phone" | "tablet" | "desktop";
+
+/** 이름·설명은 사전(`panel.browser.viewport.<id>`)에서 그릴 때 번역한다. */
 export interface Viewport {
-  id: string;
-  label: string;
+  id: ViewportId;
   /** null 이면 패널을 꽉 채운다. */
   width: number | null;
-  hint: string;
 }
 
 export const VIEWPORTS: Viewport[] = [
-  { id: "full", label: "전체", width: null, hint: "패널을 꽉 채운다" },
-  { id: "phone", label: "폰", width: 390, hint: "390px — iPhone 세로" },
-  { id: "tablet", label: "태블릿", width: 834, hint: "834px — iPad 세로" },
-  { id: "desktop", label: "데스크톱", width: 1280, hint: "1280px — 좁은 노트북" },
+  { id: "full", width: null },
+  { id: "phone", width: 390 },
+  { id: "tablet", width: 834 },
+  { id: "desktop", width: 1280 },
 ];
 
-export const DEFAULT_VIEWPORT = "full";
+export const DEFAULT_VIEWPORT: ViewportId = "full";
 
 export function viewportById(id: string): Viewport {
   return VIEWPORTS.find((v) => v.id === id) ?? VIEWPORTS[0];

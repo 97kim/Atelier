@@ -30,7 +30,7 @@ test("보기 폭 프리셋", () => {
   assert.equal(viewportById("full").width, null, "전체는 폭을 제한하지 않는다");
   assert.equal(viewportById("phone").width, 390);
   assert.equal(viewportById("없는값").id, "full", "모르는 값은 전체로");
-  assert.ok(VIEWPORTS.every((v) => v.label && v.hint), "모든 프리셋에 이름과 설명이 있다");
+  assert.ok(VIEWPORTS.every((v) => v.id && (v.width === null || v.width > 0)), "모든 프리셋에 id 와 폭이 있다");
 });
 
 test("확대 배율: 한 칸씩 움직이고 끝에서 멈춘다", () => {

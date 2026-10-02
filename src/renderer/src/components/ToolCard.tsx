@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { ToolBlock } from "@shared/session-state";
 import { isToolActive, isToolFailed, isToolWaiting, toolState } from "@shared/tool-state";
 import { DiffView } from "./DiffView";
@@ -39,7 +40,7 @@ function iconFor(name: string): IconName {
   }
 }
 
-function summary(name: string, input: Input): string {
+function summary(name: string, input: Input, t: TFunction): string {
   switch (name) {
     case "Bash":
       return str(input.description) || str(input.command).split("\n")[0];
@@ -68,7 +69,7 @@ function summary(name: string, input: Input): string {
     case "TodoWrite": {
       const items = todoItems(input);
       const done = items.filter((t) => t.done).length;
-      return `${done}/${items.length} 완료`;
+      return t("toolCard.todoDone", { done, total: items.length });
     }
     default: {
       const first = Object.values(input).find((v) => typeof v === "string");
@@ -190,13 +191,13 @@ export function ToolCard({ block }: { block: ToolBlock }) {
               e.stopPropagation();
               openFile(filePath, readAt);
             }}
-            title={readAt ? `에디터로 열기 (${readAt.line}${readAt.endLine ? `–${readAt.endLine}` : ""}줄)` : "에디터로 열기"}
+            title={readAt ? t("toolCard.openInEditorLines", { range: `${readAt.line}${readAt.endLine ? `–${readAt.endLine}` : ""}` }) : t("toolCard.openInEditor")}
             className="mono min-w-0 flex-1 truncate text-muted underline decoration-line underline-offset-2 hover:text-accent hover:decoration-accent"
           >
-            {summary(block.name, input)}
+            {summary(block.name, input, t)}
           </span>
         ) : (
-          <span className="mono min-w-0 flex-1 truncate text-muted">{summary(block.name, input)}</span>
+          <span className="mono min-w-0 flex-1 truncate text-muted">{summary(block.name, input, t)}</span>
         )}
         {bashCommand && (
           <span
@@ -205,7 +206,7 @@ export function ToolCard({ block }: { block: ToolBlock }) {
               e.stopPropagation();
               runInTerminal!(bashCommand, e.altKey);
             }}
-            title="터미널에 넣습니다. Enter 는 직접 치세요 (⌥클릭: 바로 실행)"
+            title={t("toolCard.runInTerminalHint")}
             className="shrink-0 rounded p-0.5 text-muted hover:bg-panel-2 hover:text-fg"
             data-run-in-terminal
           >
@@ -221,7 +222,7 @@ export function ToolCard({ block }: { block: ToolBlock }) {
           </span>
           {active && elapsed >= 2 && (
             <span className="mono normal-case tracking-normal text-muted-2" data-tool-elapsed>
-              {elapsed >= 60 ? `${Math.floor(elapsed / 60)}분 ${elapsed % 60}초` : `${elapsed}초`}
+              {elapsed >= 60 ? t("toolCard.elapsedMinSec", { min: Math.floor(elapsed / 60), sec: elapsed % 60 }) : t("toolCard.elapsedSec", { sec: elapsed })}
             </span>
           )}
         </span>
@@ -232,17 +233,17 @@ export function ToolCard({ block }: { block: ToolBlock }) {
         <div className="flex items-center gap-2 border-t border-line px-3 py-1.5 text-[11px] text-muted" data-subagent>
           <Icon name="arrowRight" size={11} className="shrink-0 text-muted-2" />
           <span className={`shrink-0 ${active ? "shimmer" : ""}`} style={active ? ({ "--shimmer-base": "var(--color-muted)", "--shimmer-hi": "var(--color-fg)" } as React.CSSProperties) : undefined}>
-            하위 에이전트
+            {t("toolCard.subagent")}
           </span>
           {block.subagent.via === "codex" && (
-            <span className="shrink-0 rounded bg-accent-tint px-1 text-[10px] text-accent" title="codex-companion 이 띄운 Codex 의 진행(rollout 미러)" data-subagent-via="codex">
+            <span className="shrink-0 rounded bg-accent-tint px-1 text-[10px] text-accent" title={t("toolCard.subagentViaCodexHint")} data-subagent-via="codex">
               Codex
             </span>
           )}
-          <span className="mono shrink-0 text-muted-2">도구 {block.subagent.toolCalls}회</span>
+          <span className="mono shrink-0 text-muted-2">{t("toolCard.subagentTools", { count: block.subagent.toolCalls })}</span>
           {block.subagent.lastTool ? (
             <span className="mono min-w-0 flex-1 truncate" title={JSON.stringify(block.subagent.lastTool.input)}>
-              {block.subagent.lastTool.name} {summary(block.subagent.lastTool.name, block.subagent.lastTool.input)}
+              {block.subagent.lastTool.name} {summary(block.subagent.lastTool.name, block.subagent.lastTool.input, t)}
             </span>
           ) : block.subagent.lastText ? (
             <span className="min-w-0 flex-1 truncate">{block.subagent.lastText}</span>
@@ -336,6 +337,7 @@ function ToolBody({ name, input }: { name: string; input: Input }) {
 }
 
 function ToolOutput({ output, isError }: { output: string; isError: boolean }) {
+  const { t } = useTranslation();
   const [full, setFull] = useState(false);
   const lines = output.split("\n");
   const truncated = !full && lines.length > OUTPUT_PREVIEW_LINES;
@@ -353,7 +355,7 @@ function ToolOutput({ output, isError }: { output: string; isError: boolean }) {
       </pre>
       {truncated && (
         <button onClick={() => setFull(true)} className="mt-1 text-[11px] text-muted hover:text-fg">
-          … {lines.length - OUTPUT_PREVIEW_LINES}줄 더 보기
+          {t("toolCard.moreLines", { count: lines.length - OUTPUT_PREVIEW_LINES })}
         </button>
       )}
     </div>

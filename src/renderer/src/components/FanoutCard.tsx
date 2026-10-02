@@ -1,5 +1,6 @@
 // 팬아웃 카드 — 세션별 진행 상태·변경 통계·답변 요약. 끝나면 "비교" 로 diff 를 나란히 보고 채택, "정리" 로 worktree 와 탭을 지운다.
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { FanoutVariant } from "@shared/chat-events";
 import type { FanoutBlock } from "@shared/session-state";
 import { PROVIDER_NAME, fanoutSummary } from "@shared/fanout";
@@ -8,28 +9,30 @@ import { Icon } from "./Icon";
 import { ProviderLogo } from "./ProviderLogo";
 
 function VariantStatus({ v }: { v: FanoutVariant }) {
+  const { t } = useTranslation();
   if (v.status === "running")
     return (
       <span className="label flex items-center gap-1.5 text-accent">
         <span className="spin inline-block h-2.5 w-2.5 rounded-full border-[1.5px] border-accent border-t-transparent" />
         <span className="shimmer" style={{ "--shimmer-base": "var(--color-accent)", "--shimmer-hi": "var(--color-fg)" } as React.CSSProperties}>
-          진행 중
+          {t("fanout.card.status.running")}
         </span>
       </span>
     );
-  if (v.status === "waiting") return <span className="label text-warn">응답 필요</span>;
-  if (v.status === "failed") return <span className="label text-err">실패</span>;
-  if (v.status === "cleaned") return <span className="label text-muted-2">비교 종료</span>;
-  return <span className="label text-ok">완료</span>;
+  if (v.status === "waiting") return <span className="label text-warn">{t("fanout.card.status.waiting")}</span>;
+  if (v.status === "failed") return <span className="label text-err">{t("fanout.card.status.failed")}</span>;
+  if (v.status === "cleaned") return <span className="label text-muted-2">{t("fanout.card.status.cleaned")}</span>;
+  return <span className="label text-ok">{t("fanout.card.status.done")}</span>;
 }
 
 export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; tabId: string; onCompare: (fanoutId: string) => void }) {
+  const { t } = useTranslation();
   const running = block.status === "running";
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, [running]);
   const [confirmClean, setConfirmClean] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -48,35 +51,35 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
     <div className="content-indent rounded-lg border border-line bg-panel" data-fanout-card={block.id} data-fanout-status={block.status}>
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
         <Icon name="sparkles" size={13} className="shrink-0 text-accent" />
-        <span className="shrink-0 font-medium">팬아웃</span>
+        <span className="shrink-0 font-medium">{t("fanout.card.title")}</span>
         <span className="text-[11px] text-muted" data-fanout-summary>
           {fanoutSummary(block.variants)}
         </span>
-        {running && secs >= 3 && <span className="mono text-[10.5px] text-muted-2">{secs >= 60 ? `${Math.floor(secs / 60)}분 ${secs % 60}초` : `${secs}초`}</span>}
+        {running && secs >= 3 && <span className="mono text-[10.5px] text-muted-2">{secs >= 60 ? t("fanout.card.elapsedMinSec", { min: Math.floor(secs / 60), sec: secs % 60 }) : t("fanout.card.elapsedSec", { sec: secs })}</span>}
         <span className="flex-1" />
         {block.adoptedTabId && (
           <span className="label text-ok" data-fanout-adopted={block.adoptedTabId}>
-            {block.variants.find((v) => v.tabId === block.adoptedTabId)?.label ?? "?"} 채택됨
+            {t("fanout.card.adopted", { label: block.variants.find((v) => v.tabId === block.adoptedTabId)?.label ?? "?" })}
           </span>
         )}
         <button
           onClick={() => onCompare(block.id)}
           disabled={!canCompare || block.status === "cleaned"}
           className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-          title="세션별 diff를 나란히 보고 원본에 적용할 결과를 고릅니다"
+          title={t("fanout.card.compareTitle")}
           data-fanout-compare
         >
-          비교
+          {t("fanout.card.compare")}
         </button>
         {block.status !== "cleaned" && !confirmClean && (
           <button
             onClick={() => setConfirmClean(true)}
             disabled={busy}
             className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-            title="세션의 worktree를 모두 삭제하고 탭을 닫습니다"
+            title={t("fanout.card.deleteWorktreeTitle")}
             data-fanout-cleanup
           >
-            worktree 삭제
+            {t("fanout.card.deleteWorktree")}
           </button>
         )}
       </div>
@@ -97,19 +100,19 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
                 <VariantStatus v={v} />
                 {v.files !== undefined && (
                   <span className="mono text-[10.5px] text-muted-2" data-fanout-stats>
-                    {v.files}개 파일 <span className="text-ok">+{v.added ?? 0}</span> <span className="text-err">−{v.deleted ?? 0}</span>
+                    {t("fanout.card.files", { count: v.files })} <span className="text-ok">+{v.added ?? 0}</span> <span className="text-err">−{v.deleted ?? 0}</span>
                   </span>
                 )}
-                {typeof v.durationMs === "number" && <span className="mono text-[10.5px] text-muted-2">{formatDuration(v.durationMs)}</span>}
+                {typeof v.durationMs === "number" && <span className="mono text-[10.5px] text-muted-2">{formatDuration(v.durationMs, t)}</span>}
                 <span className="flex-1" />
                 {v.status !== "cleaned" && (
                   <button
                     onClick={() => void window.workbench.workspaces.activateTab(v.tabId)}
                     className="rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg"
-                    title="이 세션의 탭 열기"
+                    title={t("fanout.card.openTabTitle")}
                     data-fanout-open
                   >
-                    탭
+                    {t("fanout.card.openTab")}
                   </button>
                 )}
               </div>
@@ -125,12 +128,12 @@ export function FanoutCard({ block, tabId, onCompare }: { block: FanoutBlock; ta
       </div>
       {confirmClean && (
         <div className="flex items-center gap-2 border-t border-err/30 bg-err-bg px-3 py-2 text-[11.5px] text-err" data-fanout-cleanup-confirm>
-          <span className="flex-1">모든 세션의 worktree와 탭을 삭제합니다. 커밋하지 않은 변경도 삭제됩니다. 필요한 결과를 먼저 원본에 적용하거나 따로 보관하세요.</span>
+          <span className="flex-1">{t("fanout.card.cleanupConfirm")}</span>
           <button onClick={() => void cleanup()} disabled={busy} className="rounded border border-err/40 px-2 py-0.5 hover:bg-err/10" data-fanout-cleanup-yes>
-            {busy ? "삭제 중…" : "worktree 삭제"}
+            {busy ? t("fanout.card.deleting") : t("fanout.card.deleteWorktree")}
           </button>
           <button onClick={() => setConfirmClean(false)} className="rounded px-1.5 py-0.5 hover:bg-err/10">
-            취소
+            {t("common.cancel")}
           </button>
         </div>
       )}

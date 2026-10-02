@@ -3,17 +3,18 @@ import { usePaneFocusRef } from "../pane-focus";
 // 컨텍스트 패널 안에서 열리지만 채팅 전체를 덮어야 해서 body 에 포털로 그린다.
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { FileViewDto, GitChangeDto } from "@shared/ipc";
-import type { GitChangesState } from "../hooks/useGitChanges";
+import { gitResultText, type GitChangesState } from "../hooks/useGitChanges";
 import { buildDiff, CodeTable, DiffTable, highlight } from "./FileViewer";
 import { Icon } from "./Icon";
 import { CheckMark, KindBadge } from "./CheckMark";
 
-const KIND_LABEL: Record<GitChangeDto["kind"], [string, string]> = {
-  added: ["새 파일", "text-ok"],
-  modified: ["수정", "text-warn"],
-  deleted: ["삭제", "text-err"],
-  renamed: ["이름 변경", "text-warn"],
+const KIND_CLASS: Record<GitChangeDto["kind"], string> = {
+  added: "text-ok",
+  modified: "text-warn",
+  deleted: "text-err",
+  renamed: "text-warn",
 };
 
 export function ChangeReview({
@@ -28,6 +29,7 @@ export function ChangeReview({
   canCommit: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const g = gitState;
   const [current, setCurrent] = useState<string | null>(g.changes[0]?.path ?? null);
   const [file, setFile] = useState<FileViewDto | null>(null);
@@ -91,14 +93,14 @@ export function ChangeReview({
         <div className="flex items-center gap-3 border-b border-line px-5 py-3">
           <Icon name="branch" size={15} className="shrink-0 text-muted" />
           <div className="min-w-0 flex-1">
-            <div className="text-[14px] font-semibold">변경 리뷰</div>
+            <div className="text-[14px] font-semibold">{t("panel.review.title")}</div>
             <div className="mono mt-0.5 text-[10.5px] text-muted">
               {g.git?.name ?? cwd}
-              {g.git?.branch ? ` · ${g.git.branch}` : ""} · {g.changes.length}개 파일 ·{" "}
+              {g.git?.branch ? ` · ${g.git.branch}` : ""} · {t("panel.review.fileCount", { count: g.changes.length })} ·{" "}
               <span className="text-ok">+{total.a}</span> <span className="text-err">−{total.d}</span>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-md border border-line p-1.5 text-muted hover:text-fg" title="닫기 (esc)">
+          <button onClick={onClose} className="rounded-md border border-line p-1.5 text-muted hover:text-fg" title={t("panel.review.closeTitle")}>
             <Icon name="x" size={14} />
           </button>
         </div>
@@ -107,18 +109,19 @@ export function ChangeReview({
           {/* 파일 목록 */}
           <div className="flex w-[300px] shrink-0 flex-col border-r border-line">
             <div className="flex items-center justify-between px-3 py-2 text-[10.5px] text-muted">
-              <span>{g.selectedPaths.length}개 커밋 대상</span>
+              <span>{t("panel.review.commitTargets", { count: g.selectedPaths.length })}</span>
               <button
                 onClick={() => g.selectAll(g.selectedPaths.length !== g.changes.length)}
                 className="rounded px-1 hover:bg-panel-2 hover:text-fg"
               >
-                {g.selectedPaths.length === g.changes.length ? "모두 해제" : "모두 선택"}
+                {g.selectedPaths.length === g.changes.length ? t("panel.changes.deselectAll") : t("panel.changes.selectAll")}
               </button>
             </div>
             <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" data-review-list>
-              {g.changes.length === 0 && <li className="px-2 py-6 text-center text-muted">변경 사항 없음</li>}
+              {g.changes.length === 0 && <li className="px-2 py-6 text-center text-muted">{t("panel.changes.none")}</li>}
               {g.changes.map((c) => {
-                const [label, cls] = KIND_LABEL[c.kind];
+                const label = t(`panel.changes.kind.${c.kind}`);
+                const cls = KIND_CLASS[c.kind];
                 const active = c.path === current;
                 return (
                   <li key={c.path} data-review-file={c.path}>
@@ -131,7 +134,7 @@ export function ChangeReview({
                       <CheckMark
                         checked={g.selected.has(c.path)}
                         onToggle={() => g.toggle(c.path)}
-                        label={`${c.path} 커밋에 포함`}
+                        label={t("panel.changes.includeInCommit", { path: c.path })}
                         className="mt-[1px]"
                       />
                       <KindBadge kind={c.kind} />
@@ -152,7 +155,7 @@ export function ChangeReview({
                         }}
                         disabled={!canCommit || g.busy !== null}
                         className="rounded p-1 text-muted opacity-0 hover:bg-err-bg hover:text-err group-hover:opacity-100 disabled:opacity-0"
-                        title="이 파일의 변경 버리기"
+                        title={t("panel.review.revertTitle")}
                         data-review-revert
                       >
                         <Icon name="refresh" size={12} />
@@ -161,7 +164,7 @@ export function ChangeReview({
                     {confirmRevert === c.path && (
                       <div className="mx-1 mb-1 flex items-center gap-2 rounded-md border border-err/40 bg-err-bg px-2 py-1.5 text-[11px] text-err" data-review-confirm>
                         <span className="min-w-0 flex-1">
-                          {c.kind === "added" ? "이 파일을 삭제합니다." : "이 파일의 변경을 버립니다."} 되돌릴 수 없습니다.
+                          {c.kind === "added" ? t("panel.review.confirmDelete") : t("panel.review.confirmDiscard")}
                         </span>
                         <button
                           onClick={() => {
@@ -171,10 +174,10 @@ export function ChangeReview({
                           className="rounded bg-err px-2 py-0.5 font-medium text-white hover:opacity-90"
                           data-review-confirm-yes
                         >
-                          버리기
+                          {t("panel.review.discard")}
                         </button>
                         <button onClick={() => setConfirmRevert(null)} className="rounded px-1.5 py-0.5 hover:bg-err/10">
-                          취소
+                          {t("common.cancel")}
                         </button>
                       </div>
                     )}
@@ -190,28 +193,28 @@ export function ChangeReview({
               <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-[11px] text-muted">
                 <span className="mono truncate text-fg">{currentChange.path}</span>
                 {currentChange.oldPath && <span className="mono truncate">← {currentChange.oldPath}</span>}
-                <span className={`label ml-auto shrink-0 ${KIND_LABEL[currentChange.kind][1]}`}>
-                  {KIND_LABEL[currentChange.kind][0]}
+                <span className={`label ml-auto shrink-0 ${KIND_CLASS[currentChange.kind]}`}>
+                  {t(`panel.changes.kind.${currentChange.kind}`)}
                 </span>
               </div>
             )}
             <div className="min-h-0 flex-1 overflow-auto bg-inset">
-              {!current && <Empty>파일을 고르세요.</Empty>}
-              {current && fileError && <Empty>읽기 실패: {fileError}</Empty>}
-              {current && !fileError && !file && <Empty>불러오는 중…</Empty>}
-              {file && file.binary && <Empty>바이너리 파일이라 표시하지 않습니다.</Empty>}
-              {file && file.tooLarge && <Empty>1MB 를 넘는 파일이라 표시하지 않습니다.</Empty>}
+              {!current && <Empty>{t("panel.review.pickFile")}</Empty>}
+              {current && fileError && <Empty>{t("panel.review.readFailed", { error: fileError })}</Empty>}
+              {current && !fileError && !file && <Empty>{t("common.loading")}</Empty>}
+              {file && file.binary && <Empty>{t("panel.review.binary")}</Empty>}
+              {file && file.tooLarge && <Empty>{t("panel.review.tooLarge")}</Empty>}
               {file && !file.binary && !file.tooLarge && (diff ? (
-                diff.added + diff.deleted === 0 ? <Empty>파일 내용은 같고 이름이나 권한만 변경되었습니다.</Empty> : <DiffTable rows={diff.rows} />
+                diff.added + diff.deleted === 0 ? <Empty>{t("panel.review.metaOnly")}</Empty> : <DiffTable rows={diff.rows} />
               ) : shown ? (
                 <>
                   <div className="border-b border-line px-4 py-2 text-[11px] text-muted">
-                    {file.missing ? "삭제된 파일입니다. 마지막 커밋의 내용을 보여줍니다." : "새 파일입니다. 전체 내용을 보여줍니다."}
+                    {file.missing ? t("panel.review.deletedFile") : t("panel.review.newFile")}
                   </div>
                   <CodeTable html={html} lines={shown.split("\n").length} />
                 </>
               ) : (
-                <Empty>내용이 없습니다.</Empty>
+                <Empty>{t("panel.review.emptyFile")}</Empty>
               ))}
             </div>
           </div>
@@ -229,7 +232,7 @@ export function ChangeReview({
               }
             }}
             rows={g.message.includes("\n") ? 4 : 2}
-            placeholder="커밋 메시지 (⌘⏎ 커밋)"
+            placeholder={t("panel.changes.commitPlaceholder")}
             disabled={g.busy !== null}
             className="mono min-w-0 flex-1 resize-none rounded-md border border-line bg-inset px-2.5 py-1.5 text-[12px] leading-5 text-fg outline-none placeholder:text-muted focus:border-accent/50 disabled:opacity-60"
             style={{ userSelect: "text" }}
@@ -240,25 +243,25 @@ export function ChangeReview({
                 onClick={() => void g.draft()}
                 disabled={g.busy !== null || g.selectedPaths.length === 0}
                 className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-                title="선택한 파일의 diff를 Claude에 보내 커밋 메시지 초안을 만듭니다"
+                title={t("panel.changes.draftTitle")}
               >
                 <Icon name="sparkles" size={11} />
-                {g.busy === "draft" ? "초안 작성 중…" : "초안"}
+                {g.busy === "draft" ? t("panel.changes.drafting") : t("panel.changes.draft")}
               </button>
               <button
                 onClick={() => void g.commit()}
                 disabled={g.busy !== null || !canCommit || g.selectedPaths.length === 0 || !g.message.trim()}
                 className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40"
-                title={!canCommit ? "AI가 작업 중일 때는 커밋할 수 없습니다" : "고른 파일만 커밋합니다"}
+                title={!canCommit ? t("panel.changes.commitBlocked") : t("panel.review.commitTitle")}
                 data-review-commit-button
               >
                 <Icon name="check" size={11} />
-                {g.busy === "commit" ? "커밋 중…" : `커밋 ${g.selectedPaths.length}`}
+                {g.busy === "commit" ? t("panel.changes.committing") : t("panel.changes.commitButton", { n: g.selectedPaths.length })}
               </button>
             </div>
             {g.result && (
               <span className={`mono text-[10.5px] ${g.result.ok ? "text-ok" : "text-err"}`} data-review-result>
-                {g.result.text}
+                {gitResultText(t, g.result)}
               </span>
             )}
           </div>

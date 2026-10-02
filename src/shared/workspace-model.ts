@@ -75,8 +75,9 @@ export function tabsUsingPath(model: WorkbenchModel, path: string): TabMeta[] {
   return [...users.filter((t) => t.open !== false), ...users.filter((t) => t.open === false)];
 }
 
-export function tabTitle(tab: TabMeta): string {
-  return tab.title?.trim() || UNTITLED_TAB;
+/** untitled 는 이름 없는 탭에 보일 문구 — 화면은 번역한 값을 넘기고, main(로그·CLI 출력)은 기본값을 쓴다. */
+export function tabTitle(tab: TabMeta, untitled: string = UNTITLED_TAB): string {
+  return tab.title?.trim() || untitled;
 }
 
 export function workspaceOf(m: WorkbenchModel, tabId: string): Workspace | null {

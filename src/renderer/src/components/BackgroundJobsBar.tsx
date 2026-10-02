@@ -10,6 +10,7 @@
 // 도는 동안만 있다가 끝나면 사라진다. 끝났다는 사실은 알림과 탭 표시(attention)가 맡는다.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { jobRunningLabel, jobsSummaryLabel, type BackgroundJobDto } from "@shared/background-jobs";
 import { Icon } from "./Icon";
 
@@ -17,6 +18,7 @@ import { Icon } from "./Icon";
 const LIST_MAX_H = "max-h-32";
 
 export function BackgroundJobsBar({ sessionId }: { sessionId: string | null }) {
+  const { t } = useTranslation();
   const [jobs, setJobs] = useState<BackgroundJobDto[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [open, setOpen] = useState(false);
@@ -32,8 +34,8 @@ export function BackgroundJobsBar({ sessionId }: { sessionId: string | null }) {
   const mine = sessionId ? jobs.filter((j) => j.sessionId === sessionId) : [];
   useEffect(() => {
     if (mine.length === 0) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, [mine.length]);
   // 다 끝나면 접힌 상태로 돌아간다 — 다음에 다시 뜰 때 펼쳐진 채로 나타나지 않게.
   useEffect(() => {
@@ -50,14 +52,14 @@ export function BackgroundJobsBar({ sessionId }: { sessionId: string | null }) {
           <button
             onClick={() => setOpen((v) => !v)}
             data-background-jobs-toggle={open ? "open" : "closed"}
-            title={open ? "접기" : "무엇이 도는지 보기"}
+            title={open ? t("chat.background.collapse") : t("chat.background.show")}
             className="flex max-w-full items-center gap-2 rounded-full bg-panel-2 px-3 py-1 text-[11px] text-muted-2 hover:text-fg"
           >
             <Spinner />
             <span className="shrink-0 shimmer" style={SHIMMER}>
-              백그라운드
+              {t("chat.background.label")}
             </span>
-            <span className="mono shrink-0">{jobsSummaryLabel(mine, now)}</span>
+            <span className="mono shrink-0">{jobsSummaryLabel(mine, now, t)}</span>
             <Icon name="chevronRight" size={11} className={`shrink-0 transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
           </button>
           {open && (
@@ -81,6 +83,7 @@ function Spinner() {
 
 /** 한 줄. 접힌 줄(알약)과 펼친 목록에서 같이 쓴다 — 목록 안에서는 배경이 이미 있으므로 알약을 입히지 않는다. */
 function JobLine({ job, now, plain = false }: { job: BackgroundJobDto; now: number; plain?: boolean }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`flex max-w-full items-center gap-2 text-[11px] text-muted-2 ${plain ? "" : "rounded-full bg-panel-2 px-3 py-1"}`}
@@ -89,10 +92,10 @@ function JobLine({ job, now, plain = false }: { job: BackgroundJobDto; now: numb
       <Spinner />
       {!plain && (
         <span className="shrink-0 shimmer" style={SHIMMER}>
-          백그라운드
+          {t("chat.background.label")}
         </span>
       )}
-      <span className="mono shrink-0">{jobRunningLabel(job, now)}</span>
+      <span className="mono shrink-0">{jobRunningLabel(job, now, t)}</span>
       {job.summary && <span className="min-w-0 truncate opacity-70">{job.summary}</span>}
     </div>
   );

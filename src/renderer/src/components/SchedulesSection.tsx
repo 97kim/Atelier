@@ -5,25 +5,15 @@
 // 저장 전에 다음 실행 시각을 계산해 보여 준다 — 사용자가 고른 것이 정말 언제 도는지 확인하는 자리다.
 
 import { useEffect, useMemo, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { intlLocale, type Locale } from "@shared/i18n/locale";
 import type { ScheduleListDto } from "@shared/ipc";
 import type { PermissionPolicy } from "@shared/chat-events";
 import type { ProviderId } from "@shared/workspace-model";
 import { classify, nextOccurrence, parseCron, presetToCron } from "@shared/cron";
 import type { Run, RunStatus, Schedule } from "@shared/schedules";
 import { Icon } from "./Icon";
-
-const STATUS_LABEL: Record<RunStatus, string> = {
-  pending: "시작하는 중",
-  running: "실행 중",
-  needs_action: "승인 대기",
-  completed: "완료",
-  failed: "실패",
-  skipped_precheck: "건너뜀 · 할 일 없음",
-  skipped_missed: "건너뜀 · 시각 놓침",
-  skipped_unavailable: "건너뜀 · 실행 불가",
-  skipped_overlap: "건너뜀 · 앞 회차가 진행 중",
-  interrupted: "중단 · 끝을 확인 못 함",
-};
 
 const STATUS_TONE: Record<RunStatus, string> = {
   pending: "text-muted",
@@ -38,41 +28,44 @@ const STATUS_TONE: Record<RunStatus, string> = {
   interrupted: "text-warn",
 };
 
-const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+// 문구는 값(키)만 들고 그릴 때 사전에서 가져온다.
+const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
-const POLICY_LABEL: Record<PermissionPolicy, string> = {
-  ask: "물어보기",
-  auto_edit: "편집은 자동",
-  full: "전부 자동",
-};
+const POLICIES: PermissionPolicy[] = ["ask", "auto_edit", "full"];
+
+const REPEATS: Repeat[] = ["hourly", "daily", "weekdays", "weekly", "custom"];
 
 /** cron 을 사람 말로. 프리셋이 아니면 식을 그대로 보여 준다 — 거짓말하지 않는다. */
-function scheduleLabel(cron: string): string {
+function scheduleLabel(t: TFunction, cron: string): string {
   const p = classify(cron);
   const hhmm = (h: number, m: number) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   switch (p.kind) {
     case "hourly":
-      return `매시 ${String(p.minute).padStart(2, "0")}분`;
+      return t("schedules.label.hourly", { minute: String(p.minute).padStart(2, "0") });
     case "daily":
-      return `매일 ${hhmm(p.hour, p.minute)}`;
+      return t("schedules.label.daily", { time: hhmm(p.hour, p.minute) });
     case "weekdays":
-      return `평일 ${hhmm(p.hour, p.minute)}`;
+      return t("schedules.label.weekdays", { time: hhmm(p.hour, p.minute) });
     case "weekly":
-      return `매주 ${WEEKDAYS[p.dayOfWeek] ?? "?"} ${hhmm(p.hour, p.minute)}`;
+      {
+      const day = WEEKDAYS[p.dayOfWeek];
+      return t("schedules.label.weekly", { day: day ? t(`schedules.weekday.${day}`) : "?", time: hhmm(p.hour, p.minute) });
+    }
     case "invalid":
-      return `읽을 수 없는 일정 (${cron})`;
+      return t("schedules.label.invalid", { cron });
     default:
       return cron;
   }
 }
 
-function when(ms: number | null): string {
+function when(t: TFunction, locale: Locale, ms: number | null): string {
   if (!ms) return "—";
   const d = new Date(ms);
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
-  const time = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-  return sameDay ? `오늘 ${time}` : `${d.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })} ${time}`;
+  const tag = intlLocale(locale);
+  const time = d.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" });
+  return sameDay ? t("schedules.today", { time }) : `${d.toLocaleDateString(tag, { month: "numeric", day: "numeric" })} ${time}`;
 }
 
 type Repeat = "hourly" | "daily" | "weekdays" | "weekly" | "custom";
@@ -172,11 +165,12 @@ function shortPath(p: string): string {
  * 다른 값과 같은 고르기로 맞춘다. 분은 60개 다 둔다 — 줄이면 07:07 같은 시각을 못 고르게 된다.
  */
 function TimePick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   const [h = "09", m = "00"] = value.split(":");
   const two = (n: number) => String(n).padStart(2, "0");
   return (
     <span className="inline-flex items-center gap-1">
-      <Pick value={h} onChange={(v) => onChange(`${v}:${m}`)} base={chipWhen} aria-label="시" data-f-hour>
+      <Pick value={h} onChange={(v) => onChange(`${v}:${m}`)} base={chipWhen} aria-label={t("schedules.form.hour")} data-f-hour>
         {Array.from({ length: 24 }, (_, i) => (
           <option key={i} value={two(i)}>
             {two(i)}
@@ -184,7 +178,7 @@ function TimePick({ value, onChange }: { value: string; onChange: (v: string) =>
         ))}
       </Pick>
       <span className="text-muted-2">:</span>
-      <Pick value={m} onChange={(v) => onChange(`${h}:${v}`)} base={chipWhen} aria-label="분" data-f-minute>
+      <Pick value={m} onChange={(v) => onChange(`${h}:${v}`)} base={chipWhen} aria-label={t("schedules.form.minute")} data-f-minute>
         {Array.from({ length: 60 }, (_, i) => (
           <option key={i} value={two(i)}>
             {two(i)}
@@ -303,6 +297,8 @@ function draftCron(d: Draft): string {
 }
 
 export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language as Locale;
   const [data, setData] = useState<ScheduleListDto>({ schedules: [], runs: [] });
   const [busy, setBusy] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -373,8 +369,8 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
     <div data-schedules-section>
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-[20px] font-semibold">예약</h1>
-          <p className="mt-1 text-muted">정해진 시각에 AI에 메시지를 보내고 실행 결과를 남깁니다.</p>
+          <h1 className="text-[20px] font-semibold">{t("schedules.title")}</h1>
+          <p className="mt-1 text-muted">{t("schedules.description")}</p>
         </div>
         {!draft && (
           <button
@@ -385,7 +381,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
             className="shrink-0 rounded-md border border-line px-2.5 py-1.5 text-[12.5px] hover:bg-panel-2"
             data-new-schedule
           >
-            새 예약
+            {t("schedules.newSchedule")}
           </button>
         )}
       </div>
@@ -396,13 +392,8 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
         </div>
       )}
 
-      <p className="mb-4 text-[12px] leading-5 text-muted">
-        예약은 Atelier가 실행 중이고 Mac이 깨어 있을 때 동작합니다. 앱 종료나 절전으로 놓친 예약은 설정된 지연 허용 시간 안에 돌아오면 실행을 시도하고, 시간이 지나면 건너뜁니다. 실행 점검 간격에 따른 짧은 여유 시간이 추가됩니다.
-      </p>
-      <p className="mb-4 text-[12px] leading-5 text-muted">
-        격리 세션을 사용하는 예약은 새 실행 전에 기존 worktree 중 최근 3회분을 남기고 오래된 worktree와 탭을 자동 삭제합니다.
-        커밋하지 않은 변경도 삭제되므로 필요한 결과는 미리 보관하세요. 실행 중인 탭은 삭제하지 않습니다.
-      </p>
+      <p className="mb-4 text-[12px] leading-5 text-muted">{t("schedules.notice.missed")}</p>
+      <p className="mb-4 text-[12px] leading-5 text-muted">{t("schedules.notice.cleanup")}</p>
 
       {draft && (
         <div className="mb-4 rounded-lg border border-accent/40 bg-panel px-4 py-4" data-schedule-form>
@@ -410,7 +401,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
           <input
             value={draft.name}
             onChange={(e) => set({ name: e.target.value })}
-            placeholder="예약 이름 (필수)"
+            placeholder={t("schedules.form.namePlaceholder")}
             className="w-full bg-transparent text-[15px] font-medium outline-none placeholder:text-muted-2"
             data-f-name
           />
@@ -419,76 +410,97 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
               정작 사람이 확인하고 싶은 것은 "언제 어디서 무엇으로 도는가" 라는 한 줄이다. */}
           <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-2 text-[13px] text-muted">
             <Pick value={draft.repeat} onChange={(v) => set({ repeat: v as Repeat })} className={chipWhen} data-f-repeat>
-              <option value="hourly">매시</option>
-              <option value="daily">매일</option>
-              <option value="weekdays">평일</option>
-              <option value="weekly">매주</option>
-              <option value="custom">직접</option>
+              {REPEATS.map((r) => (
+                <option key={r} value={r}>
+                  {t(`schedules.repeat.${r}`)}
+                </option>
+              ))}
             </Pick>
             {draft.repeat === "weekly" && (
               <Pick value={String(draft.dayOfWeek)} onChange={(v) => set({ dayOfWeek: Number(v) })} className={chipWhen}>
                 {WEEKDAYS.map((w, i) => (
                   <option key={w} value={i}>
-                    {w}
+                    {t(`schedules.weekday.${w}`)}
                   </option>
                 ))}
               </Pick>
             )}
             {draft.repeat === "hourly" ? (
-              <>
-                <input
-                  type="number"
-                  min={0}
-                  max={59}
-                  value={draft.minute}
-                  onChange={(e) => set({ minute: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
-                  className={`${chipWhen} w-14`}
-                />
-                <span>분에</span>
-              </>
+              <Trans
+                i18nKey="schedules.form.atMinute"
+                components={{
+                  minute: (
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={draft.minute}
+                      onChange={(e) => set({ minute: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
+                      className={`${chipWhen} w-14`}
+                    />
+                  ),
+                }}
+              />
             ) : draft.repeat === "custom" ? (
-              <>
-                <input
-                  value={draft.cron}
-                  onChange={(e) => set({ cron: e.target.value })}
-                  placeholder="분 시 일 월 요일"
-                  className={`${chipWhen} mono w-40`}
-                  data-f-cron
-                />
-                <span>에</span>
-              </>
+              <Trans
+                i18nKey="schedules.form.atCron"
+                components={{
+                  cron: (
+                    <input
+                      value={draft.cron}
+                      onChange={(e) => set({ cron: e.target.value })}
+                      placeholder={t("schedules.form.cronPlaceholder")}
+                      className={`${chipWhen} mono w-40`}
+                      data-f-cron
+                    />
+                  ),
+                }}
+              />
             ) : (
-              <>
-                <TimePick value={draft.time} onChange={(v) => set({ time: v })} />
-                <span>에</span>
-              </>
+              <Trans
+                i18nKey="schedules.form.atTime"
+                components={{ time: <TimePick value={draft.time} onChange={(v) => set({ time: v })} /> }}
+              />
             )}
-            <button
-              type="button"
-              onClick={async () => {
-                const dir = await window.workbench.dialog.pickDirectory();
-                if (dir) set({ cwd: dir, cwdAuto: false });
+            <Trans
+              i18nKey="schedules.form.inFolder"
+              components={{
+                folder: (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const dir = await window.workbench.dialog.pickDirectory();
+                      if (dir) set({ cwd: dir, cwdAuto: false });
+                    }}
+                    className={`${chipWhen} max-w-[14rem] truncate text-left`}
+                    title={draft.cwd || t("schedules.form.pickFolderTitle")}
+                    data-f-cwd
+                  >
+                    {draft.cwd ? shortPath(draft.cwd) : t("schedules.form.pickFolder")}
+                  </button>
+                ),
               }}
-              className={`${chipWhen} max-w-[14rem] truncate text-left`}
-              title={draft.cwd || "실행할 폴더를 고릅니다"}
-              data-f-cwd
-            >
-              {draft.cwd ? shortPath(draft.cwd) : "폴더 고르기"}
-            </button>
-            <span>에서</span>
-            <Pick value={draft.provider} onChange={(v) => set({ provider: v as ProviderId })}>
-              <option value="claude">Claude Code</option>
-              <option value="codex">Codex</option>
-            </Pick>
-            <span>가</span>
-            <Pick value={draft.policy} onChange={(v) => set({ policy: v as PermissionPolicy })} data-f-policy>
-              {(Object.keys(POLICY_LABEL) as PermissionPolicy[]).map((p) => (
-                <option key={p} value={p}>
-                  {POLICY_LABEL[p]}
-                </option>
-              ))}
-            </Pick>
-            <span>권한으로 실행합니다.</span>
+            />
+            <Trans
+              i18nKey="schedules.form.runWith"
+              components={{
+                provider: (
+                  <Pick value={draft.provider} onChange={(v) => set({ provider: v as ProviderId })}>
+                    <option value="claude">Claude Code</option>
+                    <option value="codex">Codex</option>
+                  </Pick>
+                ),
+                policy: (
+                  <Pick value={draft.policy} onChange={(v) => set({ policy: v as PermissionPolicy })} data-f-policy>
+                    {POLICIES.map((p) => (
+                      <option key={p} value={p}>
+                        {t(`schedules.policy.${p}`)}
+                      </option>
+                    ))}
+                  </Pick>
+                ),
+              }}
+            />
           </div>
 
           {/* 고른 것이 정말 언제 도는지. 저장하고 나서 알게 되면 늦다. */}
@@ -496,20 +508,24 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
             {parseCron(cron) ? (
               <>
                 <Icon name="clock" size={12} className="text-muted-2" />
-                <span className="text-muted">다음 실행 · {when(preview)}</span>
+                <span className="text-muted">{t("schedules.form.nextRun", { when: when(t, locale, preview) })}</span>
                 <span className="mono text-muted-2">({draft.timezone})</span>
               </>
             ) : (
               <>
                 <Icon name="x" size={12} className="text-err" />
-                <span className="text-err">cron 형식이 아닙니다 — 다섯 칸으로 적습니다 (분 시 일 월 요일)</span>
+                <span className="text-err">{t("schedules.form.cronInvalid")}</span>
               </>
             )}
           </div>
 
           {draft.cwdAuto && (
             <div className="mt-1 text-[11px] text-muted-2" data-f-cwd-auto>
-              이 예약은 <span className="mono text-muted">{draft.cwd}</span>에서 실행합니다. 최근에 사용한 작업 경로이므로 예약에 사용할 경로가 맞는지 확인하세요.
+              <Trans
+                i18nKey="schedules.form.cwdAuto"
+                values={{ cwd: draft.cwd }}
+                components={{ path: <span className="mono text-muted" /> }}
+              />
             </div>
           )}
 
@@ -518,7 +534,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
             onChange={(e) => set({ prompt: e.target.value })}
             // 예약 프롬프트는 사람 없이 혼자 도는 지시라 길게 쓰게 된다. 기본 8줄, 긴 걸 고칠 땐 내용만큼(최대 20줄).
             rows={Math.min(20, Math.max(8, draft.prompt.split("\n").length + 1))}
-            placeholder="보낼 말 — 어제 커밋을 훑고 빠진 테스트가 있으면 알려 줘."
+            placeholder={t("schedules.form.promptPlaceholder")}
             className="mt-3 w-full resize-y rounded-md border border-line bg-inset px-3 py-2 text-[13px] outline-none focus:border-accent/50"
             data-f-prompt
           />
@@ -526,8 +542,8 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <label className="flex cursor-pointer flex-wrap items-center gap-2 text-[12.5px]">
               <input type="checkbox" checked={draft.worktree} onChange={(e) => set({ worktree: e.target.checked })} data-f-worktree />
-              <span>격리 세션에서 실행</span>
-              <span className="text-muted-2">worktree를 만들어 원본과 분리해 작업합니다. 오래된 worktree는 위 안내에 따라 자동 삭제됩니다.</span>
+              <span>{t("schedules.form.worktree")}</span>
+              <span className="text-muted-2">{t("schedules.form.worktreeHint")}</span>
             </label>
             <div className="flex items-center gap-2">
               <button
@@ -538,7 +554,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                 }}
                 className="rounded-md px-3 py-1.5 text-[12.5px] text-muted hover:bg-panel-2 hover:text-fg"
               >
-                취소
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => void submit()}
@@ -546,13 +562,13 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                 className="rounded-md bg-accent px-3 py-1.5 text-[12.5px] text-on-accent hover:bg-accent/90 disabled:opacity-50"
                 data-f-save
               >
-                {draft.id ? "저장" : "만들기"}
+                {draft.id ? t("common.save") : t("schedules.form.create")}
               </button>
             </div>
           </div>
 
           {draft.policy === "full" && (
-            <p className="mt-2 text-[11.5px] text-warn">파일 변경과 명령 실행을 승인 없이 진행합니다. 격리 세션을 사용해도 명령은 이 Mac에서 실행됩니다.</p>
+            <p className="mt-2 text-[11.5px] text-warn">{t("schedules.form.fullWarning")}</p>
           )}
         </div>
       )}
@@ -560,10 +576,10 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
       {data.schedules.length === 0 ? (
         !draft && (
           <div className="rounded-lg border border-dashed border-line px-4 py-6 text-muted">
-            <p>아직 예약이 없습니다.</p>
+            <p>{t("schedules.empty.title")}</p>
             <p className="mt-2 text-[12px] text-muted-2">
-              오른쪽 위 “새 예약” 으로 만듭니다. 터미널에서도 됩니다:
-              <code className="mono ml-1">atelier schedule add --name 아침점검 --cron "30 9 * * *" --prompt "…" --ws repo</code>
+              {t("schedules.empty.hint")}
+              <code className="mono ml-1">{t("schedules.empty.example")}</code>
             </p>
           </div>
         )
@@ -577,21 +593,21 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className={`font-medium ${s.enabled ? "text-fg" : "text-muted"}`}>{s.name}</span>
-                      {s.target.kind === "fresh" && s.target.worktree && <span className="label text-muted-2">격리 세션</span>}
+                      {s.target.kind === "fresh" && s.target.worktree && <span className="label text-muted-2">{t("schedules.item.isolated")}</span>}
                     </div>
                     <div className="mono mt-1 text-[11px] text-muted">
-                      {scheduleLabel(s.cron)} · {s.timezone} · 다음 {when(s.nextRunAt)}
+                      {scheduleLabel(t, s.cron)} · {s.timezone} · {t("schedules.item.next", { when: when(t, locale, s.nextRunAt) })}
                     </div>
                     <div className="mt-1 text-[11px] text-muted-2">
                       {s.missedRunGraceMinutes > 0
-                        ? `지연 허용: ${s.missedRunGraceMinutes}분 · 이 시간 안에 돌아오면 놓친 예약의 실행을 시도합니다.`
-                        : "놓친 예약을 기다리는 시간은 0분입니다. 실행 점검에 필요한 짧은 여유 시간만 허용합니다."}
+                        ? t("schedules.item.grace", { minutes: s.missedRunGraceMinutes })
+                        : t("schedules.item.graceNone")}
                     </div>
                     <div className="mt-1 truncate text-[12px] text-muted-2" title={s.prompt}>{s.prompt}</div>
                     {last && (
                       <div className="mt-2 flex items-center gap-2 text-[11px]" data-last-run={last.status}>
-                        <span className={STATUS_TONE[last.status]}>{STATUS_LABEL[last.status]}</span>
-                        <span className="mono text-muted-2">{when(last.endedAt ?? last.startedAt ?? last.scheduledFor)}</span>
+                        <span className={STATUS_TONE[last.status]}>{t(`schedules.status.${last.status}`)}</span>
+                        <span className="mono text-muted-2">{when(t, locale, last.endedAt ?? last.startedAt ?? last.scheduledFor)}</span>
                         {last.reason && <span className="min-w-0 flex-1 truncate text-muted-2">{last.reason}</span>}
                       </div>
                     )}
@@ -600,7 +616,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                     <button
                       onClick={() => void act(s.id, () => window.workbench.schedules.runNow(s.id))}
                       disabled={busy === s.id}
-                      title="지금 한 번 실행"
+                      title={t("schedules.item.runNow")}
                       className="rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-50"
                     >
                       <Icon name="play" size={13} />
@@ -610,7 +626,7 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                         setError(null);
                         setDraft(toDraft(s));
                       }}
-                      title="고치기"
+                      title={t("schedules.item.edit")}
                       className="rounded-md p-1.5 text-muted hover:bg-panel-2 hover:text-fg"
                       data-edit-schedule
                     >
@@ -619,14 +635,14 @@ export function SchedulesSection({ defaultCwd }: { defaultCwd: string | null }) 
                     <Toggle
                       on={s.enabled}
                       busy={busy === s.id}
-                      title={s.enabled ? "끄기" : "켜기"}
+                      title={s.enabled ? t("common.off") : t("common.on")}
                       onChange={() => void act(s.id, () => window.workbench.schedules.save({ id: s.id, enabled: !s.enabled }))}
                       data-toggle-schedule={s.enabled ? "on" : "off"}
                     />
                     <button
                       onClick={() => void act(s.id, () => window.workbench.schedules.remove(s.id))}
                       disabled={busy === s.id}
-                      title="예약과 이력을 지웁니다"
+                      title={t("schedules.item.remove")}
                       className="rounded-md p-1.5 text-muted hover:bg-err-bg hover:text-err disabled:opacity-50"
                     >
                       <Icon name="trash" size={13} />

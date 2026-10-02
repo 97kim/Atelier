@@ -1,6 +1,7 @@
 // ⌘F 대화 검색: 모든 세션(닫힌 것 포함)의 사용자·어시스턴트 텍스트를 부분 일치로 찾는다.
 // 결과는 세션별로 묶이고, 고르면 그 세션을 열고 해당 블록으로 스크롤한다.
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { SearchResultDto } from "@shared/ipc";
 import { Icon } from "./Icon";
 
@@ -22,6 +23,7 @@ export function SearchPalette({
   onClose: () => void;
   onPick: (tabId: string, blockId: string) => void;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultDto[]>([]);
   const [searching, setSearching] = useState(false);
@@ -105,7 +107,7 @@ export function SearchPalette({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="대화 내용 검색…"
+            placeholder={t("nav.search.placeholder")}
             className="flex-1 bg-transparent outline-none placeholder:text-muted"
             style={{ userSelect: "text" }}
           />
@@ -119,9 +121,9 @@ export function SearchPalette({
             <li className="px-3 py-6 text-center text-muted">
               {query.trim()
                 ? searching
-                  ? "검색 중…"
-                  : "일치하는 대화가 없습니다."
-                : "모든 세션의 메시지를 검색합니다. 닫힌 세션도 포함됩니다."}
+                  ? t("nav.search.searching")
+                  : t("nav.search.noMatch")
+                : t("nav.search.hint")}
             </li>
           )}
           {rows.map((row, i) => (
@@ -130,7 +132,7 @@ export function SearchPalette({
                 <div className="mt-2 flex items-baseline gap-2 px-3 pb-1 pt-1 first:mt-0">
                   <span className="truncate font-medium">{row.title}</span>
                   <span className="label shrink-0 text-muted">{row.workspaceName}</span>
-                  {!row.open && <span className="label shrink-0 text-muted-2">닫힘</span>}
+                  {!row.open && <span className="label shrink-0 text-muted-2">{t("nav.search.closed")}</span>}
                 </div>
               )}
               <div
@@ -144,7 +146,7 @@ export function SearchPalette({
                 <span
                   className={`label mt-0.5 w-7 shrink-0 ${row.kind === "user" ? "text-accent" : row.kind === "tool" ? "text-muted-2" : "text-muted"}`}
                 >
-                  {row.kind === "user" ? "나" : row.kind === "tool" ? "툴" : "AI"}
+                  {t(`nav.search.kind.${row.kind}`)}
                 </span>
                 <span className="min-w-0 flex-1 text-[12.5px] text-fg">{row.snippet}</span>
               </div>
@@ -152,8 +154,8 @@ export function SearchPalette({
           ))}
         </ul>
         <div className="label flex justify-between border-t border-line px-4 py-2">
-          <span>↑↓ 이동 · ⏎ 열기</span>
-          <span>{total > 0 ? `${results.length}개 세션 · ${total}건` : ""}</span>
+          <span>{t("nav.search.navHint")}</span>
+          <span>{total > 0 ? t("nav.search.summary", { count: results.length, hits: total }) : ""}</span>
         </div>
       </div>
     </div>

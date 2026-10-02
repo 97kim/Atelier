@@ -1,6 +1,7 @@
 // 에디터 패널의 파일 하나: 읽기 → CodeMirror 편집 → ⌘S 저장. HEAD 대비 변경 줄 표시, 저장 충돌 배너.
 // (예전 오버레이 FileViewer 의 본문을 패널용으로 옮긴 것. 헤더는 패널의 탭 스트립이 맡는다.)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { FileViewDto } from "@shared/ipc";
 import { formatCodeAttachment } from "@shared/attachments";
 import { CodeEditor } from "./CodeEditor";
@@ -39,6 +40,7 @@ export function FileEditor({
   /** 패널이 "저장 후 닫기" 에 쓸 수 있게 저장 함수를 등록한다. 언마운트 시 null. */
   onRegister: (api: FileEditorApi | null) => void;
 }) {
+  const { t } = useTranslation();
   const [file, setFile] = useState<FileViewDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -48,7 +50,7 @@ export function FileEditor({
   const [initialDoc, setInitialDoc] = useState("");
   const [dirty, setDirtyState] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saveMsg, setSaveMsg] = useState<{ ok: true } | { ok: false; text: string } | null>(null);
   const [conflict, setConflict] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   // 마크다운은 미리보기로 열고, "편집" 으로 전환한다. 에디터는 숨겨 둘 뿐 내리지 않아 전환해도 커서·undo 가 남는다.
@@ -61,7 +63,7 @@ export function FileEditor({
   const onAttachSel = (sel: { text: string; line: number; endLine: number }) => {
     if (!onAttach) return;
     onAttach(formatCodeAttachment({ relPath: file?.relPath ?? path, line: sel.line, endLine: sel.endLine, text: sel.text }));
-    setAttachMsg(sel.endLine !== sel.line ? `${sel.line}–${sel.endLine}줄 첨부됨` : `${sel.line}줄 첨부됨`);
+    setAttachMsg(sel.endLine !== sel.line ? t("panel.editor.attachedLines", { from: sel.line, to: sel.endLine }) : t("panel.editor.attachedLine", { line: sel.line }));
     setTimeout(() => setAttachMsg(null), 1500);
   };
   const previewUrl = useRef<string | null>(null);
@@ -165,7 +167,7 @@ export function FileEditor({
       if (r.ok) {
         const size = new TextEncoder().encode(saved).length;
         setConflict(false);
-        setSaveMsg({ ok: true, text: "저장됨" });
+        setSaveMsg({ ok: true });
         setTimeout(() => setSaveMsg(null), 1500);
         // 에디터는 그대로 두고(커서·undo 유지) 메타만 갱신: mtime·크기·저장한 내용. HEAD 는 저장으로 바뀌지 않는다.
         setFile((f) => (f ? { ...f, content: saved, mtimeMs: r.mtimeMs, size, missing: false } : f));
@@ -202,11 +204,11 @@ export function FileEditor({
   const status = !file || file.image
     ? null
     : file.missing && file.headContent !== null
-      ? { label: "삭제됨", cls: "bg-err-bg text-err" }
+      ? { kind: "deleted" as const, cls: "bg-err-bg text-err" }
       : file.headContent === null && !file.missing
-        ? { label: "새 파일", cls: "bg-ok-bg text-ok" }
+        ? { kind: "added" as const, cls: "bg-ok-bg text-ok" }
         : hasDiff
-          ? { label: "수정됨", cls: "bg-warn-bg text-warn" }
+          ? { kind: "modified" as const, cls: "bg-warn-bg text-warn" }
           : null;
 
   return (
@@ -215,7 +217,7 @@ export function FileEditor({
         <span className="mono min-w-0 flex-1 truncate text-muted" title={file?.path ?? path}>
           {file?.relPath ?? path}
         </span>
-        {status && <span className={`label rounded px-1.5 py-0.5 ${status.cls}`}>{status.label}</span>}
+        {status && <span className={`label rounded px-1.5 py-0.5 ${status.cls}`}>{t(`panel.editor.status.${status.kind}`)}</span>}
         {hasDiff && (
           <span className="mono text-[10.5px]">
             <span className="text-ok">+{diff!.added}</span> <span className="text-err">−{diff!.deleted}</span>
@@ -231,7 +233,7 @@ export function FileEditor({
                 data-md-view={v}
                 aria-pressed={mdView === v}
               >
-                {v === "preview" ? "미리보기" : "편집"}
+                {v === "preview" ? t("panel.editor.preview") : t("common.edit")}
               </button>
             ))}
           </span>
@@ -240,11 +242,11 @@ export function FileEditor({
           <button
             onClick={() => setAttachNonce((n) => n + 1)}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg"
-            title="선택한 코드(없으면 커서 줄)를 경로:줄과 함께 채팅 입력창에 넣습니다 (⌘⇧A)"
+            title={t("panel.editor.attachTitle")}
             data-attach-selection
           >
             <Icon name="chat" size={11} />
-            채팅에 첨부
+            {t("panel.editor.attach")}
           </button>
         )}
         {attachMsg && (
@@ -256,11 +258,11 @@ export function FileEditor({
           <button
             onClick={() => void openInBrowser()}
             className="flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg"
-            title="인앱 브라우저에서 이 HTML 파일을 미리 봅니다. 파일을 저장하면 미리보기도 갱신됩니다."
+            title={t("panel.editor.openInBrowserTitle")}
             data-open-in-browser
           >
             <Icon name="globe" size={11} />
-            인앱 브라우저에서 보기
+            {t("panel.editor.openInBrowser")}
           </button>
         )}
         {previewError && (
@@ -269,32 +271,32 @@ export function FileEditor({
           </span>
         )}
         {lsp && (
-          <span className="label rounded bg-accent-tint px-1.5 py-0.5 text-accent" title="언어 서버 연결됨 — 자동완성·진단·hover, F12 정의로 이동" data-lsp-badge>
+          <span className="label rounded bg-accent-tint px-1.5 py-0.5 text-accent" title={t("panel.editor.lspTitle")} data-lsp-badge>
             LSP
           </span>
         )}
         {saveMsg && (
           <span className={`mono text-[10.5px] ${saveMsg.ok ? "text-ok" : "text-err"}`} data-save-msg>
-            {saveMsg.text}
+            {saveMsg.ok ? t("panel.editor.saved") : saveMsg.text}
           </span>
         )}
         <button
           onClick={() => void save()}
           disabled={!editable || !dirty || saving}
           className="flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-40"
-          title="저장 (⌘S)"
+          title={t("panel.editor.saveTitle")}
           data-save-button
         >
           <Icon name="check" size={11} />
-          {saving ? "저장 중…" : "저장"}
+          {saving ? t("panel.editor.saving") : t("common.save")}
         </button>
       </div>
       {conflict && (
         <div className="flex flex-wrap items-center gap-2 border-b border-err/40 bg-err-bg px-3 py-1.5 text-[11.5px] text-err" data-conflict>
           <Icon name="alert" size={12} />
-          <span className="min-w-0 basis-[calc(100%-24px)]">다른 앱이나 AI가 이 파일을 변경했습니다. 내 편집을 저장할지, 변경된 파일을 다시 읽을지 선택하세요.</span>
+          <span className="min-w-0 basis-[calc(100%-24px)]">{t("panel.editor.conflict")}</span>
           <button onClick={() => void save(true)} className="shrink-0 rounded border border-err/40 px-2 py-0.5 hover:bg-err/10" data-conflict-overwrite>
-            내 내용으로 덮어쓰기
+            {t("panel.editor.overwrite")}
           </button>
           <button
             onClick={() => {
@@ -305,22 +307,22 @@ export function FileEditor({
             className="shrink-0 rounded border border-err/40 px-2 py-0.5 hover:bg-err/10"
             data-conflict-reload
           >
-            {dirty ? "내 편집을 버리고 다시 읽기" : "변경된 파일 다시 읽기"}
+            {dirty ? t("panel.editor.discardAndReload") : t("panel.editor.reloadChanged")}
           </button>
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-hidden bg-inset">
-        {error && <Empty>읽기 실패: {error}</Empty>}
-        {!error && !file && <Empty>불러오는 중…</Empty>}
-        {file && file.missing && file.headContent === null && <Empty>파일이 없습니다.</Empty>}
+        {error && <Empty>{t("panel.editor.readFailed", { error })}</Empty>}
+        {!error && !file && <Empty>{t("common.loading")}</Empty>}
+        {file && file.missing && file.headContent === null && <Empty>{t("panel.editor.noFile")}</Empty>}
         {file && file.image && <ImagePreview src={file.image.dataUrl} mime={file.image.mime} size={file.size} />}
-        {file && file.binary && !file.image && !file.tooLarge && <Empty>바이너리 파일이라 표시하지 않습니다.</Empty>}
-        {file && file.tooLarge && <Empty>{file.binary ? "12MB 를 넘는 이미지라 표시하지 않습니다." : "1MB 를 넘는 파일이라 표시하지 않습니다."}</Empty>}
+        {file && file.binary && !file.image && !file.tooLarge && <Empty>{t("panel.editor.binary")}</Empty>}
+        {file && file.tooLarge && <Empty>{file.binary ? t("panel.editor.imageTooLarge") : t("panel.editor.tooLarge")}</Empty>}
         {file && editable && (
           <div className="flex h-full flex-col">
             {file.missing && (
               <div className="border-b border-line px-3 py-1.5 text-[11px] text-muted">
-                삭제된 파일입니다. 마지막 커밋의 내용을 보여주며, 저장하면 파일이 다시 만들어집니다.
+                {t("panel.editor.deletedFile")}
               </div>
             )}
             {isMarkdown && mdView === "preview" && (
@@ -359,6 +361,7 @@ export function FileEditor({
 
 /** 이미지 파일: 체크무늬 위에 맞춤/원본 크기로 보여 준다. 편집은 없다. */
 function ImagePreview({ src, mime, size }: { src: string; mime: string; size: number }) {
+  const { t } = useTranslation();
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   const [fit, setFit] = useState(true);
   const kb = size < 1024 * 1024 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1024 / 1024).toFixed(2)} MB`;
@@ -373,7 +376,7 @@ function ImagePreview({ src, mime, size }: { src: string; mime: string; size: nu
         )}
         <span>{kb}</span>
         <button onClick={() => setFit((f) => !f)} className="ml-auto rounded border border-line px-1.5 py-0.5 hover:bg-panel-2 hover:text-fg" data-image-fit>
-          {fit ? "원본 크기" : "화면에 맞춤"}
+          {fit ? t("panel.editor.actualSize") : t("panel.editor.fitToScreen")}
         </button>
       </div>
       <div

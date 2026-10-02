@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { diffLines } from "diff";
+import { useTranslation } from "react-i18next";
 
 const MAX_LINES = 400;
 
 /** unified diff 문자열(Codex fileChange 의 diff·팬아웃 비교)을 줄 단위로 색칠한다. 파일 헤더(diff --git/index/---/+++)는 숨기고 hunk 헤더(@@)는 흐리게. */
 export function UnifiedDiff({ diff }: { diff: string }) {
+  const { t } = useTranslation();
   const rows = useMemo(
     () =>
       diff
@@ -25,13 +27,14 @@ export function UnifiedDiff({ diff }: { diff: string }) {
           </div>
         );
       })}
-      {rows.length > MAX_LINES && <div className="text-muted">… {rows.length - MAX_LINES}줄 더 있음</div>}
+      {rows.length > MAX_LINES && <div className="text-muted">… {t("panel.diff.moreLines", { count: rows.length - MAX_LINES })}</div>}
     </pre>
   );
 }
 
 /** old → new 라인 diff. Edit 툴의 old_string/new_string, Write 의 content(old="") 에 쓴다. */
 export function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
+  const { t } = useTranslation();
   const rows = useMemo(() => {
     const parts = diffLines(oldText, newText);
     const out: { sign: " " | "+" | "-"; text: string }[] = [];
@@ -62,7 +65,7 @@ export function DiffView({ oldText, newText }: { oldText: string; newText: strin
         </div>
       ))}
       {rows.length > MAX_LINES && (
-        <div className="text-muted">… {rows.length - MAX_LINES}줄 더 있음</div>
+        <div className="text-muted">… {t("panel.diff.moreLines", { count: rows.length - MAX_LINES })}</div>
       )}
     </pre>
   );

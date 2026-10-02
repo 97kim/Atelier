@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { failedCommandTitle, formatDuration, overallStatus, parseVerifyCommands, suggestVerifyCommands, tailOutput, verifySummary } from "./verify";
+import { createI18n } from "@shared/i18n";
+
+// 문구 단언은 한국어 기준이다
+const t = createI18n("ko").t;
 
 const repo = (files: Record<string, string>) => ({ has: (p: string) => p in files, read: (p: string) => files[p] ?? null });
 
@@ -42,16 +46,16 @@ test("overallStatus / verifySummary", () => {
   assert.equal(overallStatus([c("passed"), c("failed"), c("skipped")]), "failed");
   assert.equal(overallStatus([c("passed"), c("aborted")]), "aborted");
   assert.equal(overallStatus([c("passed"), c("running"), c("pending")]), "running");
-  assert.equal(verifySummary([c("passed"), c("failed"), c("skipped")]), "2번째 명령 실패 (1/3 통과)");
-  assert.equal(verifySummary([c("passed"), c("running"), c("pending")]), "2/3 실행 중");
-  assert.equal(verifySummary([c("passed"), c("passed")]), "2/2 통과");
-  assert.equal(verifySummary([c("passed"), c("aborted")]), "1/2 통과 뒤 중단");
+  assert.equal(verifySummary([c("passed"), c("failed"), c("skipped")], t), "2번째 명령 실패 (1/3 통과)");
+  assert.equal(verifySummary([c("passed"), c("running"), c("pending")], t), "2/3 실행 중");
+  assert.equal(verifySummary([c("passed"), c("passed")], t), "2/2 통과");
+  assert.equal(verifySummary([c("passed"), c("aborted")], t), "1/2 통과 뒤 중단");
 });
 
 test("formatDuration / failedCommandTitle", () => {
-  assert.equal(formatDuration(500), "500ms");
-  assert.equal(formatDuration(4200), "4초");
-  assert.equal(formatDuration(125_000), "2분 5초");
+  assert.equal(formatDuration(500, t), "500ms");
+  assert.equal(formatDuration(4200, t), "4초");
+  assert.equal(formatDuration(125_000, t), "2분 5초");
   assert.equal(failedCommandTitle({ cmd: "yarn test", status: "failed", exitCode: 1 }), "검증 실패: yarn test (exit 1)");
   assert.equal(failedCommandTitle({ cmd: "yarn test", status: "failed", exitCode: null }), "검증 실패: yarn test");
 });

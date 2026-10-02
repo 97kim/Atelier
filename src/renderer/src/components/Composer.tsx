@@ -6,6 +6,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 import type { PermissionPolicy } from "@shared/chat-events";
 import type { ChatImageDto } from "@shared/ipc";
 import {
@@ -85,6 +86,7 @@ export function Composer({
   /** `/clear` 를 받았을 때. CLI 를 쓰던 손버릇이 이 앱에서도 통하게 한다. */
   onClear?: () => void;
 }) {
+  const { t } = useTranslation();
   // 쓰다 만 글은 탭별로 보존한다(탭 전환·재시작 뒤 복원). 전송하면 비운다.
   const [text, setText] = useState(() => (draftKey ? loadComposerDraft(draftKey) : ""));
   useEffect(() => {
@@ -92,6 +94,8 @@ export function Composer({
   }, [draftKey, text]);
   const [images, setImages] = useState<Pending[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // 문구는 값으로 두고 그릴 때 번역한다
+  const [imageLimit, setImageLimit] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // 에디터·터미널의 "채팅에 첨부": 지금 글 뒤에 이어 붙이고 커서를 끝으로
@@ -215,6 +219,7 @@ export function Composer({
     const trimmed = text.trim();
     if ((!trimmed && images.length === 0) || disabled) return;
     setError(null);
+    setImageLimit(false);
     // CLI 의 /clear 를 앱의 대화 비우기로 잇는다. 그냥 흘려보내면 CLI 는 제 맥락만 비우고,
     // 화면은 앱이 따로 쌓아 둔 기록으로 그려지므로 아무것도 달라지지 않는다.
     // 커맨드 목록에 clear 가 있다고 비켜서지 않는다 — SDK 가 주는 159개 안에 들어 있어서,
@@ -283,7 +288,7 @@ export function Composer({
     const imgs = files.filter((f) => IMAGE_MIMES.has(f.type));
     if (imgs.length === 0) return;
     if (images.length + imgs.length > MAX_IMAGES) {
-      setError(`이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다.`);
+      setImageLimit(true);
       return;
     }
     for (const file of imgs) {
@@ -326,7 +331,7 @@ export function Composer({
           {loadingCommands ? (
             <div className="flex items-center gap-2 px-3 py-2.5 text-muted">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
-              커맨드 목록을 불러오는 중…
+              {t("chat.composer.loadingCommands")}
             </div>
           ) : (
             <>
@@ -355,7 +360,7 @@ export function Composer({
                           /{row.snippet.name}
                         </span>
                         <span className="label shrink-0 rounded bg-accent-tint px-1 py-px text-[9px] text-accent">
-                          {row.snippet.workspaceId ? "스니펫" : "스니펫 · 전체"}
+                          {row.snippet.workspaceId ? t("chat.composer.snippet") : t("chat.composer.snippetAll")}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[12px] text-muted">
                           {snippetSummary(row.snippet.text)}
@@ -388,9 +393,9 @@ export function Composer({
                 ))}
               </div>
               <div className="label flex gap-3 border-t border-line px-3 py-1.5 text-[9px]">
-                <span>↑↓ 이동</span>
-                <span>⇥ / ⏎ 선택</span>
-                <span>esc 닫기</span>
+                <span>{t("chat.composer.keyMove")}</span>
+                <span>{t("chat.composer.keySelect")}</span>
+                <span>{t("chat.composer.keyClose")}</span>
               </div>
             </>
           )}
@@ -428,10 +433,10 @@ export function Composer({
           rows={1}
           placeholder={
             disabled
-              ? (disabledText ?? "작업 경로를 먼저 선택하세요")
+              ? (disabledText ?? t("chat.composer.placeholderNeedCwd"))
               : running
-                ? (runningHint ?? "다음 요청을 보내 두면 현재 작업이 끝난 뒤 자동으로 전달합니다…")
-                : "무엇이든 조사하거나, 고치거나, 실행하게 하세요…"
+                ? (runningHint ?? t("chat.composer.placeholderQueue"))
+                : t("chat.composer.placeholder")
           }
           className="block w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[13.5px] leading-6 outline-none placeholder:text-muted disabled:opacity-50"
           style={{ userSelect: "text" }}
@@ -452,10 +457,10 @@ export function Composer({
             onClick={() => fileRef.current?.click()}
             disabled={disabled}
             className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
-            title="이미지 첨부"
+            title={t("chat.composer.attachImage")}
           >
             <Icon name="paperclip" size={13} />
-            <span className="hidden @[440px]:inline">첨부</span>
+            <span className="hidden @[440px]:inline">{t("chat.composer.attach")}</span>
           </button>
           {onSaveSnippet && text.trim().length > 0 && slashQuery === null && (
             <button
@@ -467,11 +472,11 @@ export function Composer({
               className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 hover:bg-panel-2 hover:text-fg disabled:opacity-40 ${
                 saveOpen ? "text-fg" : "text-muted"
               }`}
-              title="현재 입력을 스니펫으로 저장해 다음에 / 로 꺼내 씁니다"
+              title={t("chat.composer.saveSnippetHint")}
               data-snippet-save
             >
               <Icon name="copy" size={13} />
-              <span className="hidden @[440px]:inline">스니펫</span>
+              <span className="hidden @[440px]:inline">{t("chat.composer.saveSnippet")}</span>
             </button>
           )}
           <span className="label ml-auto hidden min-w-0 items-center gap-2 truncate text-accent @[380px]:flex" title={`${providerLabel} · ${POLICY_TAG[policy]}`}>
@@ -486,20 +491,20 @@ export function Composer({
                 <button
                   onClick={() => void submit()}
                   className="ml-2 flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-line px-3 text-fg hover:bg-panel-2"
-                  title="현재 작업이 끝난 뒤 보낼 메시지로 추가합니다 (Enter)"
+                  title={t("chat.composer.queueHint")}
                   data-queue-add
                 >
                   <Icon name="clock" size={12} />
-                  <span className="hidden @[440px]:inline">대기열에</span>
+                  <span className="hidden @[440px]:inline">{t("chat.composer.queue")}</span>
                 </button>
               )}
               <button
                 onClick={onAbort}
                 className="ml-2 flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-err/50 px-3 text-err hover:bg-err/10"
-                title="중단 (esc)"
+                title={t("chat.composer.abortHint")}
               >
                 <Icon name="x" size={12} />
-                <span className="hidden @[440px]:inline">중단</span>
+                <span className="hidden @[440px]:inline">{t("chat.composer.abort")}</span>
               </button>
             </>
           ) : (
@@ -507,7 +512,7 @@ export function Composer({
               onClick={() => void submit()}
               disabled={!canSend}
               className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-on-primary hover:bg-primary-hover disabled:opacity-40"
-              title="전송 (Enter)"
+              title={t("chat.composer.sendHint")}
             >
               <Icon name="arrowUp" size={15} strokeWidth={2.2} />
             </button>
@@ -529,14 +534,14 @@ export function Composer({
               if (e.key === "Enter") void saveSnippet();
               if (e.key === "Escape") setSaveOpen(false);
             }}
-            placeholder="스니펫 이름 (예: brief)"
+            placeholder={t("chat.composer.snippetName")}
             className="mono min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted"
             style={{ userSelect: "text" }}
           />
-          <div className="flex rounded-md border border-line p-0.5" role="radiogroup" aria-label="스니펫 범위">
+          <div className="flex rounded-md border border-line p-0.5" role="radiogroup" aria-label={t("chat.composer.snippetScope")}>
             {[
-              { v: false, label: "이 워크스페이스" },
-              { v: true, label: "모든 워크스페이스" },
+              { v: false, label: t("chat.composer.scopeWorkspace") },
+              { v: true, label: t("chat.composer.scopeGlobal") },
             ].map((o) => (
               <button
                 key={String(o.v)}
@@ -556,7 +561,7 @@ export function Composer({
             onClick={() => void saveSnippet()}
             className="rounded bg-primary px-2 py-0.5 font-medium text-on-primary hover:bg-primary-hover"
           >
-            저장
+            {t("common.save")}
           </button>
           <button
             onClick={() => setSaveOpen(false)}
@@ -570,11 +575,13 @@ export function Composer({
         <span className="min-w-0 truncate">
           {error ? (
             <span className="text-err">{error}</span>
+          ) : imageLimit ? (
+            <span className="text-err">{t("chat.composer.imageLimit", { count: MAX_IMAGES })}</span>
           ) : (
-            <span className="hidden @[440px]:inline">이미지 붙여넣기 가능</span>
+            <span className="hidden @[440px]:inline">{t("chat.composer.pasteImage")}</span>
           )}
         </span>
-        <span className="hidden shrink-0 @[380px]:inline">⏎ 전송 · ⇧⏎ 줄바꿈</span>
+        <span className="hidden shrink-0 @[380px]:inline">{t("chat.composer.sendKeys")}</span>
       </div>
     </div>
   );

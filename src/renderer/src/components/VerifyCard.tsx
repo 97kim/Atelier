@@ -1,9 +1,10 @@
 // 검증 결과 카드 — 저장한 명령을 순서대로 돌린 결과(명령별 통과/실패·출력 꼬리·실행 시점 HEAD). 진행 중엔 출력이 흐르고 중단할 수 있다.
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { VerifyCommandResult } from "@shared/chat-events";
 import type { VerifyBlock } from "@shared/session-state";
 import { formatOutputAttachment } from "@shared/attachments";
-import { VERIFY_STATUS_LABEL, failedCommandTitle, formatDuration, verifySummary } from "@shared/verify";
+import { failedCommandTitle, formatDuration, verifySummary } from "@shared/verify";
 import { appendComposerDraft } from "../composer-draft";
 import { Icon } from "./Icon";
 
@@ -26,6 +27,7 @@ function StatusDot({ status }: { status: VerifyCommandResult["status"] }) {
 }
 
 function CommandRow({ c, tabId, live }: { c: VerifyCommandResult; tabId: string; live: boolean }) {
+  const { t } = useTranslation();
   // 실패·실행 중은 출력을 펼쳐 두고, 통과한 것은 접어 둔다(클릭으로 펼침)
   const [open, setOpen] = useState<boolean | null>(null);
   const expanded = open ?? (c.status === "failed" || c.status === "running");
@@ -40,22 +42,22 @@ function CommandRow({ c, tabId, live }: { c: VerifyCommandResult; tabId: string;
         <button
           onClick={() => hasOutput && setOpen(!expanded)}
           className={`mono min-w-0 flex-1 truncate text-left ${c.status === "skipped" || c.status === "pending" ? "text-muted-2" : ""} ${hasOutput ? "hover:text-accent" : "cursor-default"}`}
-          title={hasOutput ? (expanded ? "출력 접기" : "출력 보기") : c.cmd}
+          title={hasOutput ? (expanded ? t("chat.verifyCard.hideOutput") : t("chat.verifyCard.showOutput")) : c.cmd}
         >
           {c.cmd}
         </button>
         {c.status === "failed" && typeof c.exitCode === "number" && <span className="mono shrink-0 text-[10.5px] text-err">exit {c.exitCode}</span>}
-        {c.status === "skipped" && <span className="shrink-0 text-[10.5px] text-muted-2">건너뜀</span>}
-        {c.status === "aborted" && <span className="shrink-0 text-[10.5px] text-warn">중단</span>}
-        {typeof c.durationMs === "number" && <span className="mono shrink-0 text-[10.5px] text-muted-2">{formatDuration(c.durationMs)}</span>}
+        {c.status === "skipped" && <span className="shrink-0 text-[10.5px] text-muted-2">{t("chat.verifyCard.skipped")}</span>}
+        {c.status === "aborted" && <span className="shrink-0 text-[10.5px] text-warn">{t("chat.verifyCard.aborted")}</span>}
+        {typeof c.durationMs === "number" && <span className="mono shrink-0 text-[10.5px] text-muted-2">{formatDuration(c.durationMs, t)}</span>}
         {c.status === "failed" && hasOutput && (
           <button
             onClick={attach}
             className="shrink-0 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg"
-            title="실패 출력을 입력창에 붙입니다 — 그대로 모델에게 고쳐 달라고 할 수 있습니다"
+            title={t("chat.verifyCard.attachHint")}
             data-verify-attach
           >
-            채팅에 첨부
+            {t("chat.verifyCard.attach")}
           </button>
         )}
       </div>
@@ -76,6 +78,7 @@ function CommandRow({ c, tabId, live }: { c: VerifyCommandResult; tabId: string;
 }
 
 export function VerifyCard({ block, tabId, onRerun }: { block: VerifyBlock; tabId: string; onRerun?: () => void }) {
+  const { t } = useTranslation();
   const running = block.status === "running";
   const elapsed = useElapsed(running, block.ts);
   const total = running ? elapsed : (block.endedAt ?? block.ts) - block.ts;
@@ -86,42 +89,42 @@ export function VerifyCard({ block, tabId, onRerun }: { block: VerifyBlock; tabI
         <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded ${block.status === "passed" ? "bg-ok/15" : block.status === "failed" ? "bg-err/15" : "bg-panel-2"}`}>
           {running ? <span className="spin inline-block h-3 w-3 rounded-full border-[1.5px] border-accent border-t-transparent" /> : <Icon name={block.status === "passed" ? "check" : block.status === "failed" ? "x" : "minus"} size={11} className={tone} />}
         </span>
-        <span className="font-medium">검증</span>
+        <span className="font-medium">{t("chat.verifyCard.title")}</span>
         <span className={`label ${tone}`}>
           {running ? (
             <span className="shimmer" style={{ "--shimmer-base": "var(--color-accent)", "--shimmer-hi": "var(--color-fg)" } as React.CSSProperties}>
-              {VERIFY_STATUS_LABEL.running}
+              {t("shared.verify.status.running")}
             </span>
           ) : (
-            VERIFY_STATUS_LABEL[block.status]
+            t(`shared.verify.status.${block.status}`)
           )}
         </span>
         <span className="text-[11px] text-muted" data-verify-summary>
-          {verifySummary(block.commands)}
+          {verifySummary(block.commands, t)}
         </span>
         <span className="flex-1" />
         {block.head && (
-          <span className="mono flex shrink-0 items-center gap-1 text-[10.5px] text-muted-2" title={`실행 시점의 HEAD${block.head.dirty ? " (커밋 안 된 변경이 있었음)" : ""}`} data-verify-head={block.head.sha}>
+          <span className="mono flex shrink-0 items-center gap-1 text-[10.5px] text-muted-2" title={t(block.head.dirty ? "chat.verifyCard.headDirty" : "chat.verifyCard.head")} data-verify-head={block.head.sha}>
             <Icon name="branch" size={10} />
             {block.head.branch ? `${block.head.branch} ` : ""}
             {block.head.sha}
-            {block.head.dirty && <span className="text-warn">+변경</span>}
+            {block.head.dirty && <span className="text-warn">{t("chat.verifyCard.dirty")}</span>}
           </span>
         )}
-        <span className="mono shrink-0 text-[10.5px] text-muted-2">{formatDuration(total)}</span>
+        <span className="mono shrink-0 text-[10.5px] text-muted-2">{formatDuration(total, t)}</span>
         {running ? (
           <button
             onClick={() => void window.workbench.chat.verifyAbort(tabId)}
             className="shrink-0 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-err/10 hover:text-err"
-            title="진행 중인 명령을 멈춥니다"
+            title={t("chat.verifyCard.abortHint")}
             data-verify-abort
           >
-            중단
+            {t("chat.verifyCard.abort")}
           </button>
         ) : (
           onRerun && (
-            <button onClick={onRerun} className="shrink-0 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" title="같은 명령을 다시 실행" data-verify-rerun>
-              다시 실행
+            <button onClick={onRerun} className="shrink-0 rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted hover:bg-panel-2 hover:text-fg" title={t("chat.verifyCard.rerunHint")} data-verify-rerun>
+              {t("chat.verifyCard.rerun")}
             </button>
           )
         )}

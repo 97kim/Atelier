@@ -2,6 +2,7 @@
 // 실제 실행은 main/verify.ts, 카드는 renderer 의 VerifyCard.
 
 import type { VerifyCommandResult } from "./chat-events";
+import type { TFunction } from "i18next";
 
 /** 저장할 수 있는 명령 수·길이 상한. */
 export const VERIFY_MAX_COMMANDS = 20;
@@ -78,28 +79,22 @@ export function overallStatus(commands: VerifyCommandResult[]): "running" | "pas
   return "passed";
 }
 
-export const VERIFY_STATUS_LABEL: Record<"running" | "passed" | "failed" | "aborted", string> = {
-  running: "실행 중",
-  passed: "통과",
-  failed: "실패",
-  aborted: "중단됨",
-};
-
 /** 카드 헤더 한 줄: "3개 통과" · "2번째에서 실패" 등. */
-export function verifySummary(commands: VerifyCommandResult[]): string {
+export function verifySummary(commands: VerifyCommandResult[], t: TFunction): string {
   const passed = commands.filter((c) => c.status === "passed").length;
+  const total = commands.length;
   const failedIdx = commands.findIndex((c) => c.status === "failed");
-  if (failedIdx >= 0) return `${failedIdx + 1}번째 명령 실패 (${passed}/${commands.length} 통과)`;
+  if (failedIdx >= 0) return t("shared.verify.summary.failedAt", { index: failedIdx + 1, passed, total });
   const runningIdx = commands.findIndex((c) => c.status === "running");
-  if (runningIdx >= 0) return `${runningIdx + 1}/${commands.length} 실행 중`;
-  if (commands.some((c) => c.status === "aborted")) return `${passed}/${commands.length} 통과 뒤 중단`;
-  return `${passed}/${commands.length} 통과`;
+  if (runningIdx >= 0) return t("shared.verify.summary.running", { index: runningIdx + 1, total });
+  if (commands.some((c) => c.status === "aborted")) return t("shared.verify.summary.aborted", { passed, total });
+  return t("shared.verify.summary.passed", { passed, total });
 }
 
-export function formatDuration(ms: number): string {
+export function formatDuration(ms: number, t: TFunction): string {
   if (ms < 1000) return `${ms}ms`;
   const s = Math.round(ms / 1000);
-  return s >= 60 ? `${Math.floor(s / 60)}분 ${s % 60}초` : `${s}초`;
+  return s >= 60 ? t("shared.duration.minSec", { min: Math.floor(s / 60), sec: s % 60 }) : t("shared.duration.sec", { sec: s });
 }
 
 /** 실패한 명령의 출력을 채팅에 붙일 때의 제목. */

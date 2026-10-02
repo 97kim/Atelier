@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface Series {
   key: string;
@@ -28,6 +29,7 @@ export function StackedBars({
   height?: number;
   format: (n: number) => string;
 }) {
+  const { t } = useTranslation();
   const [hover, setHover] = useState<number | null>(null);
   const padL = 52;
   const padR = 8;
@@ -119,7 +121,7 @@ export function StackedBars({
             </div>
           ))}
           <div className="mono mt-1 border-t border-line pt-1 text-[11px]">
-            합계 {format(totals[hover])}
+            {t("usage.chart.total")} {format(totals[hover])}
             {points[hover].extra ? ` · ${points[hover].extra}` : ""}
           </div>
         </div>

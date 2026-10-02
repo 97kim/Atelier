@@ -1,6 +1,7 @@
 // 링크를 어디서 열지 고르는 팝업 — 답변 속 링크와 터미널 속 URL 이 같이 쓴다. 바깥 클릭·Esc 로 닫힌다.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
 
 export function LinkChooser({
@@ -17,6 +18,7 @@ export function LinkChooser({
   onDecide: (where: "app" | "external", remember: boolean) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   useEffect(() => {
     const close = (ev: Event) => {
       if (ev instanceof KeyboardEvent && ev.key !== "Escape") return;
@@ -48,17 +50,17 @@ export function LinkChooser({
       </div>
       <button role="menuitem" onClick={() => onDecide("app", remember)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-panel-2" data-link-open-app>
         <Icon name="globe" size={12} className="text-accent" />
-        <span className="flex-1">인앱 브라우저에서 열기</span>
-        <span className="mono text-[10px] text-muted">⌥클릭</span>
+        <span className="flex-1">{t("chat.linkChooser.openApp")}</span>
+        <span className="mono text-[10px] text-muted">{t("chat.linkChooser.altClick")}</span>
       </button>
       <button role="menuitem" onClick={() => onDecide("external", remember)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-panel-2" data-link-open-external>
         <Icon name="externalLink" size={12} className="text-muted" />
-        <span className="flex-1">기본 브라우저에서 열기</span>
-        <span className="mono text-[10px] text-muted">⌘클릭</span>
+        <span className="flex-1">{t("chat.linkChooser.openExternal")}</span>
+        <span className="mono text-[10px] text-muted">{t("chat.linkChooser.cmdClick")}</span>
       </button>
       <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-line px-2 pb-0.5 pt-1.5 text-[11px] text-muted">
         <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} data-link-remember />
-        다음부터 묻지 않기 <span className="mono text-[10px] text-muted-2">(⇧클릭으로 다시 선택)</span>
+        {t("chat.linkChooser.remember")} <span className="mono text-[10px] text-muted-2">{t("chat.linkChooser.rememberHint")}</span>
       </label>
     </div>
   );
