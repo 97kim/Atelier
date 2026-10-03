@@ -30,6 +30,7 @@ export const prompt = {
     },
   },
   orch: {
+    followupWake: "코디네이터의 후속 지시가 도착했어요. 워커 계약의 orch check 명령으로 읽고 반영한 뒤 --ack 로 확인하세요. 완료 보고를 아직 보내지 못했다면 반영한 뒤 정확히 한 번 보내고 이 턴을 끝내세요.",
     reportAccepted: "보고가 수락되었습니다. 이 턴을 끝내세요.",
     ack: "반영했으면 --ack {{seq}} 로 확인하세요(확인 전엔 다시 옵니다)",
     coordinatorTab: "이 탭이 코디네이터입니다. --key 를 모든 코디네이터 명령에 붙이세요.",

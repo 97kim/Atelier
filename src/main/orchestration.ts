@@ -532,6 +532,7 @@ export class Orchestrator {
         }
         // 한 이벤트(한 줄)로 기록 — 일부 워커에게만 남는 일이 없게
         this.commit(s.run.id, { type: "messages", ts: this.now(), messages: sent });
+        for (const d of group) this.wakeIdleWorker(d);
         return { message: sent[0], receipt: { group: o.to, sentTo: sent.map((x) => ({ dispatchId: x.dispatchId, messageId: x.id })) } };
       }
       const target = (o.to ?? "").replace(/^dispatch:/, "") || o.dispatchId;
@@ -540,6 +541,7 @@ export class Orchestrator {
       if (d.status !== "live") throw new OrchError(mt("cli.orch.error.followupNotAllowed"), "already_settled");
       const m = this.mk(s, o.actor, `dispatch:${d.id}`, "followup", o.subject ?? "Follow-up", o.body ?? "", d.taskId, d.id);
       this.commit(s.run.id, { type: "message", ts: m.ts, message: m });
+      this.wakeIdleWorker(d);
       return { message: m };
     }
     throw new OrchError(mt("cli.orch.error.typeInvalid", { type: o.type }), "bad_request");
@@ -871,6 +873,19 @@ export class Orchestrator {
           this.commit(s.run.id, { type: "dispatch_report_missing", ts: this.now(), dispatchId: d.id }, this.appNote(s.run.id, "turn_ended_without_report", "cli.msg.turnEndedWithoutReport", undefined, d.taskId, d.id));
       }
     }
+  }
+
+  /**
+   * 후속 지시는 워커가 `orch check` 로 읽어 가는 것이라, 턴이 이미 끝난 워커에게는 닿지 않는다.
+   * 워커 탭이 멈춰 있으면 새 턴으로 깨워 읽게 한다(돌고 있으면 계약대로 스스로 읽는다).
+   */
+  private wakeIdleWorker(d: OrchDispatch): void {
+    if (!d.tabId) return;
+    const snap = this.deps.snapshot(d.tabId);
+    if (!snap) return;
+    const state = execState(snap);
+    if (state !== "idle" && state !== "error") return;
+    void this.deps.send(d.tabId, mt("prompt.orch.followupWake")).catch(() => {});
   }
 
   private hasOpenQuestion(s: OrchRunState, dispatchId: string): boolean {

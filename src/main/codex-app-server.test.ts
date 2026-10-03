@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appServerUsage, classifyResumeFailure, mapAppServerNotification, normalizeFileChanges, reasoningSummaryArgs, resumeConflictMessage, type AppServerTurnContext } from "./codex-app-server";
+import { appServerUsage, classifyResumeFailure, atelierEnvArgs, mapAppServerNotification, normalizeFileChanges, reasoningSummaryArgs, resumeConflictMessage, type AppServerTurnContext } from "./codex-app-server";
 
 test("normalizeFileChanges: kind 객체/문자열 모두 문자열로, 빠진 값은 빈 문자열, 배열이 아니면 빈 목록", () => {
   assert.deepEqual(normalizeFileChanges([{ path: "a.ts", kind: { type: "update", move_path: null }, diff: "@@ -1 +1 @@\n-a\n+b" }, { path: "b.ts", kind: "add" }]), [
@@ -86,4 +86,14 @@ test("turn/completed: 완료된 턴에만 forkPoint(thread id + turn id)", () =>
   assert.deepEqual(ok.forkPoint, { provider: "codex", sessionId: "th1", pointId: "turn-1" });
   const [cut] = mapAppServerNotification("turn/completed", { threadId: "th1", turn: { id: "turn-2", status: "interrupted", items: [] } }, 1600, c) as { forkPoint?: unknown }[];
   assert.equal(cut.forkPoint, undefined);
+});
+
+test("atelierEnvArgs: 앱이 넘기는 변수를 Codex 셸의 set 표로 — 사용자가 환경변수 상속을 좁혀 둬도 닿게", () => {
+  assert.deepEqual(atelierEnvArgs({}), []);
+  assert.deepEqual(atelierEnvArgs({ ATELIER_USERDATA: "/Users/a b/Library/Application Support/Atelier", ATELIER_TAB_ID: "t-1", OTHER: "x" }), [
+    "-c",
+    'shell_environment_policy.set.ATELIER_USERDATA="/Users/a b/Library/Application Support/Atelier"',
+    "-c",
+    'shell_environment_policy.set.ATELIER_TAB_ID="t-1"',
+  ]);
 });

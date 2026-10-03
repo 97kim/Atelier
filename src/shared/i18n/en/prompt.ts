@@ -29,6 +29,7 @@ export const prompt = {
     },
   },
   orch: {
+    followupWake: "A follow-up from the coordinator has arrived. Read it with the orch check command from your worker contract, act on it, then confirm with --ack. If you have not sent the completion report yet, send it exactly once after acting on the follow-up, then end this turn.",
     reportAccepted: "Report accepted. End this turn.",
     ack: "Once you have acted on them, confirm with --ack {{seq}} (they will be delivered again until confirmed)",
     coordinatorTab: "This tab is the coordinator. Add --key to every coordinator command.",

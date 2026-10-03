@@ -413,3 +413,27 @@ test("리뷰 2차: 재사용 탭에 정책 적용, retain 된 시도는 cleanup 
   assert.deepEqual(o2.get("run-old").tasks[0].deps, []);
   o2.stop();
 });
+
+test("후속 지시: 턴이 끝난 워커는 깨워서 읽게 하고, 돌고 있는 워커는 건드리지 않는다", async () => {
+  const { deps, tabs } = makeDeps();
+  const o = new Orchestrator(deps);
+  const coord = { kind: "tab", tabId: "coord" } as const;
+  const { run, coordinatorKey } = o.runCreate({ objective: "x", coordinatorTabId: "coord" });
+  const w = await o.workerStart({ runId: run.id, actor: coord, key: coordinatorKey, spec: "일", provider: "codex", worktree: false, cwd: "/repo" });
+  const tab = tabs.get(w.dispatch.tabId!)!;
+  assert.equal(tab.prompts.length, 1, "워커 계약만 받았다");
+  // 돌고 있으면(계약대로 스스로 orch check 한다) 새 턴을 보내지 않는다
+  o.send({ runId: run.id, actor: coord, key: coordinatorKey, type: "followup", to: `dispatch:${w.dispatch.id}`, body: "문서도 고쳐" });
+  assert.equal(tab.prompts.length, 1);
+  // 보고 없이 턴이 끝나 멈춘 워커에게는 후속 지시를 읽으라는 턴을 보낸다
+  turnEnd(tab);
+  tab.status = "idle";
+  o.send({ runId: run.id, actor: coord, key: coordinatorKey, type: "followup", to: `dispatch:${w.dispatch.id}`, body: "보고를 다시 보내" });
+  assert.equal(tab.prompts.length, 2);
+  assert.match(tab.prompts[1], /후속 지시가 도착했어요/);
+  // 그룹으로 보내도 같다
+  turnEnd(tab);
+  tab.status = "idle";
+  o.send({ runId: run.id, actor: coord, key: coordinatorKey, type: "followup", to: "@all", body: "모두" });
+  assert.equal(tab.prompts.length, 3);
+});
