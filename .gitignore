@@ -55,3 +55,6 @@ e2e/repo/
 e2e/claude-home/
 e2e/*.png
 e2e/*.log
+
+# 이 PC 에서만 쓰는 작업 도구. 저장소에 올리지 않는다.
+.atelier/
