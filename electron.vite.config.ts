@@ -5,9 +5,8 @@ import tailwindcss from "@tailwindcss/vite";
 
 const shared = resolve(__dirname, "src/shared");
 
-// main/preload 는 CJS 로 번들된다. 두 AI SDK 는 ESM 전용이라 externalizeDepsPlugin 으로
-// 번들 밖에 두고, 실제 로드는 src/main/esm.ts 의 importEsm(new Function) 으로 한다.
-// (rollup 이 CJS 출력에서 import() 를 require 로 바꾸는 것을 피하기 위함)
+// 저장소는 ESM 이다(package.json 의 "type": "module"). 두 AI SDK 가 ESM 전용이라 형식을 맞춘 것이다.
+// preload 만 CJS(out/preload/index.cjs)로 번들한다 — 샌드박스(sandbox: true)의 preload 는 ESM 으로 읽히지 않는다.
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -16,6 +15,7 @@ export default defineConfig({
   preload: {
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: { "@shared": shared } },
+    build: { rollupOptions: { output: { format: "cjs" } } },
   },
   renderer: {
     plugins: [react(), tailwindcss()],

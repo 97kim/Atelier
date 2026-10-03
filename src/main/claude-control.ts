@@ -3,7 +3,7 @@
 // 제너레이터를 prompt 로 넘긴다. 턴이 시작되지 않으니 모델 호출·비용이 없다.
 
 import type { ClaudeRuntime } from "./claude-adapter";
-import { importClaudeSdk } from "./esm";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { mt } from "./i18n";
 
 type Query = import("@anthropic-ai/claude-agent-sdk").Query;
@@ -34,7 +34,6 @@ export async function withControlQuery<T>(
   fn: (q: Query) => Promise<T>,
   log?: (line: string) => void,
 ): Promise<T> {
-  const { query } = await importClaudeSdk();
   let release!: () => void;
   const closed = new Promise<void>((r) => (release = r));
   async function* idle(): AsyncGenerator<SDKUserMessage, void, void> {
@@ -88,7 +87,6 @@ export async function fetchUsageText(
   cwd: string,
   log?: (line: string) => void,
 ): Promise<string> {
-  const { query } = await importClaudeSdk();
   const abort = new AbortController();
   const q = query({
     prompt: "/usage",

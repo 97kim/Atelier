@@ -2697,7 +2697,7 @@ function createWindow(): BrowserWindow {
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 14, y: 14 },
     webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
+      preload: join(import.meta.dirname, "../preload/index.cjs"),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -2732,7 +2732,7 @@ function createWindow(): BrowserWindow {
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    void win.loadFile(join(__dirname, "../renderer/index.html"));
+    void win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
   }
   return win;
 }

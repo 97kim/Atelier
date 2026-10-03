@@ -13,7 +13,7 @@ import type { ProviderRateLimitDto } from "@shared/ipc";
 import { parseLiveTasks, parseTaskFinished, type LiveBackgroundTask, type TaskFinishedNote } from "@shared/bg-tasks";
 import { buildClaudeUserMessage, type StoredChatImage } from "./chat-attachments";
 import { ClaudeEventMapper, parseClaudeRateLimit } from "./claude-events";
-import { importClaudeSdk } from "./esm";
+import { forkSession, query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeProgressNotes } from "./cli-defaults";
 import { homedir } from "node:os";
 import { MsgError, mt } from "./i18n";
@@ -281,7 +281,6 @@ function openSession(runtime: ClaudeRuntime, req: ClaudeTurnRequest): Promise<Li
  * CLI 에 넘기는 환경에만 있으면 여기에도 맞춘다.
  */
 export async function forkClaudeSession(runtime: ClaudeRuntime, sessionId: string, cwd: string, upToMessageId: string): Promise<string> {
-  const { forkSession } = await importClaudeSdk();
   const cfg = runtime.env.CLAUDE_CONFIG_DIR;
   if (cfg && !process.env.CLAUDE_CONFIG_DIR) process.env.CLAUDE_CONFIG_DIR = cfg;
   const r = await forkSession(sessionId, { dir: cwd, upToMessageId });
@@ -289,7 +288,6 @@ export async function forkClaudeSession(runtime: ClaudeRuntime, sessionId: strin
 }
 
 async function openSessionNow(runtime: ClaudeRuntime, req: ClaudeTurnRequest): Promise<LiveSession> {
-  const { query } = await importClaudeSdk();
   const input = new InputQueue();
   const s: LiveSession = {
     key: req.sessionKey,

@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { mt } from "./i18n";
 
-// 타입만 사용하므로 `import(...)` 타입 구문으로 가져온다 (CommonJS require() 유발 X).
+// 타입만 사용하므로 `import(...)` 타입 구문으로 가져온다.
 type SDKUserMessage = import("@anthropic-ai/claude-agent-sdk").SDKUserMessage;
 type CodexUserInput = import("@openai/codex-sdk").UserInput;
 

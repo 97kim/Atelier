@@ -8,7 +8,7 @@ import type { ChatEvent, PermissionAnswer, PermissionPolicy, PermissionRequestEv
 import { buildCodexInput, type StoredChatImage } from "./chat-attachments";
 import { mapCodexEvent } from "./codex-events";
 import { AppServerError, CodexAppServer, classifyResumeFailure, mapAppServerNotification, normalizeFileChanges, resumeConflictMessage, type AppServerTurnContext, type FileChangeDto } from "./codex-app-server";
-import { importCodexSdk } from "./esm";
+import { Codex } from "@openai/codex-sdk";
 import { codexHasDeveloperInstructions } from "./cli-defaults";
 import { appMsg, MsgError, mt } from "./i18n";
 import type { Msg } from "@shared/i18n/msg";
@@ -438,7 +438,6 @@ export async function steerCodexTurn(sessionKey: string, text: string, images: {
 
 /** 폴백: SDK exec 경로. 한 턴 = runStreamed 한 번, thread.started 의 id 로 다음 턴 resumeThread. */
 export async function runCodexTurnExec(runtime: CodexRuntime, req: CodexTurnRequest): Promise<void> {
-  const { Codex } = await importCodexSdk();
   const codex = new Codex({ codexPathOverride: runtime.codexPath, env: runtime.env });
   const threadOptions: ThreadOptions = {
     workingDirectory: req.cwd,

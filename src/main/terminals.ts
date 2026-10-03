@@ -2,6 +2,7 @@
 // 출력은 renderer 의 xterm 으로 흘려보낸다. 패널을 닫아도 셸은 살아 있고, 탭을 닫으면 죽인다.
 
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import type { IPty } from "node-pty";
 import { TERMINAL_CLEAR_MARK } from "@shared/ipc";
@@ -60,8 +61,7 @@ interface Entry {
 /** node-pty 는 네이티브 모듈이라 로드 실패가 앱 전체를 죽이지 않도록 첫 사용 시점에 require 한다. */
 function loadPty(): typeof import("node-pty") {
   ensureSpawnHelperExecutable();
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("node-pty") as typeof import("node-pty");
+  return createRequire(import.meta.url)("node-pty") as typeof import("node-pty");
 }
 
 /**

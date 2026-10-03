@@ -106,8 +106,10 @@ CLI 를 붙일 때는 그 값을 준다(`ATELIER_USERDATA=$PWD/userdata`). 스�
 
 여기서 실제로 데인 것들이다. 겉보기에 멀쩡한 코드를 건드릴 때 이유를 모르면 되돌리기 쉬운 자리라 적어 둔다.
 
-- **두 SDK 는 ESM 전용인데 main 은 CJS 다.** `src/main/esm.ts` 의 `new Function("return import(...)")` 우회가 그래서 있다.
-  번들러가 이 `import()` 를 `require` 로 바꾸면 런타임에 깨진다 — external 설정을 건드리지 말 것.
+- **저장소는 ESM 이고 preload 만 CJS 다.** 두 SDK 가 ESM 전용이라 `package.json` 에 `"type": "module"` 을 두고 main 을 ESM 으로 번들한다.
+  샌드박스의 preload 는 ESM 으로 읽히지 않아서 `out/preload/index.cjs` 로 따로 낸다 — preload 의 출력 형식을 바꾸지 말 것.
+- **테스트는 Electron 이 아니라 Node 로 돈다.** npm 의 `electron` 패키지는 실행 파일 경로만 내보내서 `import { session } from "electron"` 이 링크 단계에서 실패한다.
+  `scripts/test-electron-stub.mjs` 가 테스트에서만 빈 값으로 바꿔 준다. main 이 `electron` 에서 새 이름을 가져오면 그 목록에 더한다.
 - **비대화형 셸에는 PATH 가 거의 없다.** `claude`·`codex` 를 그냥 실행하면 못 찾는다.
   `src/main/cli-discovery.ts` 가 사용자 셸의 PATH 를 캡처해 후보를 `--version` 으로 검증한다. 이 경로를 건너뛰지 말 것.
 - **권한 콜백은 턴을 세운다.** `canUseTool` 이 답을 줄 때까지 모델은 멈춰 있다. 그래서 대기 상태를 눈에 띄게 두고 창이 포커스 밖이면 알린다.

@@ -9,6 +9,7 @@
   "homepage": "https://github.com/97kim/Atelier",
   "author": "97kim",
   "license": "MIT",
+  "type": "module",
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
@@ -16,7 +17,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "TSX_TSCONFIG_PATH=tsconfig.node.json node --import tsx --test --test-force-exit 'src/**/*.test.ts'",
+    "test": "TSX_TSCONFIG_PATH=tsconfig.node.json node --import tsx --import ./scripts/test-electron-stub.mjs --test --test-force-exit 'src/**/*.test.ts'",
     "package": "yarn build && electron-builder --config electron-builder.config.cjs --publish never",
     "release": "scripts/release.sh",
     "i18n:check": "node scripts/check-i18n.mjs",

@@ -3,7 +3,7 @@
 
 import type { GitDraftResult } from "@shared/ipc";
 import type { ClaudeRuntime } from "./claude-adapter";
-import { importClaudeSdk } from "./esm";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { gitDiffFor, gitRecentSubjects } from "./git";
 import { mt } from "./i18n";
 
@@ -41,7 +41,6 @@ export async function draftCommitMessage(
     gitRecentSubjects(cwd, runtime.env),
   ]);
   if (!diff.trim()) return { ok: false, error: mt("repo.git.draft.noDiff") };
-  const { query } = await importClaudeSdk();
   const abort = new AbortController();
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
   const q = query({
