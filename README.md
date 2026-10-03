@@ -32,7 +32,7 @@ You don't need an Atelier account. The app finds the `claude` and `codex` CLIs y
 
 ## Agents hand off work on their own
 
-Claude Code and Codex inside the app open new tabs with the `atelier` CLI, hand off work, and read the results when it's done. You only make the first request.
+Claude Code and Codex inside the app open new tabs with the `atelier` CLI, hand off work, and read the results when it's done. Opening the tab and carrying the result back is the agents' job, not yours.
 Install the CLI and skills under Settings → General → **CLI and agent skills** and your agents learn how to use it. You can run the same commands yourself in a terminal.
 
 ```
@@ -196,6 +196,16 @@ To install without Homebrew, download the DMG from [Releases](https://github.com
 
 Permissions start at "Ask before changes", so before it changes a file or runs a command, it shows you what it's about to do and asks.
 
+### Then try a handoff
+
+This is what Atelier is for, so try it once. You need both the `claude` and `codex` CLIs logged in.
+
+1. Open **Settings → General → CLI and agent skills** and install the CLI and the skills. This teaches your agents how to use Atelier.
+2. Start a new session (the skill shows up in sessions started after you install it).
+3. Ask for a handoff. For example: "Fix the failing test, then hand the missing-quantity case and its test to Codex, and tell me the result when it's done."
+
+Claude opens a Codex tab, passes the work along, waits, and brings the result back to your chat. You'll still be asked to approve changes and commands along the way.
+
 ## And more
 
 - **Split view**: View two tabs side by side, and switch between them with ⌘⌥←/→.
@@ -218,6 +228,11 @@ Shortcuts are collected in the [feature guide](docs/GUIDE.md#keyboard-shortcuts)
 ### Do I need an account or API key?
 
 You don't need a separate Atelier account. It uses the `claude` and `codex` CLIs you've already logged in to, and billing is just each service's subscription or API pricing.
+Atelier runs the CLIs you installed and logged in to yourself. It doesn't collect, store, or relay your credentials, and each service's terms, pricing, and limits apply.
+
+### Is this an official Anthropic or OpenAI product?
+
+No. Atelier is an independent open-source project. It isn't affiliated with, endorsed by, or sponsored by Anthropic or OpenAI. Claude Code and Codex are their products.
 
 ### Where does my code go?
 
