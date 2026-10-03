@@ -9,7 +9,8 @@ export function SidebarUpdate({ onOpenSettings }: { onOpenSettings: () => void }
   const { t } = useTranslation();
   const status = useUpdateStatus();
   if (!status) return null;
-  const btn = "mono mt-1.5 block rounded border border-accent/40 px-1.5 py-px text-[10px] text-accent hover:bg-accent/10";
+  // 사이드바는 창을 끌어 옮기는 영역(drag)이다 — no-drag 가 없으면 클릭이 창 끌기로 먹힌다
+  const btn = "no-drag mono mt-1.5 block rounded border border-accent/40 px-1.5 py-px text-[10px] text-accent hover:bg-accent/10";
   // data-sidebar-update 의 값으로 상태를 본다(e2e 가 문구에 기대지 않게)
   if (status.installed)
     return (
@@ -19,7 +20,7 @@ export function SidebarUpdate({ onOpenSettings }: { onOpenSettings: () => void }
     );
   if (status.running)
     return (
-      <span className="mono mt-1.5 block text-[10px] text-accent" data-sidebar-update="running" data-update-phase={status.phase} title={t("settings.update.upgrading", { version: status.running })}>
+      <span className="no-drag mono mt-1.5 block text-[10px] text-accent" data-sidebar-update="running" data-update-phase={status.phase} title={t("settings.update.upgrading", { version: status.running })}>
         {updatePhaseLabel(t, status)}
       </span>
     );
